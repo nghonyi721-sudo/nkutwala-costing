@@ -5,6 +5,9 @@ import { fetchReport, totalHours } from '../../lib/reports'
 import ChoiceButtons from '../../components/ChoiceButtons'
 import Stepper from '../../components/Stepper'
 import ReportSummary from '../../components/ReportSummary'
+import Button from '../../components/Button'
+import Field from '../../components/Field'
+import StatusTag from '../../components/StatusTag'
 
 const SAFETY_ITEMS = [
   ['dsti_done', 'DSTI done'],
@@ -265,9 +268,9 @@ function ReportForm({ user, reportId, onDone }) {
 
   // --- Rendering -------------------------------------------------------------
   const backButton = (
-    <button type="button" className="btn-secondary btn-back" onClick={onDone}>
-      ← My reports
-    </button>
+    <Button variant="secondary" inline onClick={onDone}>
+      Back to my reports
+    </Button>
   )
 
   if (loading) {
@@ -319,7 +322,8 @@ function ReportForm({ user, reportId, onDone }) {
   return (
     <div className="card report-form">
       {backButton}
-      <h1>{id ? 'Daily report (draft)' : 'New daily report'}</h1>
+      {id && <StatusTag status="draft" />}
+      <h1>{id ? 'Daily report' : 'New daily report'}</h1>
 
       {/* 1. Project and date */}
       {Object.keys(projectOptions).length === 0 ? (
@@ -333,9 +337,9 @@ function ReportForm({ user, reportId, onDone }) {
         />
       )}
 
-      <label htmlFor="report-date">Date</label>
-      <input
+      <Field
         id="report-date"
+        label="Date"
         type="date"
         value={form.report_date}
         onChange={(e) => setField('report_date', e.target.value)}
@@ -343,140 +347,137 @@ function ReportForm({ user, reportId, onDone }) {
 
       {/* 2. Times */}
       <div className="two-columns">
-        <div className="card">
-          <label htmlFor="start-time">Start</label>
-          <input
-            id="start-time"
-            type="time"
-            value={form.start_time}
-            onChange={(e) => setField('start_time', e.target.value)}
-          />
-        </div>
-        <div className="card">
-          <label htmlFor="end-time">End</label>
-          <input
-            id="end-time"
-            type="time"
-            value={form.end_time}
-            onChange={(e) => setField('end_time', e.target.value)}
-          />
-        </div>
+        <Field
+          id="start-time"
+          label="Start"
+          type="time"
+          value={form.start_time}
+          onChange={(e) => setField('start_time', e.target.value)}
+        />
+        <Field
+          id="end-time"
+          label="End"
+          type="time"
+          value={form.end_time}
+          onChange={(e) => setField('end_time', e.target.value)}
+        />
       </div>
 
       {/* 3. Crew */}
       <h2>Crew</h2>
-      {crew.length === 0 && <p>No one added yet.</p>}
-      <ul className="list">
-        {crew.map((line) => (
-          <li key={line.employee_id} className="line-row">
-            <span className="list-title">{employeeName[line.employee_id] ?? 'Unknown'}</span>
-            <Stepper
-              label="Hours"
-              value={line.hours}
-              min={0.5}
-              unit="h"
-              onChange={(hours) => setCrewHours(line.employee_id, hours)}
-            />
-            <button
-              type="button"
-              className="btn-secondary btn-remove"
-              onClick={() => removeCrew(line.employee_id)}
-            >
-              Remove
-            </button>
-          </li>
-        ))}
-      </ul>
+      {crew.length === 0 && <p className="label">No one added yet.</p>}
+      {crew.length > 0 && (
+        <ul className="list">
+          {crew.map((line) => (
+            <li key={line.employee_id} className="line-row">
+              <span className="list-title">{employeeName[line.employee_id] ?? 'Unknown'}</span>
+              <Stepper
+                label="Hours"
+                value={line.hours}
+                min={0.5}
+                unit="h"
+                onChange={(hours) => setCrewHours(line.employee_id, hours)}
+              />
+              <Button variant="secondary" onClick={() => removeCrew(line.employee_id)}>
+                Remove
+              </Button>
+            </li>
+          ))}
+        </ul>
+      )}
 
       {showCrewPicker ? (
         <div className="picker">
           <p className="label">Tap a person to add them:</p>
           {availableEmployees.length === 0 && <p>Everyone is already on the report.</p>}
-          {availableEmployees.map((employee) => (
-            <button
-              key={employee.id}
-              type="button"
-              className="list-item"
-              onClick={() => addCrew(employee.id)}
-            >
-              + {employee.full_name}
-            </button>
-          ))}
-          <button type="button" className="btn-secondary" onClick={() => setShowCrewPicker(false)}>
+          {availableEmployees.length > 0 && (
+            <ul className="list">
+              {availableEmployees.map((employee) => (
+                <li key={employee.id}>
+                  <button
+                    type="button"
+                    className="list-item"
+                    onClick={() => addCrew(employee.id)}
+                  >
+                    <span className="list-title">{employee.full_name}</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+          <Button variant="secondary" onClick={() => setShowCrewPicker(false)}>
             Close list
-          </button>
+          </Button>
         </div>
       ) : (
-        <button type="button" className="btn-secondary" onClick={() => setShowCrewPicker(true)}>
-          + Add person
-        </button>
+        <Button variant="secondary" onClick={() => setShowCrewPicker(true)}>
+          Add person
+        </Button>
       )}
 
       {/* 4. Total man-hours */}
-      <p className="total">Total man-hours: {totalHours(crew)}</p>
+      <p className="total">
+        <span>Total man-hours</span>
+        <span className="num">{totalHours(crew).toFixed(1)}</span>
+      </p>
 
       {/* 5. Equipment */}
       <h2>Equipment</h2>
-      {equipmentLines.length === 0 && <p>No equipment added yet.</p>}
-      <ul className="list">
-        {equipmentLines.map((line) => (
-          <li key={line.equipment_id} className="line-row">
-            <span className="list-title">{machineName[line.equipment_id] ?? 'Unknown'}</span>
-            <Stepper
-              label="Hours"
-              value={line.hours}
-              min={0.5}
-              unit="h"
-              onChange={(hours) => setEquipmentHours(line.equipment_id, hours)}
-            />
-            <button
-              type="button"
-              className="btn-secondary btn-remove"
-              onClick={() => removeEquipment(line.equipment_id)}
-            >
-              Remove
-            </button>
-          </li>
-        ))}
-      </ul>
+      {equipmentLines.length === 0 && <p className="label">No equipment added yet.</p>}
+      {equipmentLines.length > 0 && (
+        <ul className="list">
+          {equipmentLines.map((line) => (
+            <li key={line.equipment_id} className="line-row">
+              <span className="list-title">{machineName[line.equipment_id] ?? 'Unknown'}</span>
+              <Stepper
+                label="Hours"
+                value={line.hours}
+                min={0.5}
+                unit="h"
+                onChange={(hours) => setEquipmentHours(line.equipment_id, hours)}
+              />
+              <Button variant="secondary" onClick={() => removeEquipment(line.equipment_id)}>
+                Remove
+              </Button>
+            </li>
+          ))}
+        </ul>
+      )}
 
       {showEquipmentPicker ? (
         <div className="picker">
           <p className="label">Tap a machine to add it:</p>
           {availableMachines.length === 0 && <p>All equipment is already on the report.</p>}
-          {availableMachines.map((machine) => (
-            <button
-              key={machine.id}
-              type="button"
-              className="list-item"
-              onClick={() => addEquipment(machine.id)}
-            >
-              + {machine.name}
-            </button>
-          ))}
-          <button
-            type="button"
-            className="btn-secondary"
-            onClick={() => setShowEquipmentPicker(false)}
-          >
+          {availableMachines.length > 0 && (
+            <ul className="list">
+              {availableMachines.map((machine) => (
+                <li key={machine.id}>
+                  <button
+                    type="button"
+                    className="list-item"
+                    onClick={() => addEquipment(machine.id)}
+                  >
+                    <span className="list-title">{machine.name}</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+          <Button variant="secondary" onClick={() => setShowEquipmentPicker(false)}>
             Close list
-          </button>
+          </Button>
         </div>
       ) : (
-        <button
-          type="button"
-          className="btn-secondary"
-          onClick={() => setShowEquipmentPicker(true)}
-        >
-          + Add equipment
-        </button>
+        <Button variant="secondary" onClick={() => setShowEquipmentPicker(true)}>
+          Add equipment
+        </Button>
       )}
 
       {/* 6. Site conditions */}
       <h2>Site conditions</h2>
-      <label htmlFor="fuel">Fuel (litres)</label>
-      <input
+      <Field
         id="fuel"
+        label="Fuel (litres)"
         type="number"
         inputMode="decimal"
         min="0"
@@ -511,15 +512,17 @@ function ReportForm({ user, reportId, onDone }) {
             onClick={() => setField(key, !form[key])}
           >
             {label}
-            <span className="toggle-state">{form[key] ? 'Yes ✓' : 'No'}</span>
+            <span className="toggle-state">{form[key] ? 'Yes' : 'No'}</span>
           </button>
         ))}
       </div>
 
       {/* 8. Activities */}
-      <label htmlFor="activities">Activities</label>
-      <textarea
+      <h2>Activities</h2>
+      <Field
         id="activities"
+        label="What was done today"
+        multiline
         rows={5}
         value={form.activities}
         onChange={(e) => setField('activities', e.target.value)}
@@ -540,24 +543,23 @@ function ReportForm({ user, reportId, onDone }) {
       {confirming ? (
         <div className="confirm">
           <p>
-            Submit report for <strong>{projectName}</strong>, {formatDate(form.report_date)}?
-            You can't change it after this.
+            Submit report for <strong>{projectName}</strong>,{' '}
+            <span className="num">{formatDate(form.report_date)}</span>? You can&apos;t change
+            it after this.
           </p>
-          <button type="button" className="btn-primary" disabled={busy} onClick={submit}>
+          <Button disabled={busy} onClick={submit}>
             {busy ? 'Submitting…' : 'Yes, submit'}
-          </button>
-          <button type="button" className="btn-secondary" onClick={() => setConfirming(false)}>
+          </Button>
+          <Button variant="secondary" onClick={() => setConfirming(false)}>
             Go back
-          </button>
+          </Button>
         </div>
       ) : (
         <>
-          <button type="button" className="btn-secondary" disabled={busy} onClick={save}>
+          <Button variant="secondary" disabled={busy} onClick={save}>
             {busy ? 'Saving…' : 'Save draft'}
-          </button>
-          <button
-            type="button"
-            className="btn-primary"
+          </Button>
+          <Button
             disabled={busy}
             onClick={() => {
               setError('')
@@ -565,7 +567,7 @@ function ReportForm({ user, reportId, onDone }) {
             }}
           >
             Submit report
-          </button>
+          </Button>
         </>
       )}
     </div>

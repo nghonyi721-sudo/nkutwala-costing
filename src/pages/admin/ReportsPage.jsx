@@ -1,13 +1,32 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../../lib/supabaseClient'
-import { formatDate, REPORT_STATUS_LABELS } from '../../lib/labels'
+import { formatDate } from '../../lib/labels'
+import Button from '../../components/Button'
 import ChoiceButtons from '../../components/ChoiceButtons'
+import DataTable from '../../components/DataTable'
+import Field from '../../components/Field'
+import StatusTag from '../../components/StatusTag'
 import ReportView from './ReportView'
 
 const ALL_PROJECTS = 'all'
 
+const REPORT_COLUMNS = [
+  { key: 'report_date', label: 'Date', mono: true, render: (r) => formatDate(r.report_date) },
+  {
+    key: 'project',
+    label: 'Project',
+    render: (r) => (
+      <>
+        {r.project?.name}
+        <span className="cell-detail">{r.reporter?.full_name}</span>
+      </>
+    ),
+  },
+  { key: 'status', label: 'Status', render: (r) => <StatusTag status={r.status} /> },
+]
+
 // Owner/admin: every report in the company, filterable by project and date.
-function ReportsPage({ onBack }) {
+function ReportsPage() {
   const [projects, setProjects] = useState([])
   const [projectFilter, setProjectFilter] = useState(ALL_PROJECTS)
   const [dateFilter, setDateFilter] = useState('')
@@ -74,9 +93,6 @@ function ReportsPage({ onBack }) {
 
   return (
     <div className="card">
-      <button type="button" className="btn-secondary btn-back" onClick={onBack}>
-        ← Back
-      </button>
       <h1>Daily reports</h1>
 
       <ChoiceButtons
@@ -86,18 +102,18 @@ function ReportsPage({ onBack }) {
         onChange={setProjectFilter}
       />
 
-      <label htmlFor="date-filter">Date</label>
       <div className="date-filter">
-        <input
+        <Field
           id="date-filter"
+          label="Date"
           type="date"
           value={dateFilter}
           onChange={(e) => setDateFilter(e.target.value)}
         />
         {dateFilter && (
-          <button type="button" className="btn-secondary" onClick={() => setDateFilter('')}>
+          <Button variant="secondary" inline onClick={() => setDateFilter('')}>
             Clear
-          </button>
+          </Button>
         )}
       </div>
 
@@ -109,24 +125,15 @@ function ReportsPage({ onBack }) {
 
       {!error && reports === undefined && <p className="loading">Loading…</p>}
 
-      {reports?.length === 0 && <p>No reports match.</p>}
+      {reports?.length === 0 && <p className="label">No reports match.</p>}
 
       {reports?.length > 0 && (
-        <ul className="list">
-          {reports.map((report) => (
-            <li key={report.id}>
-              <button type="button" className="list-item" onClick={() => setOpenId(report.id)}>
-                <span className="list-title">{report.project?.name}</span>
-                <span className="list-detail">
-                  {formatDate(report.report_date)} · {report.reporter?.full_name}
-                </span>
-                <span className={`badge ${report.status}`}>
-                  {REPORT_STATUS_LABELS[report.status]}
-                </span>
-              </button>
-            </li>
-          ))}
-        </ul>
+        <DataTable
+          caption="Daily reports"
+          columns={REPORT_COLUMNS}
+          rows={reports}
+          onRowClick={(report) => setOpenId(report.id)}
+        />
       )}
     </div>
   )

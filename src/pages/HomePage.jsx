@@ -1,21 +1,24 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabaseClient'
-import { ROLE_LABELS, isOwnerOrAdmin } from '../lib/labels'
+import { isOwnerOrAdmin } from '../lib/labels'
+import AppShell from '../components/AppShell'
 import ProjectsPage from './admin/ProjectsPage'
 import EmployeesPage from './admin/EmployeesPage'
 import EquipmentPage from './admin/EquipmentPage'
 import ReportsPage from './admin/ReportsPage'
 import MyReportsPage from './reports/MyReportsPage'
 
-// Shows who is logged in. Only asks the server for this user's own
-// name and role - nothing else. Owners and admins also get admin buttons.
+// The logged-in app: loads this user's own name and role (nothing else),
+// then shows the app shell with the nav and screens for their role.
 function HomePage({ user }) {
   // undefined = loading, null = no profile row, object = loaded
   const [profile, setProfile] = useState(undefined)
   const [error, setError] = useState('')
   // 'home' | 'projects' | 'employees' | 'equipment' | 'reports'
   // | 'new-report' | 'my-reports'
+  // 'home' = not chosen yet (the role's landing screen is shown)
   const [screen, setScreen] = useState('home')
+  const [visit, setVisit] = useState(0)
 
   useEffect(() => {
     let cancelled = false
@@ -39,22 +42,38 @@ function HomePage({ user }) {
     }
   }, [user.id])
 
-  // Hiding these from site managers is only tidiness - the database refuses
+  // Hiding screens from site managers is only tidiness - the database refuses
   // them anyway (see the RLS policies and scripts/rls-attack-test.mjs).
   const isAdmin = Boolean(profile) && isOwnerOrAdmin(profile.role)
   const isSiteManager = profile?.role === 'site_manager'
-  const goHome = () => setScreen('home')
 
-  if (isAdmin && screen === 'projects') return <ProjectsPage onBack={goHome} />
-  if (isAdmin && screen === 'employees') return <EmployeesPage onBack={goHome} />
-  if (isAdmin && screen === 'equipment') return <EquipmentPage onBack={goHome} />
-  if (isAdmin && screen === 'reports') return <ReportsPage onBack={goHome} />
-  if (isSiteManager && (screen === 'new-report' || screen === 'my-reports')) {
-    return <MyReportsPage user={user} startNew={screen === 'new-report'} onBack={goHome} />
+  // Until a nav tab is tapped: owners land on Reports, site managers on My reports.
+  let current = screen
+  if (current === 'home') current = isAdmin ? 'reports' : isSiteManager ? 'my-reports' : 'home'
+
+  // Tapping a tab always starts that section fresh at its main list.
+  function navigate(next) {
+    setScreen(next)
+    setVisit((count) => count + 1)
+  }
+  const pageKey = `${current}-${visit}`
+
+  let page = null
+  if (isAdmin && current === 'reports') page = <ReportsPage key={pageKey} />
+  if (isAdmin && current === 'projects') page = <ProjectsPage key={pageKey} />
+  if (isAdmin && current === 'employees') page = <EmployeesPage key={pageKey} />
+  if (isAdmin && current === 'equipment') page = <EquipmentPage key={pageKey} />
+  if (isSiteManager && (current === 'new-report' || current === 'my-reports')) {
+    page = <MyReportsPage key={pageKey} user={user} startNew={current === 'new-report'} />
   }
 
   return (
-    <div className="card">
+    <AppShell
+      profile={profile}
+      screen={current}
+      onNavigate={navigate}
+      onLogout={() => supabase.auth.signOut()}
+    >
       {error && (
         <p className="error" role="alert">
           {error}
@@ -69,50 +88,8 @@ function HomePage({ user }) {
         </p>
       )}
 
-      {profile && (
-        <>
-          <p className="label">Logged in as</p>
-          <h1 className="name">{profile.full_name}</h1>
-          <p className="role">{ROLE_LABELS[profile.role] ?? profile.role}</p>
-        </>
-      )}
-
-      {isSiteManager && (
-        <>
-          <button type="button" className="btn-primary" onClick={() => setScreen('new-report')}>
-            New daily report
-          </button>
-          <button type="button" className="btn-primary" onClick={() => setScreen('my-reports')}>
-            My reports
-          </button>
-        </>
-      )}
-
-      {isAdmin && (
-        <>
-          <button type="button" className="btn-primary" onClick={() => setScreen('reports')}>
-            Daily reports
-          </button>
-          <button type="button" className="btn-primary" onClick={() => setScreen('projects')}>
-            Projects
-          </button>
-          <button type="button" className="btn-primary" onClick={() => setScreen('employees')}>
-            Employees
-          </button>
-          <button type="button" className="btn-primary" onClick={() => setScreen('equipment')}>
-            Equipment
-          </button>
-        </>
-      )}
-
-      <button
-        type="button"
-        className="btn-secondary"
-        onClick={() => supabase.auth.signOut()}
-      >
-        Log out
-      </button>
-    </div>
+      {page}
+    </AppShell>
   )
 }
 

@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../../lib/supabaseClient'
 import { EQUIPMENT_OWNERSHIP_LABELS } from '../../lib/labels'
+import Button from '../../components/Button'
+import StatusTag from '../../components/StatusTag'
 import EquipmentForm from './EquipmentForm'
 
 // Owner/admin: list of equipment. Tap one to edit, or add a new one.
-function EquipmentPage({ onBack }) {
+function EquipmentPage() {
   // undefined = loading, array = loaded
   const [machines, setMachines] = useState(undefined)
   const [error, setError] = useState('')
@@ -48,14 +50,9 @@ function EquipmentPage({ onBack }) {
 
   return (
     <div className="card">
-      <button type="button" className="btn-secondary btn-back" onClick={onBack}>
-        ← Back
-      </button>
       <h1>Equipment</h1>
 
-      <button type="button" className="btn-primary" onClick={() => setEditing('new')}>
-        + Add equipment
-      </button>
+      <Button onClick={() => setEditing('new')}>Add equipment</Button>
 
       {error && (
         <p className="error" role="alert">
@@ -65,7 +62,7 @@ function EquipmentPage({ onBack }) {
 
       {!error && machines === undefined && <p className="loading">Loading…</p>}
 
-      {machines?.length === 0 && <p>No equipment yet.</p>}
+      {machines?.length === 0 && <p className="label">No equipment yet.</p>}
 
       {machines?.length > 0 && (
         <ul className="list">
@@ -77,10 +74,8 @@ function EquipmentPage({ onBack }) {
                 onClick={() => setEditing(machine)}
               >
                 <span className="list-title">{machine.name}</span>
-                <span className="list-detail">
-                  {EQUIPMENT_OWNERSHIP_LABELS[machine.ownership]}
-                  {machine.active ? '' : ' · Inactive'}
-                </span>
+                <span className="list-detail">{EQUIPMENT_OWNERSHIP_LABELS[machine.ownership]}</span>
+                {!machine.active && <StatusTag status="inactive" label="Inactive" />}
               </button>
             </li>
           ))}

@@ -2,6 +2,8 @@ import { useState } from 'react'
 import { supabase } from '../../lib/supabaseClient'
 import { EMPLOYEE_CATEGORY_LABELS } from '../../lib/labels'
 import ChoiceButtons from '../../components/ChoiceButtons'
+import Button from '../../components/Button'
+import Field from '../../components/Field'
 import EmployeeRates from './EmployeeRates'
 
 const ACTIVE_OPTIONS = { yes: 'Active', no: 'Inactive' }
@@ -46,9 +48,9 @@ function EmployeeForm({ employee, onDone }) {
       <form className="card" onSubmit={handleSubmit}>
         <h1>{employee ? 'Edit employee' : 'Add employee'}</h1>
 
-        <label htmlFor="full-name">Full name</label>
-        <input
+        <Field
           id="full-name"
+          label="Full name"
           required
           value={fullName}
           onChange={(e) => setFullName(e.target.value)}
@@ -74,12 +76,12 @@ function EmployeeForm({ employee, onDone }) {
           </p>
         )}
 
-        <button type="submit" className="btn-primary" disabled={busy}>
+        <Button type="submit" disabled={busy}>
           {busy ? 'Saving…' : 'Save employee'}
-        </button>
-        <button type="button" className="btn-secondary" onClick={() => onDone(false)}>
+        </Button>
+        <Button variant="secondary" onClick={() => onDone(false)}>
           {employee ? 'Back to employees' : 'Cancel'}
-        </button>
+        </Button>
       </form>
 
       {employee && <EmployeeRates employeeId={employee.id} />}

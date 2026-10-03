@@ -1,5 +1,7 @@
-import { formatDate, formatDateTime, formatTime, REPORT_STATUS_LABELS } from '../lib/labels'
+import { formatDate, formatDateTime, formatTime } from '../lib/labels'
 import { totalHours } from '../lib/reports'
+import DataTable from './DataTable'
+import StatusTag from './StatusTag'
 
 const SAFETY_ITEMS = [
   ['dsti_done', 'DSTI done'],
@@ -8,94 +10,89 @@ const SAFETY_ITEMS = [
   ['safety_moment', 'Safety moment'],
 ]
 
+const NAME_HOURS = (nameLabel, nameOf) => [
+  { key: 'name', label: nameLabel, render: nameOf },
+  { key: 'hours', label: 'Hours', numeric: true, render: (line) => Number(line.hours).toFixed(1) },
+]
+
 // Read-only view of one report (from fetchReport). Used by the site manager
 // for submitted reports and by owners for every report. Quantities only.
 function ReportSummary({ report }) {
   const crew = report.report_crew ?? []
   const equipment = report.report_equipment ?? []
 
+  const conditions = [
+    { id: 'times', label: 'Times', value: `${formatTime(report.start_time)} - ${formatTime(report.end_time)}` },
+    { id: 'fuel', label: 'Fuel (L)', value: Number(report.fuel_litres).toFixed(1) },
+    { id: 'rain', label: 'Rain (%)', value: report.rain_percent },
+    { id: 'delay', label: 'Delay (h)', value: Number(report.delay_hours).toFixed(1) },
+  ]
+  const safety = SAFETY_ITEMS.map(([key, label]) => ({
+    id: key,
+    label,
+    value: report[key] ? 'Yes' : 'No',
+  }))
+  const labelValue = (valueLabel) => [
+    { key: 'label', label: 'Item' },
+    { key: 'value', label: valueLabel, numeric: true },
+  ]
+
   return (
     <div className="card summary">
-      <p className={`badge ${report.status}`}>{REPORT_STATUS_LABELS[report.status]}</p>
+      <StatusTag status={report.status} />
       <h1>{report.project?.name}</h1>
-      <p className="summary-line">{formatDate(report.report_date)}</p>
-      {report.reporter?.full_name && (
-        <p className="summary-line">Site manager: {report.reporter.full_name}</p>
-      )}
+      <p className="summary-line">
+        <span className="num">{formatDate(report.report_date)}</span>
+        {report.reporter?.full_name && <> · {report.reporter.full_name}</>}
+      </p>
       {report.submitted_at && (
-        <p className="summary-line">Submitted {formatDateTime(report.submitted_at)}</p>
+        <p className="summary-line">
+          Submitted <span className="num">{formatDateTime(report.submitted_at)}</span>
+        </p>
       )}
 
       {report.reopened_at && (
         <p className="notice">
-          Reopened {formatDateTime(report.reopened_at)}
+          Reopened <span className="num">{formatDateTime(report.reopened_at)}</span>
           {report.reopener?.full_name ? ` by ${report.reopener.full_name}` : ''}
           <br />
           Reason: {report.reopen_reason}
         </p>
       )}
 
-      <h2>Times</h2>
-      <p className="summary-line">
-        {formatTime(report.start_time)} to {formatTime(report.end_time)}
+      <h2 className="section">Crew</h2>
+      {crew.length === 0 ? (
+        <p className="label">No crew recorded.</p>
+      ) : (
+        <DataTable
+          caption="Crew hours"
+          columns={NAME_HOURS('Name', (line) => line.employee?.full_name)}
+          rows={crew}
+        />
+      )}
+      <p className="total">
+        <span>Total man-hours</span>
+        <span className="num">{totalHours(crew).toFixed(1)}</span>
       </p>
 
-      <h2>Crew</h2>
-      {crew.length === 0 ? (
-        <p>No crew recorded.</p>
-      ) : (
-        <ul className="list">
-          {crew.map((line) => (
-            <li key={line.id} className="summary-row">
-              <span>{line.employee?.full_name}</span>
-              <strong>{Number(line.hours)} h</strong>
-            </li>
-          ))}
-        </ul>
-      )}
-      <p className="total">Total man-hours: {totalHours(crew)}</p>
-
-      <h2>Equipment</h2>
+      <h2 className="section">Equipment</h2>
       {equipment.length === 0 ? (
-        <p>No equipment recorded.</p>
+        <p className="label">No equipment recorded.</p>
       ) : (
-        <ul className="list">
-          {equipment.map((line) => (
-            <li key={line.id} className="summary-row">
-              <span>{line.equipment?.name}</span>
-              <strong>{Number(line.hours)} h</strong>
-            </li>
-          ))}
-        </ul>
+        <DataTable
+          caption="Equipment hours"
+          columns={NAME_HOURS('Equipment', (line) => line.equipment?.name)}
+          rows={equipment}
+        />
       )}
 
-      <h2>Site conditions</h2>
-      <ul className="list">
-        <li className="summary-row">
-          <span>Fuel</span>
-          <strong>{Number(report.fuel_litres)} L</strong>
-        </li>
-        <li className="summary-row">
-          <span>Rain</span>
-          <strong>{report.rain_percent}%</strong>
-        </li>
-        <li className="summary-row">
-          <span>Delay</span>
-          <strong>{Number(report.delay_hours)} h</strong>
-        </li>
-      </ul>
+      <h2 className="section">Site conditions</h2>
+      <DataTable caption="Site conditions" columns={labelValue('Value')} rows={conditions} />
 
-      <h2>Safety</h2>
-      <ul className="list">
-        {SAFETY_ITEMS.map(([key, label]) => (
-          <li key={key} className="summary-row">
-            <span>{label}</span>
-            <strong>{report[key] ? 'Yes' : 'No'}</strong>
-          </li>
-        ))}
-      </ul>
+      <h2 className="section">Safety</h2>
+      <DataTable caption="Safety checks" columns={labelValue('Done')} rows={safety} />
 
-      <h2>Activities</h2>
+      <h2 className="section">Activities</h2>
       <p className="activities">{report.activities || 'None recorded.'}</p>
     </div>
   )

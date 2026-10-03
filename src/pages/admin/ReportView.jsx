@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react'
 import { supabase } from '../../lib/supabaseClient'
 import { fetchReport } from '../../lib/reports'
 import ReportSummary from '../../components/ReportSummary'
+import Button from '../../components/Button'
+import Field from '../../components/Field'
 
 // Owner/admin: one report, read-only. A submitted report can be reopened
 // (with a reason) so the site manager can correct it. The database keeps
@@ -62,9 +64,9 @@ function ReportView({ reportId, onBack }) {
 
   return (
     <div className="card">
-      <button type="button" className="btn-secondary btn-back" onClick={onBack}>
-        ← Daily reports
-      </button>
+      <Button variant="secondary" inline onClick={onBack}>
+        Back to reports
+      </Button>
 
       {loadError && (
         <p className="error" role="alert">
@@ -84,10 +86,10 @@ function ReportView({ reportId, onBack }) {
 
       {report?.status === 'submitted' &&
         (reopening ? (
-          <div className="confirm">
-            <label htmlFor="reopen-reason">Why does this report need to be reopened?</label>
-            <input
+          <div className="void-form">
+            <Field
               id="reopen-reason"
+              label="Why does this report need to be reopened?"
               value={reason}
               onChange={(e) => setReason(e.target.value)}
             />
@@ -96,24 +98,23 @@ function ReportView({ reportId, onBack }) {
                 {reopenError}
               </p>
             )}
-            <button type="button" className="btn-danger" disabled={busy} onClick={reopen}>
+            <Button variant="danger" disabled={busy} onClick={reopen}>
               {busy ? 'Reopening…' : 'Confirm reopen'}
-            </button>
-            <button type="button" className="btn-secondary" onClick={() => setReopening(false)}>
+            </Button>
+            <Button variant="secondary" onClick={() => setReopening(false)}>
               Cancel
-            </button>
+            </Button>
           </div>
         ) : (
-          <button
-            type="button"
-            className="btn-primary"
+          <Button
+            variant="danger"
             onClick={() => {
               setReopenError('')
               setReopening(true)
             }}
           >
             Reopen report
-          </button>
+          </Button>
         ))}
     </div>
   )

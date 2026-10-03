@@ -2,6 +2,8 @@ import { useState } from 'react'
 import { supabase } from '../../lib/supabaseClient'
 import { PROJECT_STATUS_LABELS } from '../../lib/labels'
 import ChoiceButtons from '../../components/ChoiceButtons'
+import Button from '../../components/Button'
+import Field from '../../components/Field'
 
 // Add a project (project = null) or edit one. Projects are never deleted:
 // mark them Complete instead. company_id is filled in by the database.
@@ -42,17 +44,18 @@ function ProjectForm({ project, onDone }) {
     <form className="card" onSubmit={handleSubmit}>
       <h1>{project ? 'Edit project' : 'Add project'}</h1>
 
-      <label htmlFor="project-name">Project name</label>
-      <input
+      <Field
         id="project-name"
+        label="Project name"
         required
         value={name}
         onChange={(e) => setName(e.target.value)}
       />
 
-      <label htmlFor="contract-number">Contract number (optional)</label>
-      <input
+      <Field
         id="contract-number"
+        label="Contract number (optional)"
+        className="field-mono"
         value={contractNumber}
         onChange={(e) => setContractNumber(e.target.value)}
       />
@@ -70,12 +73,12 @@ function ProjectForm({ project, onDone }) {
         </p>
       )}
 
-      <button type="submit" className="btn-primary" disabled={busy}>
+      <Button type="submit" disabled={busy}>
         {busy ? 'Saving…' : 'Save project'}
-      </button>
-      <button type="button" className="btn-secondary" onClick={() => onDone(false)}>
+      </Button>
+      <Button variant="secondary" onClick={() => onDone(false)}>
         Cancel
-      </button>
+      </Button>
     </form>
   )
 }

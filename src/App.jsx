@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { supabase, isSupabaseConfigured } from './lib/supabaseClient'
 import LoginPage from './pages/LoginPage'
 import HomePage from './pages/HomePage'
+import AppHeader from './components/AppHeader'
 import './App.css'
 
 function App() {
@@ -25,27 +26,38 @@ function App() {
 
   if (!isSupabaseConfigured) {
     return (
-      <main className="app">
-        <h1>Nkutwala Site Costing</h1>
-        <p className="status warn">
-          Supabase: not configured yet - add your keys to the .env file
-        </p>
-      </main>
+      <>
+        <AppHeader />
+        <main className="app">
+          <p className="status warn">
+            Supabase: not configured yet - add your keys to the .env file
+          </p>
+        </main>
+      </>
     )
   }
 
   if (session === undefined) {
     return (
-      <main className="app">
-        <p className="loading">Loading…</p>
-      </main>
+      <>
+        <AppHeader />
+        <main className="app">
+          <p className="loading">Loading…</p>
+        </main>
+      </>
     )
   }
 
+  // Logged in: HomePage draws the full app shell (header, user bar, nav).
+  if (session) return <HomePage user={session.user} />
+
   return (
-    <main className="app">
-      {session ? <HomePage user={session.user} /> : <LoginPage />}
-    </main>
+    <>
+      <AppHeader />
+      <main className="app">
+        <LoginPage />
+      </main>
+    </>
   )
 }
 

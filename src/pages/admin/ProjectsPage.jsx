@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../../lib/supabaseClient'
 import { PROJECT_STATUS_LABELS } from '../../lib/labels'
+import Button from '../../components/Button'
+import StatusTag from '../../components/StatusTag'
 import ProjectForm from './ProjectForm'
 
 // Owner/admin: list of projects. Tap one to edit, or add a new one.
-function ProjectsPage({ onBack }) {
+function ProjectsPage() {
   // undefined = loading, array = loaded
   const [projects, setProjects] = useState(undefined)
   const [error, setError] = useState('')
@@ -48,14 +50,9 @@ function ProjectsPage({ onBack }) {
 
   return (
     <div className="card">
-      <button type="button" className="btn-secondary btn-back" onClick={onBack}>
-        ← Back
-      </button>
       <h1>Projects</h1>
 
-      <button type="button" className="btn-primary" onClick={() => setEditing('new')}>
-        + Add project
-      </button>
+      <Button onClick={() => setEditing('new')}>Add project</Button>
 
       {error && (
         <p className="error" role="alert">
@@ -65,7 +62,7 @@ function ProjectsPage({ onBack }) {
 
       {!error && projects === undefined && <p className="loading">Loading…</p>}
 
-      {projects?.length === 0 && <p>No projects yet.</p>}
+      {projects?.length === 0 && <p className="label">No projects yet.</p>}
 
       {projects?.length > 0 && (
         <ul className="list">
@@ -77,10 +74,10 @@ function ProjectsPage({ onBack }) {
                 onClick={() => setEditing(project)}
               >
                 <span className="list-title">{project.name}</span>
-                <span className="list-detail">
-                  {project.contract_number ? `${project.contract_number} · ` : ''}
-                  {PROJECT_STATUS_LABELS[project.status]}
-                </span>
+                {project.contract_number && (
+                  <span className="list-detail num">{project.contract_number}</span>
+                )}
+                <StatusTag status={project.status} label={PROJECT_STATUS_LABELS[project.status]} />
               </button>
             </li>
           ))}

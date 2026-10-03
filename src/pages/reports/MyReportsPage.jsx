@@ -1,11 +1,13 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../../lib/supabaseClient'
-import { formatDate, REPORT_STATUS_LABELS } from '../../lib/labels'
+import { formatDate } from '../../lib/labels'
+import Button from '../../components/Button'
+import StatusTag from '../../components/StatusTag'
 import ReportForm from './ReportForm'
 
 // Site manager: their own reports, newest first. The database only ever
 // returns this user's own reports.
-function MyReportsPage({ user, startNew, onBack }) {
+function MyReportsPage({ user, startNew }) {
   // undefined = loading, array = loaded
   const [reports, setReports] = useState(undefined)
   const [error, setError] = useState('')
@@ -52,14 +54,9 @@ function MyReportsPage({ user, startNew, onBack }) {
 
   return (
     <div className="card">
-      <button type="button" className="btn-secondary btn-back" onClick={onBack}>
-        ← Back
-      </button>
       <h1>My reports</h1>
 
-      <button type="button" className="btn-primary" onClick={() => setOpen('new')}>
-        + New daily report
-      </button>
+      <Button onClick={() => setOpen('new')}>New daily report</Button>
 
       {error && (
         <p className="error" role="alert">
@@ -69,7 +66,7 @@ function MyReportsPage({ user, startNew, onBack }) {
 
       {!error && reports === undefined && <p className="loading">Loading…</p>}
 
-      {reports?.length === 0 && <p>No reports yet.</p>}
+      {reports?.length === 0 && <p className="label">No reports yet.</p>}
 
       {reports?.length > 0 && (
         <ul className="list">
@@ -77,10 +74,8 @@ function MyReportsPage({ user, startNew, onBack }) {
             <li key={report.id}>
               <button type="button" className="list-item" onClick={() => setOpen(report.id)}>
                 <span className="list-title">{report.project?.name}</span>
-                <span className="list-detail">{formatDate(report.report_date)}</span>
-                <span className={`badge ${report.status}`}>
-                  {REPORT_STATUS_LABELS[report.status]}
-                </span>
+                <span className="list-detail num">{formatDate(report.report_date)}</span>
+                <StatusTag status={report.status} />
               </button>
             </li>
           ))}

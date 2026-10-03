@@ -2,6 +2,8 @@ import { useState } from 'react'
 import { supabase } from '../../lib/supabaseClient'
 import { EQUIPMENT_OWNERSHIP_LABELS } from '../../lib/labels'
 import ChoiceButtons from '../../components/ChoiceButtons'
+import Button from '../../components/Button'
+import Field from '../../components/Field'
 
 const ACTIVE_OPTIONS = { yes: 'Active', no: 'Inactive' }
 
@@ -44,9 +46,9 @@ function EquipmentForm({ machine, onDone }) {
     <form className="card" onSubmit={handleSubmit}>
       <h1>{machine ? 'Edit equipment' : 'Add equipment'}</h1>
 
-      <label htmlFor="equipment-name">Name</label>
-      <input
+      <Field
         id="equipment-name"
+        label="Name"
         required
         value={name}
         onChange={(e) => setName(e.target.value)}
@@ -72,12 +74,12 @@ function EquipmentForm({ machine, onDone }) {
         </p>
       )}
 
-      <button type="submit" className="btn-primary" disabled={busy}>
+      <Button type="submit" disabled={busy}>
         {busy ? 'Saving…' : 'Save equipment'}
-      </button>
-      <button type="button" className="btn-secondary" onClick={() => onDone(false)}>
+      </Button>
+      <Button variant="secondary" onClick={() => onDone(false)}>
         Cancel
-      </button>
+      </Button>
     </form>
   )
 }

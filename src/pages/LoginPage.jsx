@@ -1,5 +1,7 @@
 import { useState } from 'react'
 import { supabase } from '../lib/supabaseClient'
+import Button from '../components/Button'
+import Field from '../components/Field'
 
 // Email + password login. There is no sign-up: accounts are created by the
 // administrator in the Supabase dashboard.
@@ -31,12 +33,13 @@ function LoginPage() {
   }
 
   return (
-    <form className="card" onSubmit={handleSubmit}>
-      <h1>Nkutwala Site Costing</h1>
+    <form className="card login" onSubmit={handleSubmit}>
+      <h1>Site Costing</h1>
+      <p className="label">Log in with the account your administrator gave you.</p>
 
-      <label htmlFor="email">Email</label>
-      <input
+      <Field
         id="email"
+        label="Email"
         type="email"
         inputMode="email"
         autoComplete="username"
@@ -46,9 +49,9 @@ function LoginPage() {
         onChange={(e) => setEmail(e.target.value)}
       />
 
-      <label htmlFor="password">Password</label>
-      <input
+      <Field
         id="password"
+        label="Password"
         type="password"
         autoComplete="current-password"
         required
@@ -62,9 +65,9 @@ function LoginPage() {
         </p>
       )}
 
-      <button type="submit" className="btn-primary" disabled={busy}>
+      <Button type="submit" disabled={busy}>
         {busy ? 'Logging in…' : 'Log in'}
-      </button>
+      </Button>
     </form>
   )
 }

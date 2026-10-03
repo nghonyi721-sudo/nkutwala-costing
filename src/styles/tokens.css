@@ -1,0 +1,17 @@
+/* Nkutwala design tokens. The only place colours and fonts are defined. */
+:root {
+  --blue: #1F4FBF;
+  --blue-dk: #153A91;
+  --blue-pale: #EAEFFA;
+  --red: #DD1F26;
+  --red-pale: #FBEAEB;
+  --black: #111214;
+  --grey: #5C6166;
+  --grey-lt: #8A9096; /* borders and disabled only - too faint for text outdoors */
+  --line: #C9CDD2;
+  --line-lt: #E2E5E8;
+  --bg: #FFFFFF;
+  --bg-alt: #F4F5F6;
+  --sans: -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
+  --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}

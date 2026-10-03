@@ -1,6 +1,10 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../../lib/supabaseClient'
 import { formatDate, formatRand, todayLocal } from '../../lib/labels'
+import Button from '../../components/Button'
+import DataTable from '../../components/DataTable'
+import Field from '../../components/Field'
+import StatusTag from '../../components/StatusTag'
 
 // Owner/admin only (the database refuses site managers): an employee's dated
 // hourly rates. Rates are NEVER edited. A rate change is a new row; a wrong
@@ -114,23 +118,64 @@ function EmployeeRates({ employeeId }) {
     return 'Earlier rate'
   }
 
+  const voidingRate = rates?.find((rate) => rate.id === voidingId)
+
+  const rateColumns = [
+    {
+      key: 'hourly_rate',
+      label: 'Rate / hour',
+      numeric: true,
+      render: (rate) => <span className="rate-amount">{formatRand(rate.hourly_rate)}</span>,
+    },
+    { key: 'effective_from', label: 'From', mono: true, render: (rate) => formatDate(rate.effective_from) },
+    {
+      key: 'status',
+      label: 'Status',
+      render: (rate) =>
+        rate.voided_at ? (
+          <>
+            <StatusTag status="voided" label="Voided" />
+            <span className="cell-detail">{rate.void_reason}</span>
+          </>
+        ) : (
+          <>
+            <StatusTag status={rate.id === currentRate?.id ? 'current' : 'other'} label={rateStatus(rate)} />
+            {voidingId !== rate.id && (
+              <Button
+                variant="secondary"
+                className="cell-action"
+                onClick={() => {
+                  setVoidingId(rate.id)
+                  setVoidReason('')
+                  setVoidError('')
+                }}
+              >
+                Void
+              </Button>
+            )}
+          </>
+        ),
+    },
+  ]
+
   return (
     <section className="card section">
       <h2>Hourly rates</h2>
 
       {currentRate ? (
         <p className="current-rate">
-          Current: <strong>{formatRand(currentRate.hourly_rate)}</strong> / hour
+          <span>Current rate</span>
+          <span className="num">{formatRand(currentRate.hourly_rate)}</span>
         </p>
       ) : (
-        rates && <p>No current rate.</p>
+        rates && <p className="label">No current rate.</p>
       )}
 
       <form className="card" onSubmit={handleAdd}>
         <h3>Add new rate</h3>
-        <label htmlFor="rate-amount">Hourly rate (R)</label>
-        <input
+        <Field
           id="rate-amount"
+          label="Hourly rate (R)"
           type="number"
           inputMode="decimal"
           min="0.01"
@@ -140,9 +185,9 @@ function EmployeeRates({ employeeId }) {
           onChange={(e) => setAmount(e.target.value)}
         />
 
-        <label htmlFor="rate-from">Starts on</label>
-        <input
+        <Field
           id="rate-from"
+          label="Starts on"
           type="date"
           required
           value={effectiveFrom}
@@ -155,9 +200,9 @@ function EmployeeRates({ employeeId }) {
           </p>
         )}
 
-        <button type="submit" className="btn-primary" disabled={adding}>
+        <Button type="submit" disabled={adding}>
           {adding ? 'Adding…' : 'Add rate'}
-        </button>
+        </Button>
       </form>
 
       <h3>History</h3>
@@ -170,70 +215,41 @@ function EmployeeRates({ employeeId }) {
 
       {!loadError && rates === undefined && <p className="loading">Loading…</p>}
 
-      {rates?.length === 0 && <p>No rates yet.</p>}
+      {rates?.length === 0 && <p className="label">No rates yet.</p>}
 
       {rates?.length > 0 && (
-        <ul className="list">
-          {rates.map((rate) => (
-            <li
-              key={rate.id}
-              className={`rate-row${rate.voided_at ? ' voided' : ''}${
-                rate.id === currentRate?.id ? ' current' : ''
-              }`}
-            >
-              <span className="list-title rate-amount">
-                {formatRand(rate.hourly_rate)} / hour
-              </span>
-              <span className="list-detail">from {formatDate(rate.effective_from)}</span>
-              <span className="list-detail rate-status">{rateStatus(rate)}</span>
+        <DataTable
+          caption="Rate history"
+          columns={rateColumns}
+          rows={rates}
+          rowClassName={(rate) => (rate.voided_at ? 'voided' : '')}
+        />
+      )}
 
-              {!rate.voided_at && voidingId !== rate.id && (
-                <button
-                  type="button"
-                  className="btn-secondary"
-                  onClick={() => {
-                    setVoidingId(rate.id)
-                    setVoidReason('')
-                    setVoidError('')
-                  }}
-                >
-                  Void this rate
-                </button>
-              )}
-
-              {voidingId === rate.id && (
-                <div className="card">
-                  <label htmlFor={`void-reason-${rate.id}`}>Why is this rate wrong?</label>
-                  <input
-                    id={`void-reason-${rate.id}`}
-                    value={voidReason}
-                    onChange={(e) => setVoidReason(e.target.value)}
-                  />
-                  {voidError && (
-                    <p className="error" role="alert">
-                      {voidError}
-                    </p>
-                  )}
-                  <button
-                    type="button"
-                    className="btn-danger"
-                    disabled={voiding}
-                    onClick={() => handleVoid(rate.id)}
-                  >
-                    {voiding ? 'Voiding…' : 'Confirm void'}
-                  </button>
-                  <button
-                    type="button"
-                    className="btn-secondary"
-                    onClick={() => setVoidingId(null)}
-                  >
-                    Cancel
-                  </button>
-                </div>
-              )}
-            </li>
-          ))}
-        </ul>
+      {voidingRate && (
+        <div className="void-form">
+          <p>
+            Void <span className="num">{formatRand(voidingRate.hourly_rate)}</span> from{' '}
+            <span className="num">{formatDate(voidingRate.effective_from)}</span>?
+          </p>
+          <Field
+            id={`void-reason-${voidingRate.id}`}
+            label="Why is this rate wrong?"
+            value={voidReason}
+            onChange={(e) => setVoidReason(e.target.value)}
+          />
+          {voidError && (
+            <p className="error" role="alert">
+              {voidError}
+            </p>
+          )}
+          <Button variant="danger" disabled={voiding} onClick={() => handleVoid(voidingRate.id)}>
+            {voiding ? 'Voiding…' : 'Confirm void'}
+          </Button>
+          <Button variant="secondary" onClick={() => setVoidingId(null)}>
+            Cancel
+          </Button>
+        </div>
       )}
     </section>
   )

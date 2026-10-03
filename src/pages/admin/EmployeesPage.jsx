@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../../lib/supabaseClient'
 import { EMPLOYEE_CATEGORY_LABELS } from '../../lib/labels'
+import Button from '../../components/Button'
+import StatusTag from '../../components/StatusTag'
 import EmployeeForm from './EmployeeForm'
 
 // Owner/admin: list of employees. Tap one to edit it and manage rates.
-function EmployeesPage({ onBack }) {
+function EmployeesPage() {
   // undefined = loading, array = loaded
   const [employees, setEmployees] = useState(undefined)
   const [error, setError] = useState('')
@@ -48,14 +50,10 @@ function EmployeesPage({ onBack }) {
 
   return (
     <div className="card">
-      <button type="button" className="btn-secondary btn-back" onClick={onBack}>
-        ← Back
-      </button>
       <h1>Employees</h1>
 
-      <button type="button" className="btn-primary" onClick={() => setEditing('new')}>
-        + Add employee
-      </button>
+      <Button onClick={() => setEditing('new')}>Add employee</Button>
+      <p className="label">Tap a person to edit them or manage their hourly rates.</p>
 
       {error && (
         <p className="error" role="alert">
@@ -65,7 +63,7 @@ function EmployeesPage({ onBack }) {
 
       {!error && employees === undefined && <p className="loading">Loading…</p>}
 
-      {employees?.length === 0 && <p>No employees yet.</p>}
+      {employees?.length === 0 && <p className="label">No employees yet.</p>}
 
       {employees?.length > 0 && (
         <ul className="list">
@@ -77,10 +75,8 @@ function EmployeesPage({ onBack }) {
                 onClick={() => setEditing(employee)}
               >
                 <span className="list-title">{employee.full_name}</span>
-                <span className="list-detail">
-                  {EMPLOYEE_CATEGORY_LABELS[employee.category]}
-                  {employee.active ? '' : ' · Inactive'}
-                </span>
+                <span className="list-detail">{EMPLOYEE_CATEGORY_LABELS[employee.category]}</span>
+                {!employee.active && <StatusTag status="inactive" label="Inactive" />}
               </button>
             </li>
           ))}
