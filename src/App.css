@@ -1,0 +1,21 @@
+.app {
+  max-width: 640px;
+  margin: 4rem auto;
+  padding: 0 1rem;
+}
+
+.status {
+  display: inline-block;
+  padding: 0.5rem 0.75rem;
+  border-radius: 6px;
+}
+
+.status.ok {
+  background: #e6f4ea;
+  color: #1e6b34;
+}
+
+.status.warn {
+  background: #fff4e5;
+  color: #8a5300;
+}
