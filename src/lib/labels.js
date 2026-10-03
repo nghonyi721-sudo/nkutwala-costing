@@ -47,3 +47,42 @@ export function formatDate(isoDate) {
     year: 'numeric',
   })
 }
+
+export const EQUIPMENT_OWNERSHIP_LABELS = {
+  own: 'Own',
+  rented: 'Rented',
+}
+
+export const REPORT_STATUS_LABELS = {
+  draft: 'Draft',
+  submitted: 'Submitted',
+}
+
+// "07:30:00" -> "07:30"
+export function formatTime(time) {
+  return time ? time.slice(0, 5) : '-'
+}
+
+// A database timestamp shown in this device's local time.
+export function formatDateTime(timestamp) {
+  return new Date(timestamp).toLocaleString('en-ZA', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+}
+
+// Hours between two "HH:MM" times, rounded to the nearest half hour.
+// Returns null if either is missing or end isn't after start.
+export function hoursBetween(start, end) {
+  if (!start || !end) return null
+  const toMinutes = (time) => {
+    const [h, m] = time.split(':').map(Number)
+    return h * 60 + m
+  }
+  const minutes = toMinutes(end) - toMinutes(start)
+  if (minutes <= 0) return null
+  return Math.round((minutes / 60) * 2) / 2
+}

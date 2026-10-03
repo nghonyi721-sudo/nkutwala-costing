@@ -3,6 +3,9 @@ import { supabase } from '../lib/supabaseClient'
 import { ROLE_LABELS, isOwnerOrAdmin } from '../lib/labels'
 import ProjectsPage from './admin/ProjectsPage'
 import EmployeesPage from './admin/EmployeesPage'
+import EquipmentPage from './admin/EquipmentPage'
+import ReportsPage from './admin/ReportsPage'
+import MyReportsPage from './reports/MyReportsPage'
 
 // Shows who is logged in. Only asks the server for this user's own
 // name and role - nothing else. Owners and admins also get admin buttons.
@@ -10,7 +13,8 @@ function HomePage({ user }) {
   // undefined = loading, null = no profile row, object = loaded
   const [profile, setProfile] = useState(undefined)
   const [error, setError] = useState('')
-  // 'home' | 'projects' | 'employees'
+  // 'home' | 'projects' | 'employees' | 'equipment' | 'reports'
+  // | 'new-report' | 'my-reports'
   const [screen, setScreen] = useState('home')
 
   useEffect(() => {
@@ -38,10 +42,16 @@ function HomePage({ user }) {
   // Hiding these from site managers is only tidiness - the database refuses
   // them anyway (see the RLS policies and scripts/rls-attack-test.mjs).
   const isAdmin = Boolean(profile) && isOwnerOrAdmin(profile.role)
+  const isSiteManager = profile?.role === 'site_manager'
   const goHome = () => setScreen('home')
 
   if (isAdmin && screen === 'projects') return <ProjectsPage onBack={goHome} />
   if (isAdmin && screen === 'employees') return <EmployeesPage onBack={goHome} />
+  if (isAdmin && screen === 'equipment') return <EquipmentPage onBack={goHome} />
+  if (isAdmin && screen === 'reports') return <ReportsPage onBack={goHome} />
+  if (isSiteManager && (screen === 'new-report' || screen === 'my-reports')) {
+    return <MyReportsPage user={user} startNew={screen === 'new-report'} onBack={goHome} />
+  }
 
   return (
     <div className="card">
@@ -67,13 +77,30 @@ function HomePage({ user }) {
         </>
       )}
 
+      {isSiteManager && (
+        <>
+          <button type="button" className="btn-primary" onClick={() => setScreen('new-report')}>
+            New daily report
+          </button>
+          <button type="button" className="btn-primary" onClick={() => setScreen('my-reports')}>
+            My reports
+          </button>
+        </>
+      )}
+
       {isAdmin && (
         <>
+          <button type="button" className="btn-primary" onClick={() => setScreen('reports')}>
+            Daily reports
+          </button>
           <button type="button" className="btn-primary" onClick={() => setScreen('projects')}>
             Projects
           </button>
           <button type="button" className="btn-primary" onClick={() => setScreen('employees')}>
             Employees
+          </button>
+          <button type="button" className="btn-primary" onClick={() => setScreen('equipment')}>
+            Equipment
           </button>
         </>
       )}
