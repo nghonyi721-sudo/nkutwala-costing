@@ -4,6 +4,7 @@ import { fetchReport } from '../../lib/reports'
 import ReportSummary from '../../components/ReportSummary'
 import Button from '../../components/Button'
 import Field from '../../components/Field'
+import Skeleton from '../../components/Skeleton'
 
 // Owner/admin: one report, read-only. A submitted report can be reopened
 // (with a reason) so the site manager can correct it. The database keeps
@@ -73,7 +74,7 @@ function ReportView({ reportId, onBack }) {
           {loadError}
         </p>
       )}
-      {!loadError && report === undefined && <p className="loading">Loading…</p>}
+      {!loadError && report === undefined && <Skeleton rows={4} />}
       {report === null && <p className="error">Report not found.</p>}
 
       {report && <ReportSummary report={report} />}

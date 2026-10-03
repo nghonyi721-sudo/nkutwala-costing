@@ -4,6 +4,7 @@ import { EMPLOYEE_CATEGORY_LABELS } from '../../lib/labels'
 import ChoiceButtons from '../../components/ChoiceButtons'
 import Button from '../../components/Button'
 import Field from '../../components/Field'
+import PageHeader from '../../components/PageHeader'
 import EmployeeRates from './EmployeeRates'
 
 const ACTIVE_OPTIONS = { yes: 'Active', no: 'Inactive' }
@@ -46,7 +47,7 @@ function EmployeeForm({ employee, onDone }) {
   return (
     <div className="card">
       <form className="card" onSubmit={handleSubmit}>
-        <h1>{employee ? 'Edit employee' : 'Add employee'}</h1>
+        <PageHeader eyebrow="Setup · Employees" title={employee ? employee.full_name : 'Add employee'} />
 
         <Field
           id="full-name"

@@ -8,6 +8,11 @@ import ReportSummary from '../../components/ReportSummary'
 import Button from '../../components/Button'
 import Field from '../../components/Field'
 import StatusTag from '../../components/StatusTag'
+import Figure from '../../components/Figure'
+import ListRow from '../../components/ListRow'
+import PageHeader from '../../components/PageHeader'
+import SectionHeading from '../../components/SectionHeading'
+import Skeleton from '../../components/Skeleton'
 
 const SAFETY_ITEMS = [
   ['dsti_done', 'DSTI done'],
@@ -277,7 +282,7 @@ function ReportForm({ user, reportId, onDone }) {
     return (
       <div className="card">
         {backButton}
-        <p className="loading">Loading…</p>
+        <Skeleton rows={4} />
       </div>
     )
   }
@@ -322,10 +327,20 @@ function ReportForm({ user, reportId, onDone }) {
   return (
     <div className="card report-form">
       {backButton}
+      <PageHeader
+        eyebrow="Site · Daily activity report"
+        title={id ? 'Daily report' : 'New daily report'}
+        meta={
+          <>
+            <span className="num">{form.report_date ? formatDate(form.report_date) : 'No date'}</span>
+            {form.project_id && <> · {projectName}</>}
+          </>
+        }
+      />
       {id && <StatusTag status="draft" />}
-      <h1>{id ? 'Daily report' : 'New daily report'}</h1>
 
       {/* 1. Project and date */}
+      <SectionHeading number={1}>Project &amp; date</SectionHeading>
       {Object.keys(projectOptions).length === 0 ? (
         <p className="error">There are no active projects. Ask the owner to add one.</p>
       ) : (
@@ -346,6 +361,7 @@ function ReportForm({ user, reportId, onDone }) {
       />
 
       {/* 2. Times */}
+      <SectionHeading number={2}>Times</SectionHeading>
       <div className="two-columns">
         <Field
           id="start-time"
@@ -364,7 +380,7 @@ function ReportForm({ user, reportId, onDone }) {
       </div>
 
       {/* 3. Crew */}
-      <h2>Crew</h2>
+      <SectionHeading number={3}>Crew</SectionHeading>
       {crew.length === 0 && <p className="label">No one added yet.</p>}
       {crew.length > 0 && (
         <ul className="list">
@@ -394,13 +410,11 @@ function ReportForm({ user, reportId, onDone }) {
             <ul className="list">
               {availableEmployees.map((employee) => (
                 <li key={employee.id}>
-                  <button
-                    type="button"
-                    className="list-item"
+                  <ListRow
+                    title={employee.full_name}
+                    action="Add"
                     onClick={() => addCrew(employee.id)}
-                  >
-                    <span className="list-title">{employee.full_name}</span>
-                  </button>
+                  />
                 </li>
               ))}
             </ul>
@@ -415,14 +429,10 @@ function ReportForm({ user, reportId, onDone }) {
         </Button>
       )}
 
-      {/* 4. Total man-hours */}
-      <p className="total">
-        <span>Total man-hours</span>
-        <span className="num">{totalHours(crew).toFixed(1)}</span>
-      </p>
+      <Figure label="Total man-hours" value={totalHours(crew).toFixed(1)} unit="h" emphasis />
 
-      {/* 5. Equipment */}
-      <h2>Equipment</h2>
+      {/* 4. Equipment */}
+      <SectionHeading number={4}>Equipment</SectionHeading>
       {equipmentLines.length === 0 && <p className="label">No equipment added yet.</p>}
       {equipmentLines.length > 0 && (
         <ul className="list">
@@ -452,13 +462,11 @@ function ReportForm({ user, reportId, onDone }) {
             <ul className="list">
               {availableMachines.map((machine) => (
                 <li key={machine.id}>
-                  <button
-                    type="button"
-                    className="list-item"
+                  <ListRow
+                    title={machine.name}
+                    action="Add"
                     onClick={() => addEquipment(machine.id)}
-                  >
-                    <span className="list-title">{machine.name}</span>
-                  </button>
+                  />
                 </li>
               ))}
             </ul>
@@ -473,8 +481,8 @@ function ReportForm({ user, reportId, onDone }) {
         </Button>
       )}
 
-      {/* 6. Site conditions */}
-      <h2>Site conditions</h2>
+      {/* 5. Site conditions */}
+      <SectionHeading number={5}>Conditions</SectionHeading>
       <Field
         id="fuel"
         label="Fuel (litres)"
@@ -500,8 +508,8 @@ function ReportForm({ user, reportId, onDone }) {
         onChange={(value) => setField('delay_hours', value)}
       />
 
-      {/* 7. Safety */}
-      <h2>Safety</h2>
+      {/* 6. Safety */}
+      <SectionHeading number={6}>Safety</SectionHeading>
       <div className="choice-grid">
         {SAFETY_ITEMS.map(([key, label]) => (
           <button
@@ -517,8 +525,8 @@ function ReportForm({ user, reportId, onDone }) {
         ))}
       </div>
 
-      {/* 8. Activities */}
-      <h2>Activities</h2>
+      {/* 7. Activities */}
+      <SectionHeading number={7}>Activities</SectionHeading>
       <Field
         id="activities"
         label="What was done today"
@@ -528,48 +536,52 @@ function ReportForm({ user, reportId, onDone }) {
         onChange={(e) => setField('activities', e.target.value)}
       />
 
-      {/* 9. Save / submit */}
-      {error && (
-        <p className="error" role="alert">
-          {error}
-        </p>
-      )}
-      {message && (
-        <p className="success" role="status">
-          {message}
-        </p>
-      )}
-
-      {confirming ? (
-        <div className="confirm">
-          <p>
-            Submit report for <strong>{projectName}</strong>,{' '}
-            <span className="num">{formatDate(form.report_date)}</span>? You can&apos;t change
-            it after this.
+      {/* Save / submit - pinned to the bottom of the screen */}
+      <div className="action-bar">
+        {error && (
+          <p className="error" role="alert">
+            {error}
           </p>
-          <Button disabled={busy} onClick={submit}>
-            {busy ? 'Submitting…' : 'Yes, submit'}
-          </Button>
-          <Button variant="secondary" onClick={() => setConfirming(false)}>
-            Go back
-          </Button>
-        </div>
-      ) : (
-        <>
-          <Button variant="secondary" disabled={busy} onClick={save}>
-            {busy ? 'Saving…' : 'Save draft'}
-          </Button>
-          <Button
-            disabled={busy}
-            onClick={() => {
-              setError('')
-              setConfirming(true)
-            }}
-          >
-            Submit report
-          </Button>
-        </>
-      )}
+        )}
+        {message && (
+          <p className="success" role="status">
+            {message}
+          </p>
+        )}
+
+        {confirming ? (
+          <div className="confirm">
+            <p>
+              Submit report for <strong>{projectName}</strong>,{' '}
+              <span className="num">{formatDate(form.report_date)}</span>? You can&apos;t change
+              it after this.
+            </p>
+            <div className="action-bar-buttons">
+              <Button variant="secondary" onClick={() => setConfirming(false)}>
+                Go back
+              </Button>
+              <Button disabled={busy} onClick={submit}>
+                {busy ? 'Submitting…' : 'Yes, submit'}
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <div className="action-bar-buttons">
+            <Button variant="secondary" disabled={busy} onClick={save}>
+              {busy ? 'Saving…' : 'Save draft'}
+            </Button>
+            <Button
+              disabled={busy}
+              onClick={() => {
+                setError('')
+                setConfirming(true)
+              }}
+            >
+              Submit
+            </Button>
+          </div>
+        )}
+      </div>
     </div>
   )
 }

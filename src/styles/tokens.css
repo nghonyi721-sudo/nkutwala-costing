@@ -1,17 +1,52 @@
-/* Nkutwala design tokens. The only place colours and fonts are defined. */
+/* Nkutwala design tokens. The only place colours, fonts, sizes, spacing and
+   motion are defined. */
 :root {
+  /* Colour */
   --blue: #1F4FBF;
   --blue-dk: #153A91;
   --blue-pale: #EAEFFA;
   --red: #DD1F26;
   --red-pale: #FBEAEB;
+  --red-dk: #A3161C;     /* red text on pale red (passes contrast), pressed red */
   --black: #111214;
+  --black-2: #26282B;    /* pressed state on black */
   --grey: #5C6166;
   --grey-lt: #8A9096; /* borders and disabled only - too faint for text outdoors */
   --line: #C9CDD2;
   --line-lt: #E2E5E8;
   --bg: #FFFFFF;
   --bg-alt: #F4F5F6;
-  --sans: -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
-  --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+
+  /* Type - IBM Plex is bundled with the app (see main.jsx); the system
+     fonts after it are only a fallback while it loads. */
+  --sans: "IBM Plex Sans", -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+
+  --text-xs: 0.75rem;   /* 12 */
+  --text-sm: 0.875rem;  /* 14 */
+  --text-base: 1rem;    /* 16 */
+  --text-lg: 1.25rem;   /* 20 */
+  --text-xl: 1.75rem;   /* 28 */
+  --text-2xl: 2.25rem;  /* 36 */
+
+  --tracking-tight: -0.015em;
+  --tracking-caps: 0.08em;
+
+  /* Spacing - strict 4/8 grid */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --space-7: 48px;
+  --space-8: 64px;
+
+  /* Tap targets */
+  --tap: 48px;
+  --tap-lg: 56px;
+
+  /* Motion */
+  --fast: 120ms;
+  --ease: cubic-bezier(0.2, 0, 0, 1);
 }

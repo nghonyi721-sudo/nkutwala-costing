@@ -6,6 +6,8 @@ import ChoiceButtons from '../../components/ChoiceButtons'
 import DataTable from '../../components/DataTable'
 import Field from '../../components/Field'
 import StatusTag from '../../components/StatusTag'
+import PageHeader from '../../components/PageHeader'
+import Skeleton from '../../components/Skeleton'
 import ReportView from './ReportView'
 
 const ALL_PROJECTS = 'all'
@@ -93,7 +95,11 @@ function ReportsPage() {
 
   return (
     <div className="card">
-      <h1>Daily reports</h1>
+      <PageHeader
+        eyebrow="Review"
+        title="Daily reports"
+        meta={reports ? `${reports.length} report${reports.length === 1 ? '' : 's'} shown` : null}
+      />
 
       <ChoiceButtons
         label="Project"
@@ -123,7 +129,7 @@ function ReportsPage() {
         </p>
       )}
 
-      {!error && reports === undefined && <p className="loading">Loading…</p>}
+      {!error && reports === undefined && <Skeleton />}
 
       {reports?.length === 0 && <p className="label">No reports match.</p>}
 

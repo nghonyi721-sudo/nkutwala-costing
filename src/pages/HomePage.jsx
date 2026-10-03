@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabaseClient'
 import { isOwnerOrAdmin } from '../lib/labels'
 import AppShell from '../components/AppShell'
+import Skeleton from '../components/Skeleton'
 import ProjectsPage from './admin/ProjectsPage'
 import EmployeesPage from './admin/EmployeesPage'
 import EquipmentPage from './admin/EquipmentPage'
@@ -80,7 +81,7 @@ function HomePage({ user }) {
         </p>
       )}
 
-      {!error && profile === undefined && <p className="loading">Loading…</p>}
+      {!error && profile === undefined && <Skeleton rows={2} />}
 
       {!error && profile === null && (
         <p className="error" role="alert">

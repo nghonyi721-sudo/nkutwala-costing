@@ -3,6 +3,9 @@ import { supabase } from '../../lib/supabaseClient'
 import { EQUIPMENT_OWNERSHIP_LABELS } from '../../lib/labels'
 import Button from '../../components/Button'
 import StatusTag from '../../components/StatusTag'
+import ListRow from '../../components/ListRow'
+import PageHeader from '../../components/PageHeader'
+import Skeleton from '../../components/Skeleton'
 import EquipmentForm from './EquipmentForm'
 
 // Owner/admin: list of equipment. Tap one to edit, or add a new one.
@@ -50,7 +53,11 @@ function EquipmentPage() {
 
   return (
     <div className="card">
-      <h1>Equipment</h1>
+      <PageHeader
+        eyebrow="Setup"
+        title="Equipment"
+        meta={machines ? `${machines.filter((m) => m.active).length} active of ${machines.length}` : null}
+      />
 
       <Button onClick={() => setEditing('new')}>Add equipment</Button>
 
@@ -60,7 +67,7 @@ function EquipmentPage() {
         </p>
       )}
 
-      {!error && machines === undefined && <p className="loading">Loading…</p>}
+      {!error && machines === undefined && <Skeleton />}
 
       {machines?.length === 0 && <p className="label">No equipment yet.</p>}
 
@@ -68,15 +75,13 @@ function EquipmentPage() {
         <ul className="list">
           {machines.map((machine) => (
             <li key={machine.id}>
-              <button
-                type="button"
-                className={`list-item${machine.active ? '' : ' inactive'}`}
+              <ListRow
+                title={machine.name}
+                detail={EQUIPMENT_OWNERSHIP_LABELS[machine.ownership]}
+                muted={!machine.active}
+                tag={machine.active ? null : <StatusTag status="inactive" label="Inactive" />}
                 onClick={() => setEditing(machine)}
-              >
-                <span className="list-title">{machine.name}</span>
-                <span className="list-detail">{EQUIPMENT_OWNERSHIP_LABELS[machine.ownership]}</span>
-                {!machine.active && <StatusTag status="inactive" label="Inactive" />}
-              </button>
+              />
             </li>
           ))}
         </ul>

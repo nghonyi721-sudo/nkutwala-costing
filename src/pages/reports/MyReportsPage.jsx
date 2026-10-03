@@ -3,6 +3,9 @@ import { supabase } from '../../lib/supabaseClient'
 import { formatDate } from '../../lib/labels'
 import Button from '../../components/Button'
 import StatusTag from '../../components/StatusTag'
+import ListRow from '../../components/ListRow'
+import PageHeader from '../../components/PageHeader'
+import Skeleton from '../../components/Skeleton'
 import ReportForm from './ReportForm'
 
 // Site manager: their own reports, newest first. The database only ever
@@ -54,7 +57,17 @@ function MyReportsPage({ user, startNew }) {
 
   return (
     <div className="card">
-      <h1>My reports</h1>
+      <PageHeader
+        eyebrow="Site"
+        title="My reports"
+        meta={
+          reports
+            ? `${reports.filter((r) => r.status === 'draft').length} draft · ${
+                reports.filter((r) => r.status === 'submitted').length
+              } submitted`
+            : null
+        }
+      />
 
       <Button onClick={() => setOpen('new')}>New daily report</Button>
 
@@ -64,19 +77,21 @@ function MyReportsPage({ user, startNew }) {
         </p>
       )}
 
-      {!error && reports === undefined && <p className="loading">Loading…</p>}
+      {!error && reports === undefined && <Skeleton />}
 
-      {reports?.length === 0 && <p className="label">No reports yet.</p>}
+      {reports?.length === 0 && <p className="label">No reports yet. Tap New daily report to start today's.</p>}
 
       {reports?.length > 0 && (
         <ul className="list">
           {reports.map((report) => (
             <li key={report.id}>
-              <button type="button" className="list-item" onClick={() => setOpen(report.id)}>
-                <span className="list-title">{report.project?.name}</span>
-                <span className="list-detail num">{formatDate(report.report_date)}</span>
-                <StatusTag status={report.status} />
-              </button>
+              <ListRow
+                title={report.project?.name}
+                detail={formatDate(report.report_date)}
+                mono
+                tag={<StatusTag status={report.status} />}
+                onClick={() => setOpen(report.id)}
+              />
             </li>
           ))}
         </ul>

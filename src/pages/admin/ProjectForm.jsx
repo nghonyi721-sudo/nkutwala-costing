@@ -4,6 +4,7 @@ import { PROJECT_STATUS_LABELS } from '../../lib/labels'
 import ChoiceButtons from '../../components/ChoiceButtons'
 import Button from '../../components/Button'
 import Field from '../../components/Field'
+import PageHeader from '../../components/PageHeader'
 
 // Add a project (project = null) or edit one. Projects are never deleted:
 // mark them Complete instead. company_id is filled in by the database.
@@ -42,7 +43,7 @@ function ProjectForm({ project, onDone }) {
 
   return (
     <form className="card" onSubmit={handleSubmit}>
-      <h1>{project ? 'Edit project' : 'Add project'}</h1>
+      <PageHeader eyebrow="Setup · Projects" title={project ? project.name : 'Add project'} />
 
       <Field
         id="project-name"

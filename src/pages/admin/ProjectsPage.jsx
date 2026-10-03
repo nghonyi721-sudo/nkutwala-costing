@@ -3,6 +3,9 @@ import { supabase } from '../../lib/supabaseClient'
 import { PROJECT_STATUS_LABELS } from '../../lib/labels'
 import Button from '../../components/Button'
 import StatusTag from '../../components/StatusTag'
+import ListRow from '../../components/ListRow'
+import PageHeader from '../../components/PageHeader'
+import Skeleton from '../../components/Skeleton'
 import ProjectForm from './ProjectForm'
 
 // Owner/admin: list of projects. Tap one to edit, or add a new one.
@@ -50,7 +53,11 @@ function ProjectsPage() {
 
   return (
     <div className="card">
-      <h1>Projects</h1>
+      <PageHeader
+        eyebrow="Setup"
+        title="Projects"
+        meta={projects ? `${projects.length} project${projects.length === 1 ? '' : 's'}` : null}
+      />
 
       <Button onClick={() => setEditing('new')}>Add project</Button>
 
@@ -60,7 +67,7 @@ function ProjectsPage() {
         </p>
       )}
 
-      {!error && projects === undefined && <p className="loading">Loading…</p>}
+      {!error && projects === undefined && <Skeleton />}
 
       {projects?.length === 0 && <p className="label">No projects yet.</p>}
 
@@ -68,17 +75,14 @@ function ProjectsPage() {
         <ul className="list">
           {projects.map((project) => (
             <li key={project.id}>
-              <button
-                type="button"
-                className={`list-item${project.status === 'complete' ? ' inactive' : ''}`}
+              <ListRow
+                title={project.name}
+                detail={project.contract_number}
+                mono
+                muted={project.status === 'complete'}
+                tag={<StatusTag status={project.status} label={PROJECT_STATUS_LABELS[project.status]} />}
                 onClick={() => setEditing(project)}
-              >
-                <span className="list-title">{project.name}</span>
-                {project.contract_number && (
-                  <span className="list-detail num">{project.contract_number}</span>
-                )}
-                <StatusTag status={project.status} label={PROJECT_STATUS_LABELS[project.status]} />
-              </button>
+              />
             </li>
           ))}
         </ul>

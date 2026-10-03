@@ -3,6 +3,7 @@ import { supabase, isSupabaseConfigured } from './lib/supabaseClient'
 import LoginPage from './pages/LoginPage'
 import HomePage from './pages/HomePage'
 import AppHeader from './components/AppHeader'
+import Skeleton from './components/Skeleton'
 import './App.css'
 
 function App() {
@@ -42,7 +43,7 @@ function App() {
       <>
         <AppHeader />
         <main className="app">
-          <p className="loading">Loading…</p>
+          <Skeleton rows={2} />
         </main>
       </>
     )
@@ -51,14 +52,8 @@ function App() {
   // Logged in: HomePage draws the full app shell (header, user bar, nav).
   if (session) return <HomePage user={session.user} />
 
-  return (
-    <>
-      <AppHeader />
-      <main className="app">
-        <LoginPage />
-      </main>
-    </>
-  )
+  // Logged out: the login screen has its own brand panel.
+  return <LoginPage />
 }
 
 export default App

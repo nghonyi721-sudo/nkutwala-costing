@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { supabase } from '../lib/supabaseClient'
 import Button from '../components/Button'
 import Field from '../components/Field'
+import PageHeader from '../components/PageHeader'
 
 // Email + password login. There is no sign-up: accounts are created by the
 // administrator in the Supabase dashboard.
@@ -33,42 +34,55 @@ function LoginPage() {
   }
 
   return (
-    <form className="card login" onSubmit={handleSubmit}>
-      <h1>Site Costing</h1>
-      <p className="label">Log in with the account your administrator gave you.</p>
+    <div className="login-screen">
+      <div className="login-brand">
+        <span className="wordmark">
+          <span className="wordmark-name">Nkutwala</span>
+          <span className="wordmark-sub">Construction</span>
+        </span>
+        <p className="login-product">Site Costing</p>
+      </div>
 
-      <Field
-        id="email"
-        label="Email"
-        type="email"
-        inputMode="email"
-        autoComplete="username"
-        autoCapitalize="none"
-        required
-        value={email}
-        onChange={(e) => setEmail(e.target.value)}
-      />
+      <form className="card login-form" onSubmit={handleSubmit}>
+        <PageHeader
+          eyebrow="Welcome"
+          title="Log in"
+          meta="Use the account your administrator gave you."
+        />
 
-      <Field
-        id="password"
-        label="Password"
-        type="password"
-        autoComplete="current-password"
-        required
-        value={password}
-        onChange={(e) => setPassword(e.target.value)}
-      />
+        <Field
+          id="email"
+          label="Email"
+          type="email"
+          inputMode="email"
+          autoComplete="username"
+          autoCapitalize="none"
+          required
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+        />
 
-      {error && (
-        <p className="error" role="alert">
-          {error}
-        </p>
-      )}
+        <Field
+          id="password"
+          label="Password"
+          type="password"
+          autoComplete="current-password"
+          required
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+        />
 
-      <Button type="submit" disabled={busy}>
-        {busy ? 'Logging in…' : 'Log in'}
-      </Button>
-    </form>
+        {error && (
+          <p className="error" role="alert">
+            {error}
+          </p>
+        )}
+
+        <Button type="submit" disabled={busy}>
+          {busy ? 'Logging in…' : 'Log in'}
+        </Button>
+      </form>
+    </div>
   )
 }
 

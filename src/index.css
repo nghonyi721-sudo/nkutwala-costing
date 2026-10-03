@@ -16,10 +16,13 @@ html {
 body {
   margin: 0;
   font-family: var(--sans);
-  font-size: 16px;
-  line-height: 1.4;
+  font-size: var(--text-base);
+  line-height: 1.5;
   color: var(--black);
   background: var(--bg);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
 }
 
 button,
@@ -29,6 +32,10 @@ textarea {
   color: inherit;
   -webkit-appearance: none;
   appearance: none;
+}
+
+button {
+  -webkit-tap-highlight-color: transparent;
 }
 
 /* Every number (hours, litres, dates, %, rands) - so columns line up. */
@@ -44,4 +51,14 @@ textarea {
   overflow: hidden;
   clip: rect(0 0 0 0);
   white-space: nowrap;
+}
+
+/* Respect "reduce motion" on the phone: no transitions or pulsing. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition: none !important;
+  }
 }

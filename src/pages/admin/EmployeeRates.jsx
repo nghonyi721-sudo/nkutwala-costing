@@ -5,6 +5,9 @@ import Button from '../../components/Button'
 import DataTable from '../../components/DataTable'
 import Field from '../../components/Field'
 import StatusTag from '../../components/StatusTag'
+import Figure from '../../components/Figure'
+import SectionHeading from '../../components/SectionHeading'
+import Skeleton from '../../components/Skeleton'
 
 // Owner/admin only (the database refuses site managers): an employee's dated
 // hourly rates. Rates are NEVER edited. A rate change is a new row; a wrong
@@ -159,20 +162,22 @@ function EmployeeRates({ employeeId }) {
   ]
 
   return (
-    <section className="card section">
-      <h2>Hourly rates</h2>
+    <section className="card">
+      <SectionHeading>Hourly rates</SectionHeading>
 
       {currentRate ? (
-        <p className="current-rate">
-          <span>Current rate</span>
-          <span className="num">{formatRand(currentRate.hourly_rate)}</span>
-        </p>
+        <Figure
+          label="Current rate"
+          value={formatRand(currentRate.hourly_rate)}
+          unit="/ hour"
+          emphasis
+        />
       ) : (
         rates && <p className="label">No current rate.</p>
       )}
 
       <form className="card" onSubmit={handleAdd}>
-        <h3>Add new rate</h3>
+        <h3 className="caps">Add new rate</h3>
         <Field
           id="rate-amount"
           label="Hourly rate (R)"
@@ -205,7 +210,7 @@ function EmployeeRates({ employeeId }) {
         </Button>
       </form>
 
-      <h3>History</h3>
+      <h3 className="caps">History</h3>
 
       {loadError && (
         <p className="error" role="alert">
@@ -213,7 +218,7 @@ function EmployeeRates({ employeeId }) {
         </p>
       )}
 
-      {!loadError && rates === undefined && <p className="loading">Loading…</p>}
+      {!loadError && rates === undefined && <Skeleton rows={2} />}
 
       {rates?.length === 0 && <p className="label">No rates yet.</p>}
 

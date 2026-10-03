@@ -4,6 +4,7 @@ import { EQUIPMENT_OWNERSHIP_LABELS } from '../../lib/labels'
 import ChoiceButtons from '../../components/ChoiceButtons'
 import Button from '../../components/Button'
 import Field from '../../components/Field'
+import PageHeader from '../../components/PageHeader'
 
 const ACTIVE_OPTIONS = { yes: 'Active', no: 'Inactive' }
 
@@ -44,7 +45,7 @@ function EquipmentForm({ machine, onDone }) {
 
   return (
     <form className="card" onSubmit={handleSubmit}>
-      <h1>{machine ? 'Edit equipment' : 'Add equipment'}</h1>
+      <PageHeader eyebrow="Setup · Equipment" title={machine ? machine.name : 'Add equipment'} />
 
       <Field
         id="equipment-name"

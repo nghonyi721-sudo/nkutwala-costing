@@ -1,6 +1,9 @@
 import { formatDate, formatDateTime, formatTime } from '../lib/labels'
 import { totalHours } from '../lib/reports'
 import DataTable from './DataTable'
+import Figure from './Figure'
+import PageHeader from './PageHeader'
+import SectionHeading from './SectionHeading'
 import StatusTag from './StatusTag'
 
 const SAFETY_ITEMS = [
@@ -15,6 +18,11 @@ const NAME_HOURS = (nameLabel, nameOf) => [
   { key: 'hours', label: 'Hours', numeric: true, render: (line) => Number(line.hours).toFixed(1) },
 ]
 
+const LABEL_VALUE = (valueLabel) => [
+  { key: 'label', label: 'Item' },
+  { key: 'value', label: valueLabel, numeric: true },
+]
+
 // Read-only view of one report (from fetchReport). Used by the site manager
 // for submitted reports and by owners for every report. Quantities only.
 function ReportSummary({ report }) {
@@ -22,9 +30,8 @@ function ReportSummary({ report }) {
   const equipment = report.report_equipment ?? []
 
   const conditions = [
-    { id: 'times', label: 'Times', value: `${formatTime(report.start_time)} - ${formatTime(report.end_time)}` },
-    { id: 'fuel', label: 'Fuel (L)', value: Number(report.fuel_litres).toFixed(1) },
-    { id: 'rain', label: 'Rain (%)', value: report.rain_percent },
+    { id: 'start', label: 'Start', value: formatTime(report.start_time) },
+    { id: 'end', label: 'End', value: formatTime(report.end_time) },
     { id: 'delay', label: 'Delay (h)', value: Number(report.delay_hours).toFixed(1) },
   ]
   const safety = SAFETY_ITEMS.map(([key, label]) => ({
@@ -32,24 +39,26 @@ function ReportSummary({ report }) {
     label,
     value: report[key] ? 'Yes' : 'No',
   }))
-  const labelValue = (valueLabel) => [
-    { key: 'label', label: 'Item' },
-    { key: 'value', label: valueLabel, numeric: true },
-  ]
 
   return (
     <div className="card summary">
+      <PageHeader
+        eyebrow="Daily activity report"
+        title={report.project?.name}
+        meta={
+          <>
+            <span className="num">{formatDate(report.report_date)}</span>
+            {report.reporter?.full_name && <> · {report.reporter.full_name}</>}
+            {report.submitted_at && (
+              <>
+                {' '}
+                · Submitted <span className="num">{formatDateTime(report.submitted_at)}</span>
+              </>
+            )}
+          </>
+        }
+      />
       <StatusTag status={report.status} />
-      <h1>{report.project?.name}</h1>
-      <p className="summary-line">
-        <span className="num">{formatDate(report.report_date)}</span>
-        {report.reporter?.full_name && <> · {report.reporter.full_name}</>}
-      </p>
-      {report.submitted_at && (
-        <p className="summary-line">
-          Submitted <span className="num">{formatDateTime(report.submitted_at)}</span>
-        </p>
-      )}
 
       {report.reopened_at && (
         <p className="notice">
@@ -60,7 +69,14 @@ function ReportSummary({ report }) {
         </p>
       )}
 
-      <h2 className="section">Crew</h2>
+      <div className="figures">
+        <Figure label="Man-hours" value={totalHours(crew).toFixed(1)} unit="h" />
+        <Figure label="Plant hours" value={totalHours(equipment).toFixed(1)} unit="h" />
+        <Figure label="Fuel" value={Number(report.fuel_litres).toFixed(1)} unit="L" />
+        <Figure label="Rain" value={report.rain_percent} unit="%" />
+      </div>
+
+      <SectionHeading number={1}>Crew</SectionHeading>
       {crew.length === 0 ? (
         <p className="label">No crew recorded.</p>
       ) : (
@@ -70,12 +86,8 @@ function ReportSummary({ report }) {
           rows={crew}
         />
       )}
-      <p className="total">
-        <span>Total man-hours</span>
-        <span className="num">{totalHours(crew).toFixed(1)}</span>
-      </p>
 
-      <h2 className="section">Equipment</h2>
+      <SectionHeading number={2}>Equipment</SectionHeading>
       {equipment.length === 0 ? (
         <p className="label">No equipment recorded.</p>
       ) : (
@@ -86,13 +98,13 @@ function ReportSummary({ report }) {
         />
       )}
 
-      <h2 className="section">Site conditions</h2>
-      <DataTable caption="Site conditions" columns={labelValue('Value')} rows={conditions} />
+      <SectionHeading number={3}>Times &amp; delays</SectionHeading>
+      <DataTable caption="Times and delays" columns={LABEL_VALUE('Value')} rows={conditions} />
 
-      <h2 className="section">Safety</h2>
-      <DataTable caption="Safety checks" columns={labelValue('Done')} rows={safety} />
+      <SectionHeading number={4}>Safety</SectionHeading>
+      <DataTable caption="Safety checks" columns={LABEL_VALUE('Done')} rows={safety} />
 
-      <h2 className="section">Activities</h2>
+      <SectionHeading number={5}>Activities</SectionHeading>
       <p className="activities">{report.activities || 'None recorded.'}</p>
     </div>
   )

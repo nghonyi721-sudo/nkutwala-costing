@@ -3,6 +3,9 @@ import { supabase } from '../../lib/supabaseClient'
 import { EMPLOYEE_CATEGORY_LABELS } from '../../lib/labels'
 import Button from '../../components/Button'
 import StatusTag from '../../components/StatusTag'
+import ListRow from '../../components/ListRow'
+import PageHeader from '../../components/PageHeader'
+import Skeleton from '../../components/Skeleton'
 import EmployeeForm from './EmployeeForm'
 
 // Owner/admin: list of employees. Tap one to edit it and manage rates.
@@ -50,7 +53,11 @@ function EmployeesPage() {
 
   return (
     <div className="card">
-      <h1>Employees</h1>
+      <PageHeader
+        eyebrow="Setup"
+        title="Employees"
+        meta={employees ? `${employees.filter((e) => e.active).length} active of ${employees.length}` : null}
+      />
 
       <Button onClick={() => setEditing('new')}>Add employee</Button>
       <p className="label">Tap a person to edit them or manage their hourly rates.</p>
@@ -61,7 +68,7 @@ function EmployeesPage() {
         </p>
       )}
 
-      {!error && employees === undefined && <p className="loading">Loading…</p>}
+      {!error && employees === undefined && <Skeleton />}
 
       {employees?.length === 0 && <p className="label">No employees yet.</p>}
 
@@ -69,15 +76,13 @@ function EmployeesPage() {
         <ul className="list">
           {employees.map((employee) => (
             <li key={employee.id}>
-              <button
-                type="button"
-                className={`list-item${employee.active ? '' : ' inactive'}`}
+              <ListRow
+                title={employee.full_name}
+                detail={EMPLOYEE_CATEGORY_LABELS[employee.category]}
+                muted={!employee.active}
+                tag={employee.active ? null : <StatusTag status="inactive" label="Inactive" />}
                 onClick={() => setEditing(employee)}
-              >
-                <span className="list-title">{employee.full_name}</span>
-                <span className="list-detail">{EMPLOYEE_CATEGORY_LABELS[employee.category]}</span>
-                {!employee.active && <StatusTag status="inactive" label="Inactive" />}
-              </button>
+              />
             </li>
           ))}
         </ul>
