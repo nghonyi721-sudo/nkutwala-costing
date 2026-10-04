@@ -1,7 +1,5 @@
 import { useState } from 'react'
 import { supabase } from '../lib/supabaseClient'
-import BrandBackdrop from '../components/BrandBackdrop'
-import BrandMark from '../components/BrandMark'
 import Button from '../components/Button'
 import Logo from '../components/Logo'
 import s from './LoginPage.module.css'
@@ -37,25 +35,17 @@ function LoginPage() {
 
   return (
     <form className={s.screen} onSubmit={handleSubmit}>
-      <BrandBackdrop />
-
-      {/* The logo needs white, so it sits on a white card. */}
-      <div className={s.stage}>
-        <div className={s.card}>
+      {/* The logo needs white, so it sits on a white tile like an app icon. */}
+      <div className={s.top}>
+        <span className={s.logoTile}>
           <Logo width={120} />
-          <BrandMark className={s.cardMark} />
-          <p className={s.product}>Site Costing</p>
-          <p className={s.tagline}>Daily activity reports and job costing</p>
-        </div>
+        </span>
+        <h1 className={s.title}>Site Costing</h1>
+        <p className={s.lead}>Log in with the account the office set up for you.</p>
       </div>
 
       {/* The form sits at the bottom, within thumb reach. */}
-      <div className={s.sheet}>
-        <div>
-          <h1 className={s.title}>Log in</h1>
-          <p className={s.lead}>Use the account the office set up for you.</p>
-        </div>
-
+      <div className={s.bottom}>
         <div className={s.fields}>
           <label className={s.fieldRow}>
             <span className={s.fieldLabel}>Email</span>

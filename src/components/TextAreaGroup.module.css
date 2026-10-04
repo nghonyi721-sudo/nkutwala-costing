@@ -5,27 +5,28 @@
 }
 
 .group:focus-within {
-  outline: 2px solid var(--blue);
+  outline: 2px solid var(--tint);
   outline-offset: 0;
 }
 
 .textarea {
   display: block;
   width: 100%;
-  min-height: 128px;
-  padding: 14px var(--gutter);
+  min-height: 132px;
+  padding: 12px var(--gutter);
   background: transparent;
   border: 0;
   outline: none;
-  color: var(--ink);
+  color: var(--label);
+  font-size: max(16px, 1rem);
   line-height: 1.4;
   resize: vertical;
 }
 
 .textarea::placeholder {
-  color: var(--edge);
+  color: var(--label-3);
 }
 
 .textarea:disabled {
-  color: var(--ink-2);
+  color: var(--label-2);
 }

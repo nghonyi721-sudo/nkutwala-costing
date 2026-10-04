@@ -1,5 +1,5 @@
 /* A voided rate stays in the history, crossed out */
 .struck {
-  color: var(--ink-2);
+  color: var(--label-2);
   text-decoration-thickness: 1.5px;
 }

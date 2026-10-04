@@ -3,7 +3,8 @@ import { supabase } from '../../lib/supabaseClient'
 import { formatDate, formatRand, todayLocal } from '../../lib/labels'
 import Button from '../../components/Button'
 import { CalendarBlankIcon, CoinsIcon } from '../../components/icons'
-import HeroCard from '../../components/HeroCard'
+import DateTimeField from '../../components/DateTimeField'
+import SummaryCard from '../../components/SummaryCard'
 import Notice from '../../components/Notice'
 import { FieldRow, Row } from '../../components/Row'
 import Section from '../../components/Section'
@@ -135,20 +136,14 @@ function EmployeeRates({ employeeId }) {
 
   return (
     <>
-      {/* Money is shown on black - the logo's black. Owners only. */}
+      {/* Owners only - the database never sends rates to site managers. */}
       {currentRate ? (
-        <HeroCard
-          tone="black"
-          eyebrow="Hourly rate"
-          figures={[
-            {
-              label: 'Current',
-              value: formatRand(currentRate.hourly_rate),
-              unit: '/h',
-              main: true,
-            },
-            { label: 'Since', value: formatDate(currentRate.effective_from) },
-          ]}
+        <SummaryCard
+          icon={CoinsIcon}
+          label="Hourly rate"
+          meta={`Since ${formatDate(currentRate.effective_from)}`}
+          value={formatRand(currentRate.hourly_rate)}
+          unit="/h"
         />
       ) : (
         rates && (
@@ -176,13 +171,17 @@ function EmployeeRates({ employeeId }) {
             value={amount}
             onChange={(e) => setAmount(e.target.value)}
           />
-          <FieldRow
+          <Row
             icon={CalendarBlankIcon}
-            label="Starts on"
-            type="date"
-            required
-            value={effectiveFrom}
-            onChange={(e) => setEffectiveFrom(e.target.value)}
+            title="Starts on"
+            trailing={
+              <DateTimeField
+                type="date"
+                label="Rate starts on"
+                value={effectiveFrom}
+                onChange={(e) => setEffectiveFrom(e.target.value)}
+              />
+            }
           />
         </Section>
         {addError && <Notice tone="error">{addError}</Notice>}
@@ -227,7 +226,8 @@ function EmployeeRates({ employeeId }) {
           hint={`Void ${formatRand(voidingRate.hourly_rate)} /h from ${formatDate(
             voidingRate.effective_from,
           )}? It stays in the history, crossed out, and you can then add the correct rate.`}
-          doneLabel="Cancel"
+          cancelLabel="Cancel"
+          showDone={false}
           onClose={() => setVoidingId(null)}
           footer={
             <Button variant="danger" busy={voiding} onClick={() => handleVoid(voidingRate.id)}>

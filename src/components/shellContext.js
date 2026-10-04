@@ -1,14 +1,23 @@
 import { createContext, useContext, useEffect } from 'react'
 
-// Lets a "pushed" screen (a form or detail view opened from a list) hide the
-// bottom tab bar while it's showing, like phone apps do.
+// Shared by AppShell (which provides it) and Page/NavBar (which use it):
+//   push / pop        - a "pushed" screen (form or detail) hides the tab bar
+//   isReturning()     - true while a pushed screen is still on screen, so the
+//                       list it goes back to can slide in from the left
+//   tabs, screen, onNavigate, profile, openAccount - for the nav bar
 export const ShellContext = createContext(null)
+
+export function useShell() {
+  return useContext(ShellContext)
+}
 
 export function usePushedScreen(active) {
   const shell = useContext(ShellContext)
+  const push = shell?.push
+  const pop = shell?.pop
   useEffect(() => {
-    if (!active || !shell) return undefined
-    shell.push()
-    return shell.pop
-  }, [active, shell])
+    if (!active || !push) return undefined
+    push()
+    return pop
+  }, [active, push, pop])
 }

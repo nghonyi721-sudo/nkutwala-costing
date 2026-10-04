@@ -1,5 +1,5 @@
 .group {
-  margin: var(--space-5) var(--gutter) 0;
+  margin: 28px var(--gutter) 0;
   overflow: hidden;
   background: var(--surface);
   border-radius: var(--radius-group);
@@ -10,12 +10,12 @@
   flex-direction: column;
   justify-content: center;
   gap: 8px;
-  min-height: 64px;
+  min-height: 60px;
   padding: var(--space-3) var(--gutter);
 }
 
 .row + .row {
-  border-top: 1px solid var(--sep);
+  border-top: 0.5px solid var(--separator);
 }
 
 .title,
@@ -24,7 +24,7 @@
   height: 12px;
   border-radius: 6px;
   background: var(--fill);
-  animation: pulse 1.2s var(--ease) infinite alternate;
+  animation: pulse 1.2s ease-in-out infinite alternate;
 }
 
 .title {

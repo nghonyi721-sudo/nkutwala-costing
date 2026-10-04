@@ -1,11 +1,20 @@
 import s from './SegmentedControl.module.css'
 
-// Pick one of two or three options, e.g. Own / Rented.
-// options is an object of { value: label }.
+// iOS segmented control: a grey track with a white "thumb" that slides to
+// the chosen option. options is an object of { value: label }.
 function SegmentedControl({ label, options, value, onChange, disabled }) {
+  const entries = Object.entries(options)
+  const index = entries.findIndex(([optionValue]) => optionValue === value)
+
   return (
-    <div className={s.control} role="radiogroup" aria-label={label}>
-      {Object.entries(options).map(([optionValue, optionLabel]) => (
+    <div
+      className={s.control}
+      role="radiogroup"
+      aria-label={label}
+      style={{ '--count': entries.length, '--index': Math.max(index, 0) }}
+    >
+      {index >= 0 && <span className={s.thumb} aria-hidden="true" />}
+      {entries.map(([optionValue, optionLabel]) => (
         <button
           key={optionValue}
           type="button"

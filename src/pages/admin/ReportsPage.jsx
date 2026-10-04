@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../../lib/supabaseClient'
 import { formatDate } from '../../lib/labels'
+import DateTimeField from '../../components/DateTimeField'
 import EmptyState from '../../components/EmptyState'
 import { CalendarBlankIcon, ClipboardTextIcon, MapPinIcon } from '../../components/icons'
 import Notice from '../../components/Notice'
 import Page from '../../components/Page'
-import { FieldRow, Row } from '../../components/Row'
+import { Row } from '../../components/Row'
 import Section from '../../components/Section'
 import { PickSheet } from '../../components/Sheet'
 import Skeleton from '../../components/Skeleton'
@@ -110,12 +111,18 @@ function ReportsPage() {
           chevron
           onClick={() => setPickingProject(true)}
         />
-        <FieldRow
+        <Row
           icon={CalendarBlankIcon}
-          label="Date"
-          type="date"
-          value={dateFilter}
-          onChange={(e) => setDateFilter(e.target.value)}
+          title="Date"
+          trailing={
+            <DateTimeField
+              type="date"
+              label="Filter by date"
+              placeholder="Any date"
+              value={dateFilter}
+              onChange={(e) => setDateFilter(e.target.value)}
+            />
+          }
         />
       </Section>
 

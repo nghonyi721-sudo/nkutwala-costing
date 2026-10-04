@@ -1,0 +1,122 @@
+.backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  background: var(--scrim);
+  font-family: var(--font);
+  animation: fade-in var(--fast) ease both;
+}
+
+.sheet {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+  max-width: 460px;
+  padding: 0 8px calc(8px + env(safe-area-inset-bottom));
+  animation: sheet-up var(--medium) var(--ease) both;
+}
+
+.closing {
+  animation: fade-out 0.22s ease both;
+}
+
+.closing .sheet {
+  animation: sheet-down 0.22s ease-in both;
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes fade-out {
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes sheet-up {
+  from {
+    transform: translateY(110%);
+  }
+}
+
+@keyframes sheet-down {
+  to {
+    transform: translateY(110%);
+  }
+}
+
+.group {
+  overflow: hidden;
+  border-radius: 14px;
+  background: var(--sheet-cell);
+}
+
+.header {
+  padding: 14px var(--gutter);
+  border-bottom: 0.5px solid var(--separator);
+  text-align: center;
+}
+
+.title {
+  font-size: var(--text-footnote);
+  font-weight: 600;
+  color: var(--label-2);
+}
+
+.message {
+  margin-top: 4px;
+  font-size: var(--text-footnote);
+  line-height: 1.35;
+  color: var(--label-2);
+}
+
+.action,
+.cancel {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 57px;
+  border: 0;
+  color: var(--tint);
+  font-size: var(--text-title3);
+  cursor: pointer;
+}
+
+.action {
+  background: none;
+}
+
+.destructive {
+  color: var(--destructive);
+}
+
+.cancel {
+  border-radius: 14px;
+  background: var(--sheet-cell);
+  font-weight: 600;
+}
+
+.action:active,
+.cancel:active {
+  background: var(--fill);
+}
+
+.action:disabled,
+.cancel:disabled {
+  cursor: progress;
+}
+
+.action:focus-visible,
+.cancel:focus-visible {
+  outline: 2px solid var(--tint);
+  outline-offset: -3px;
+}

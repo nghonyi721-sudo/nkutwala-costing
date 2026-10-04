@@ -1,109 +1,8 @@
-/* ------------------------------------------------------------- top bar */
-
-.topBar {
-  position: sticky;
-  top: 0;
-  z-index: 30;
-  background: var(--surface);
-  border-bottom: 1px solid var(--sep);
-}
-
-.topInner {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-4);
-  height: var(--topbar);
-  max-width: 1040px;
-  margin: 0 auto;
-  padding: 0 var(--space-3) 0 var(--gutter);
-}
-
-/* Tabs in the top bar - wide screens only */
-.topNav {
-  display: none;
-  flex: 1;
-  justify-content: center;
-  gap: var(--space-1);
-}
-
-.topTab {
-  position: relative;
-  min-height: var(--tap);
-  padding: 0 14px;
-  background: none;
-  border: 0;
-  border-radius: var(--radius-control);
-  color: var(--ink-2);
-  font-size: var(--text-small);
-  font-weight: 600;
-  cursor: pointer;
-}
-
-.topTab:hover {
-  color: var(--ink);
-}
-
-.topTab[aria-current='page'] {
-  color: var(--ink);
-}
-
-/* The N-split mark under the current tab */
-.topTabMark {
-  position: absolute;
-  bottom: 4px;
-  left: 50%;
-  transform: translateX(-50%);
-}
-
-/* Account button: a black dot inside a blue ring, like the dot in the
-   logo's cog, with the user's initials */
-.account {
-  display: grid;
-  place-items: center;
-  flex: none;
-  width: var(--tap);
-  height: var(--tap);
-  padding: 0;
-  background: var(--blue);
-  border: 0;
-  border-radius: 50%;
-  cursor: pointer;
-}
-
-.accountDot {
-  display: grid;
-  place-items: center;
-  width: 40px;
-  height: 40px;
-  border: 2px solid var(--surface);
-  border-radius: 50%;
-  background: var(--black);
-  color: #fff;
-  font-size: 14px;
-  font-weight: 600;
-  letter-spacing: 0.03em;
-}
-
-.account:active {
-  background: var(--blue-dk);
-}
-
-.topTab:focus-visible,
-.account:focus-visible,
-.tab:focus-visible {
-  outline: 2px solid var(--blue);
-  outline-offset: -2px;
-}
-
-/* ------------------------------------------------------------ content */
-
 .mainWithTabs {
   padding-bottom: calc(var(--tabbar) + env(safe-area-inset-bottom));
 }
 
-/* -------------------------------------------- tab bar (phones only) */
-
+/* iOS tab bar: solid bar colour, hairline on top, accent for the current tab */
 .tabBar {
   position: fixed;
   right: 0;
@@ -111,11 +10,11 @@
   left: 0;
   z-index: 30;
   display: grid;
-  grid-auto-flow: column;
   grid-auto-columns: 1fr;
+  grid-auto-flow: column;
   padding-bottom: env(safe-area-inset-bottom);
-  background: var(--surface);
-  border-top: 1px solid var(--sep);
+  background: var(--bar);
+  border-top: 0.5px solid var(--separator);
 }
 
 .tab {
@@ -125,36 +24,30 @@
   justify-content: center;
   gap: 2px;
   min-height: var(--tabbar);
-  padding: 0;
+  padding: 4px 0 2px;
   background: none;
   border: 0;
-  color: var(--ink-2);
-  font-size: 12px;
-  font-weight: 600;
+  color: var(--label-2);
+  font-size: 11px;
+  font-weight: 500;
   cursor: pointer;
 }
 
-.tab {
-  position: relative;
-}
-
 .tab[aria-current='page'] {
-  color: var(--blue);
+  color: var(--tint);
 }
 
-/* The N-split mark along the top of the current tab */
-.tabMark {
-  position: absolute;
-  top: 0;
-  left: 50%;
-  transform: translateX(-50%);
+.tab:active {
+  opacity: 0.7;
+}
+
+.tab:focus-visible {
+  outline: 2px solid var(--tint);
+  outline-offset: -4px;
+  border-radius: 10px;
 }
 
 @media (min-width: 768px) {
-  .topNav {
-    display: flex;
-  }
-
   .tabBar {
     display: none;
   }

@@ -1,8 +1,8 @@
 import { MinusIcon, PlusIcon } from './icons'
 import s from './Stepper.module.css'
 
-// The grey − value + pill used for hours, rain and delay. Buttons are 48px
-// and the icons bold so they're easy to hit and see outdoors.
+// An Apple-style stepper: − | value | + on a grey pill, hairline dividers.
+// Kept 48px tall so it works with gloves. The value uses rounded numerals.
 //   label: what it changes, for screen readers (e.g. "Sipho hours")
 //   unit:  '%' sits tight ("10%"); anything else gets a space ("9.5 h")
 function Stepper({ label, value, onChange, step = 0.5, min = 0, max = 24, unit = '', disabled }) {
@@ -19,11 +19,11 @@ function Stepper({ label, value, onChange, step = 0.5, min = 0, max = 24, unit =
         disabled={disabled || value <= min}
         onClick={() => change(-step)}
       >
-        <MinusIcon size={20} weight="bold" />
+        <MinusIcon size={18} weight="bold" />
       </button>
       <span className={s.value} aria-live="polite">
         {value.toFixed(decimals)}
-        {unit === '%' ? '%' : unit ? ` ${unit}` : ''}
+        <span className={s.unit}>{unit === '%' ? '%' : unit ? ` ${unit}` : ''}</span>
       </span>
       <button
         type="button"
@@ -32,7 +32,7 @@ function Stepper({ label, value, onChange, step = 0.5, min = 0, max = 24, unit =
         disabled={disabled || value >= max}
         onClick={() => change(step)}
       >
-        <PlusIcon size={20} weight="bold" />
+        <PlusIcon size={18} weight="bold" />
       </button>
     </div>
   )

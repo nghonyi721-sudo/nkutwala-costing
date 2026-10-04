@@ -1,0 +1,24 @@
+.spinner {
+  position: relative;
+  display: inline-block;
+  flex: none;
+  animation: turn 0.8s steps(8) infinite;
+}
+
+.bar {
+  position: absolute;
+  top: 0;
+  left: 44%;
+  width: 12%;
+  height: 30%;
+  border-radius: 999px;
+  background: currentColor;
+  /* rotate around the centre of the whole spinner */
+  transform-origin: 50% 166.67%;
+}
+
+@keyframes turn {
+  to {
+    rotate: 360deg;
+  }
+}

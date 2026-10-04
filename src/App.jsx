@@ -2,10 +2,9 @@ import { useEffect, useState } from 'react'
 import { supabase, isSupabaseConfigured } from './lib/supabaseClient'
 import LoginPage from './pages/LoginPage'
 import HomePage from './pages/HomePage'
-import BrandBackdrop from './components/BrandBackdrop'
 import Logo from './components/Logo'
 import Notice from './components/Notice'
-import Skeleton from './components/Skeleton'
+import Spinner from './components/Spinner'
 import s from './App.module.css'
 
 function App() {
@@ -30,10 +29,9 @@ function App() {
   if (!isSupabaseConfigured) {
     return (
       <div className={s.stage}>
-        <BrandBackdrop />
-        <div className={s.card}>
+        <span className={s.logoTile}>
           <Logo width={120} />
-        </div>
+        </span>
         <Notice tone="error">Supabase: not configured yet - add your keys to the .env file</Notice>
       </div>
     )
@@ -41,17 +39,16 @@ function App() {
 
   if (session === undefined) {
     return (
-      <div className={s.stage}>
-        <BrandBackdrop />
-        <div className={s.card}>
+      <div className={s.stage} role="status" aria-label="Loading">
+        <span className={s.logoTile}>
           <Logo width={120} />
-        </div>
-        <Skeleton rows={2} />
+        </span>
+        <Spinner size={24} className={s.spinner} />
       </div>
     )
   }
 
-  // Logged in: HomePage draws the app shell (top bar, tabs, screens).
+  // Logged in: HomePage draws the app shell (navigation, tabs, screens).
   if (session) return <HomePage user={session.user} />
 
   // Logged out.

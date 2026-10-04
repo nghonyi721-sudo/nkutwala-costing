@@ -1,4 +1,4 @@
-/* Red remove button shown on crew/equipment rows in Edit mode */
+/* Red remove button shown on crew/equipment rows in Edit mode (iOS style) */
 .remove {
   display: grid;
   place-items: center;
@@ -9,12 +9,12 @@
   padding: 0;
   background: none;
   border: 0;
-  color: var(--red);
+  color: var(--destructive);
   cursor: pointer;
 }
 
 .remove:focus-visible {
-  outline: 2px solid var(--blue);
+  outline: 2px solid var(--tint);
   outline-offset: -2px;
   border-radius: 50%;
 }

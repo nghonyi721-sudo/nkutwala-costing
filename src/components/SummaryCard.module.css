@@ -1,0 +1,74 @@
+.card {
+  margin: 20px var(--gutter) 0;
+  padding: 14px var(--gutter) var(--gutter);
+  border-radius: var(--radius-card);
+  background: var(--surface);
+}
+
+.head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  color: var(--tint);
+  font-size: var(--text-subhead);
+  font-weight: 600;
+}
+
+.meta {
+  flex: none;
+  font-size: var(--text-footnote);
+  color: var(--label-2);
+}
+
+.value {
+  margin-top: 6px;
+  font-family: var(--font-rounded);
+  font-size: 2.6rem;
+  font-weight: 700;
+  line-height: 1.05;
+  color: var(--label);
+}
+
+.unit {
+  margin-left: 4px;
+  font-size: var(--text-title3);
+  font-weight: 600;
+  color: var(--label-2);
+}
+
+.figures {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(68px, 1fr));
+  gap: var(--space-3);
+  margin: 14px 0 0;
+  padding-top: var(--space-3);
+  border-top: 0.5px solid var(--separator);
+}
+
+.figure dt {
+  font-size: var(--text-footnote);
+  color: var(--label-2);
+}
+
+.figure dd {
+  margin: 2px 0 0;
+  font-family: var(--font-rounded);
+  font-size: var(--text-title3);
+  font-weight: 600;
+  color: var(--label);
+}
+
+.figureUnit {
+  margin-left: 3px;
+  font-size: var(--text-subhead);
+  font-weight: 500;
+  color: var(--label-2);
+}

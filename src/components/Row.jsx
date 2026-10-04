@@ -1,19 +1,36 @@
 import { CaretRightIcon } from './icons'
 import s from './Row.module.css'
 
-// List rows that live inside a <Section> group, like the phone's Settings.
+// List rows inside a <Section>, like the iPhone's Settings app.
+//
+// Icons sit on small coloured tiles (white symbol on a rounded square):
+//   iconTone: 'blue' (accent, default), 'red' (warnings), 'grey' (neutral)
+// Rows with tone 'accent' (e.g. "Add person") or 'danger' (e.g. "Log out")
+// show the icon on its own, in that colour, with no tile.
+
+const TONES = { blue: s.tileBlue, red: s.tileRed, grey: s.tileGrey }
+
+function RowIcon({ icon: Icon, iconTone = 'blue', plain }) {
+  if (!Icon) return null
+  if (plain) return <Icon className={s.plainIcon} size={26} weight="fill" aria-hidden="true" />
+  return (
+    <span className={`${s.tile} ${TONES[iconTone] ?? s.tileBlue}`} aria-hidden="true">
+      <Icon size={18} weight="fill" />
+    </span>
+  )
+}
 
 function rowClass(hasIcon, extra) {
   return [s.row, hasIcon ? s.withIcon : '', extra].filter(Boolean).join(' ')
 }
 
-// A row with an optional icon, title, subtitle, something on the right
-// (trailing) and a chevron. Becomes a button when onClick is given.
-//   tone: 'accent' (blue title, e.g. "Add person"), 'danger' (red title),
-//         'strong' (bold title, e.g. totals)
+// title, optional subtitle, something on the right (trailing), a chevron.
+// Becomes a button when onClick is given.
+//   tone: 'accent' (blue title), 'danger' (red title), 'strong' (bold)
 //   leading: something before the icon (e.g. a remove button)
 export function Row({
-  icon: Icon,
+  icon,
+  iconTone,
   title,
   subtitle,
   trailing,
@@ -25,30 +42,31 @@ export function Row({
   ...props
 }) {
   const Tag = onClick ? 'button' : 'div'
+  const plainIcon = tone === 'accent' || tone === 'danger'
   return (
     <Tag
-      className={rowClass(Icon, tone ? s[tone] : '')}
+      className={rowClass(icon, tone ? s[tone] : '')}
       onClick={onClick}
       type={onClick ? 'button' : undefined}
       {...props}
     >
       {leading}
-      {Icon && <Icon className={s.icon} size={24} aria-hidden="true" />}
+      <RowIcon icon={icon} iconTone={iconTone} plain={plainIcon} />
       <span className={s.main}>
         <span className={s.title}>{title}</span>
         {subtitle && <span className={mono ? `${s.subtitle} num` : s.subtitle}>{subtitle}</span>}
       </span>
       {trailing !== undefined && trailing !== null && <span className={s.trailing}>{trailing}</span>}
-      {chevron && <CaretRightIcon className={s.chevron} size={20} weight="bold" aria-hidden="true" />}
+      {chevron && <CaretRightIcon className={s.chevron} size={15} weight="bold" aria-hidden="true" />}
     </Tag>
   )
 }
 
-// A row with a label on the left and an input on the right.
-export function FieldRow({ icon: Icon, label, suffix, inputWidth, ...inputProps }) {
+// A label on the left and a text/number input on the right.
+export function FieldRow({ icon, iconTone, label, suffix, inputWidth, ...inputProps }) {
   return (
-    <label className={rowClass(Icon)}>
-      {Icon && <Icon className={s.icon} size={24} aria-hidden="true" />}
+    <label className={rowClass(icon)}>
+      <RowIcon icon={icon} iconTone={iconTone} />
       <span className={s.main}>
         <span className={s.title}>{label}</span>
       </span>
@@ -58,19 +76,19 @@ export function FieldRow({ icon: Icon, label, suffix, inputWidth, ...inputProps 
   )
 }
 
-// An on/off row; the whole row is the tap target.
-//   alert: "on" is a warning (e.g. near miss), so it shows red.
-export function SwitchRow({ icon: Icon, title, subtitle, checked, onChange, alert = false, ...props }) {
+// An iOS switch row; the whole row is the tap target.
+//   alert: "on" is a warning (e.g. near miss) - red tile and red switch.
+export function SwitchRow({ icon, title, subtitle, checked, onChange, alert = false, ...props }) {
   return (
     <button
       type="button"
       role="switch"
       aria-checked={checked}
-      className={rowClass(Icon)}
+      className={rowClass(icon)}
       onClick={() => onChange(!checked)}
       {...props}
     >
-      {Icon && <Icon className={s.icon} size={24} aria-hidden="true" />}
+      <RowIcon icon={icon} iconTone={alert ? 'red' : 'blue'} />
       <span className={s.main}>
         <span className={s.title}>{title}</span>
         {subtitle && <span className={s.subtitle}>{subtitle}</span>}

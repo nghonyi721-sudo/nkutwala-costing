@@ -90,7 +90,11 @@ function HomePage({ user }) {
         </Page>
       )}
 
-      {!error && profile === undefined && <Skeleton rows={2} />}
+      {!error && profile === undefined && (
+        <Page>
+          <Skeleton rows={2} />
+        </Page>
+      )}
 
       {!error && profile === null && (
         <Page title="No profile yet">

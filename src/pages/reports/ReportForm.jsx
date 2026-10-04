@@ -15,10 +15,14 @@ import {
   ListChecksIcon,
   MapPinIcon,
   MinusCircleIcon,
-  PlusIcon,
+  PlusCircleIcon,
+  UsersThreeIcon,
   WarningIcon,
 } from '../../components/icons'
-import HeroCard from '../../components/HeroCard'
+import ConfirmSheet from '../../components/ConfirmSheet'
+import DateTimeField from '../../components/DateTimeField'
+import StatusBadge from '../../components/StatusBadge'
+import SummaryCard from '../../components/SummaryCard'
 import Notice from '../../components/Notice'
 import Page from '../../components/Page'
 import ReportSummary from '../../components/ReportSummary'
@@ -351,39 +355,19 @@ function ReportForm({ user, reportId, onDone }) {
   )
 
   const footer = (
-    <ActionBar
-      message={
-        confirming
-          ? `Submit the report for ${projectName ?? 'this project'}, ${dateText}? You can't change it after this.`
-          : error || message
-      }
-      tone={error && !confirming ? 'error' : 'info'}
-    >
-      {confirming ? (
-        <>
-          <Button variant="secondary" onClick={() => setConfirming(false)}>
-            Go back
-          </Button>
-          <Button busy={busy} onClick={submit}>
-            {busy ? 'Submitting…' : 'Yes, submit'}
-          </Button>
-        </>
-      ) : (
-        <>
-          <Button variant="secondary" busy={busy} onClick={save}>
-            {busy ? 'Saving…' : 'Save draft'}
-          </Button>
-          <Button
-            disabled={busy}
-            onClick={() => {
-              setError('')
-              setConfirming(true)
-            }}
-          >
-            Submit
-          </Button>
-        </>
-      )}
+    <ActionBar message={error || message} tone={error ? 'error' : 'info'}>
+      <Button variant="secondary" busy={busy && !confirming} disabled={busy} onClick={save}>
+        {busy && !confirming ? 'Saving…' : 'Save draft'}
+      </Button>
+      <Button
+        disabled={busy}
+        onClick={() => {
+          setError('')
+          setConfirming(true)
+        }}
+      >
+        Submit
+      </Button>
     </ActionBar>
   )
 
@@ -395,15 +379,17 @@ function ReportForm({ user, reportId, onDone }) {
       backLabel="My reports"
       footer={footer}
     >
-      {/* Today at a glance - updates live as hours change */}
-      <HeroCard
-        eyebrow={dateText}
-        badge={id ? 'Draft' : 'New'}
-        title={projectName ?? 'Choose a project'}
+      {/* The day at a glance - updates live as hours change */}
+      <SummaryCard
+        icon={UsersThreeIcon}
+        label="Man-hours"
+        meta={<StatusBadge status="draft" label={id ? 'Draft' : 'New'} />}
+        value={totalHours(crew).toFixed(1)}
+        unit="h"
         figures={[
-          { label: 'Total man-hours', value: totalHours(crew).toFixed(1), unit: 'h', main: true },
           { label: 'Crew', value: crew.length },
           { label: 'Plant hours', value: totalHours(equipmentLines).toFixed(1), unit: 'h' },
+          { label: 'On site', value: siteHours ? siteHours.toFixed(1) : '–', unit: siteHours ? 'h' : '' },
         ]}
       />
 
@@ -419,12 +405,17 @@ function ReportForm({ user, reportId, onDone }) {
             onClick={() => setPickingProject(true)}
           />
         )}
-        <FieldRow
+        <Row
           icon={CalendarBlankIcon}
-          label="Date"
-          type="date"
-          value={form.report_date}
-          onChange={(e) => setField('report_date', e.target.value)}
+          title="Date"
+          trailing={
+            <DateTimeField
+              type="date"
+              label="Report date"
+              value={form.report_date}
+              onChange={(e) => setField('report_date', e.target.value)}
+            />
+          }
         />
       </Section>
 
@@ -432,19 +423,29 @@ function ReportForm({ user, reportId, onDone }) {
         title="Times"
         footer={siteHours ? `${siteHours.toFixed(1)} hours on site` : 'Set a start and end time.'}
       >
-        <FieldRow
+        <Row
           icon={ClockIcon}
-          label="Start"
-          type="time"
-          value={form.start_time}
-          onChange={(e) => setField('start_time', e.target.value)}
+          title="Start"
+          trailing={
+            <DateTimeField
+              type="time"
+              label="Start time"
+              value={form.start_time}
+              onChange={(e) => setField('start_time', e.target.value)}
+            />
+          }
         />
-        <FieldRow
+        <Row
           icon={ClockIcon}
-          label="End"
-          type="time"
-          value={form.end_time}
-          onChange={(e) => setField('end_time', e.target.value)}
+          title="End"
+          trailing={
+            <DateTimeField
+              type="time"
+              label="End time"
+              value={form.end_time}
+              onChange={(e) => setField('end_time', e.target.value)}
+            />
+          }
         />
       </Section>
 
@@ -479,7 +480,7 @@ function ReportForm({ user, reportId, onDone }) {
             />
           )
         })}
-        <Row icon={PlusIcon} tone="accent" title="Add person" onClick={() => setShowCrewPicker(true)} />
+        <Row icon={PlusCircleIcon} tone="accent" title="Add person" onClick={() => setShowCrewPicker(true)} />
         <Row tone="strong" title="Total man-hours" trailing={`${totalHours(crew).toFixed(1)} h`} />
       </Section>
 
@@ -518,7 +519,7 @@ function ReportForm({ user, reportId, onDone }) {
           )
         })}
         <Row
-          icon={PlusIcon}
+          icon={PlusCircleIcon}
           tone="accent"
           title="Add equipment"
           onClick={() => setShowEquipmentPicker(true)}
@@ -589,6 +590,17 @@ function ReportForm({ user, reportId, onDone }) {
           onChange={(e) => setField('activities', e.target.value)}
         />
       </Section>
+
+      {confirming && (
+        <ConfirmSheet
+          title="Submit report?"
+          message={`${projectName ?? 'This report'} · ${dateText}. You can't change it after you submit - only the owner can reopen it.`}
+          actionLabel={busy ? 'Submitting…' : 'Submit report'}
+          busy={busy}
+          onConfirm={submit}
+          onCancel={() => setConfirming(false)}
+        />
+      )}
 
       {pickingProject && (
         <PickSheet

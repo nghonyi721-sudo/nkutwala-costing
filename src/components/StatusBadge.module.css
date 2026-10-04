@@ -3,27 +3,27 @@
   align-items: center;
   gap: 6px;
   flex: none;
-  font-size: var(--text-small);
+  font-size: var(--text-subhead);
   font-weight: 500;
   white-space: nowrap;
 }
 
 .badge::before {
   content: '';
-  width: 9px;
-  height: 9px;
+  width: 8px;
+  height: 8px;
   border-radius: 50%;
   background: currentColor;
 }
 
 .grey {
-  color: var(--ink-2);
+  color: var(--label-2);
 }
 
 .blue {
-  color: var(--blue);
+  color: var(--tint);
 }
 
 .red {
-  color: var(--red-ink);
+  color: var(--destructive);
 }

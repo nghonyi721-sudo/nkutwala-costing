@@ -1,0 +1,14 @@
+/* The logo's JPEG has a white background, so it always sits on a small white
+   rounded tile - on the grey background and in Dark Mode alike. */
+.tile {
+  display: inline-flex;
+  flex: none;
+  padding: 3px 6px;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.image {
+  display: block;
+  height: auto;
+}

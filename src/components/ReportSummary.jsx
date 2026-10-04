@@ -1,6 +1,6 @@
-import { REPORT_STATUS_LABELS, formatDate, formatDateTime, formatTime, hoursBetween } from '../lib/labels'
+import { formatDate, formatDateTime, formatTime, hoursBetween } from '../lib/labels'
 import { totalHours } from '../lib/reports'
-import HeroCard from './HeroCard'
+import SummaryCard from './SummaryCard'
 import {
   CalendarBlankIcon,
   CheckCircleIcon,
@@ -12,6 +12,7 @@ import {
   HourglassIcon,
   ListChecksIcon,
   UserCircleIcon,
+  UsersThreeIcon,
   WarningIcon,
 } from './icons'
 import Notice from './Notice'
@@ -39,11 +40,13 @@ function ReportSummary({ report }) {
 
   return (
     <>
-      <HeroCard
-        eyebrow={formatDate(report.report_date)}
-        badge={REPORT_STATUS_LABELS[report.status]}
+      <SummaryCard
+        icon={UsersThreeIcon}
+        label="Man-hours"
+        meta={<StatusBadge status={report.status} />}
+        value={totalHours(crew).toFixed(1)}
+        unit="h"
         figures={[
-          { label: 'Total man-hours', value: totalHours(crew).toFixed(1), unit: 'h', main: true },
           { label: 'Crew', value: crew.length },
           { label: 'Plant hours', value: totalHours(equipment).toFixed(1), unit: 'h' },
           { label: 'Fuel', value: Number(report.fuel_litres).toFixed(0), unit: 'L' },
@@ -61,13 +64,28 @@ function ReportSummary({ report }) {
       )}
 
       <Section title="Details">
-        <Row icon={CalendarBlankIcon} title="Date" trailing={formatDate(report.report_date)} />
+        <Row icon={CalendarBlankIcon} iconTone="grey" title="Date" trailing={formatDate(report.report_date)} />
         {report.reporter?.full_name && (
-          <Row icon={UserCircleIcon} title="Site manager" trailing={report.reporter.full_name} />
+          <Row
+            icon={UserCircleIcon}
+            iconTone="grey"
+            title="Site manager"
+            trailing={report.reporter.full_name}
+          />
         )}
-        <Row icon={CheckCircleIcon} title="Status" trailing={<StatusBadge status={report.status} />} />
+        <Row
+          icon={CheckCircleIcon}
+          iconTone="grey"
+          title="Status"
+          trailing={<StatusBadge status={report.status} />}
+        />
         {report.submitted_at && (
-          <Row icon={ClockIcon} title="Submitted" trailing={formatDateTime(report.submitted_at)} />
+          <Row
+            icon={ClockIcon}
+            iconTone="grey"
+            title="Submitted"
+            trailing={formatDateTime(report.submitted_at)}
+          />
         )}
       </Section>
 
@@ -103,6 +121,7 @@ function ReportSummary({ report }) {
           <Row
             key={item.key}
             icon={item.icon}
+            iconTone={item.alert ? 'red' : 'blue'}
             title={item.label}
             trailing={
               report[item.key] ? (

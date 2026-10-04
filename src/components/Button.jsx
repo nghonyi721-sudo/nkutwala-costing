@@ -1,13 +1,14 @@
-import { GearSixIcon } from './icons'
+import Spinner from './Spinner'
 import s from './Button.module.css'
 
-// The one button.
-//   variant: 'primary' (blue), 'secondary' (grey), 'danger' (red),
-//            'plain' (blue text, e.g. "Add" in a page header)
-//   icon:    optional Phosphor icon shown before the label
-//   busy:    shows the logo's cog turning (e.g. while "Saving…") and
-//            stops further taps
-// Full width unless inline. Always at least 48px tall.
+// Apple-style buttons.
+//   variant: 'primary'   - filled with the accent colour (the main action)
+//            'secondary' - tinted: light accent background, accent text
+//            'danger'    - filled red (destructive actions only)
+//            'plain'     - accent text only (e.g. "Add" in the nav bar)
+//   icon:    optional icon before the label
+//   busy:    shows Apple's activity indicator and stops further taps
+// Full width unless inline. At least 48px tall (50 for full-width buttons).
 function Button({
   variant = 'primary',
   icon: Icon,
@@ -29,9 +30,9 @@ function Button({
       {...props}
     >
       {busy ? (
-        <GearSixIcon className={s.spin} size={22} weight="bold" aria-hidden="true" />
+        <Spinner size={18} />
       ) : (
-        Icon && <Icon size={22} weight={variant === 'plain' ? 'bold' : 'regular'} aria-hidden="true" />
+        Icon && <Icon size={variant === 'plain' ? 24 : 20} weight="bold" aria-hidden="true" />
       )}
       {children}
     </button>

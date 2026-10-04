@@ -1,68 +1,139 @@
-/* Nkutwala design tokens - direction "C · Native".
+/* Nkutwala design tokens, following Apple's Human Interface Guidelines.
    The only place colours, type, shape, spacing and motion are defined.
-   Components use these through var(--name); nothing else hard-codes them.
 
-   Brand colours are the logo's own (measured from public/logo.jpeg):
-     blue  #001AFF  - act, selected, live/done        (white on it: 8.1:1)
-     red   #C20116  - needs attention, and the brand
-                      diagonal only - keep it rare     (on white: 6.4:1)
-     black #000000  - brand surfaces and money         (white on it: 21:1)
-   Grey is everything neutral. */
+   Colour works like Apple's semantic colours: components ask for a role
+   (label, separator, tint...) and the value changes for Dark Mode and for
+   the phone's "Increase Contrast" setting automatically.
+
+   Brand: the logo's blue is the app's single accent (tint); the logo's red
+   is only for destructive actions and warnings. */
+
 :root {
-  /* Brand - the logo's colours */
-  --blue: #001aff;
-  --blue-dk: #0013b8; /* pressed blue, blue text on tints */
-  --blue-tint: #e8ebff; /* logo blue on it: 6.8:1 */
-  --red: #c20116;
-  --red-dk: #9a0011; /* pressed red */
-  --red-ink: #c20116; /* red text on white (6.4:1) or tints (5.5:1) */
-  --red-tint: #fbe8ea;
-  --black: #000000;
-  --on-brand-2: rgb(255 255 255 / 0.8); /* secondary text on blue/black: 5.2:1+ */
+  color-scheme: light dark;
 
-  /* Neutrals */
-  --canvas: #f2f3f5; /* page background */
-  --surface: #ffffff; /* groups, bars, sheets */
-  --ink: #0b0d10; /* main text */
-  --ink-2: #5f646c; /* secondary text: 5.9:1 on white, 5.4:1 on canvas */
-  --sep: #e1e4e8; /* thin lines between rows */
-  --fill: #e8eaee; /* grey buttons, steppers, segmented controls */
-  --fill-pressed: #d9dce2;
-  --edge: #8c929b; /* control outlines: 3.3:1, visible in sunlight */
-  --chevron: #a2a7af;
-  --scrim: rgb(11 13 16 / 0.42); /* dimmed background behind sheets */
+  /* --- Accent (logo blue #001AFF) -------------------------------------- */
+  --tint: #001aff; /* text, icons, links - 8.1:1 on white */
+  --tint-solid: #001aff; /* filled buttons/switches with white on them */
+  --tint-pressed: #0013b8;
+  --tint-fill: #e8ebff; /* tinted buttons, selected tabs */
+  --on-tint: #ffffff;
 
-  /* Type - the phone's own font: instant, no download */
+  /* --- Destructive / warning (logo red #C20116) ------------------------ */
+  --destructive: #c20116; /* 6.4:1 on white */
+  --destructive-solid: #c20116;
+  --destructive-fill: #fbe8ea;
+
+  /* --- Backgrounds (Apple "grouped" set) -------------------------------- */
+  --bg: #f2f2f7; /* systemGroupedBackground */
+  --surface: #ffffff; /* cells, cards */
+  --surface-2: #f2f2f7; /* fields inside cards/sheets */
+  --bar: #f9f9f9; /* nav bar (scrolled) and tab bar - solid, no blur */
+  --sheet: #f2f2f7;
+  --sheet-cell: #ffffff; /* rows and action-sheet blocks inside sheets */
+
+  /* --- Text ------------------------------------------------------------- */
+  --label: #000000;
+  /* Apple's default secondary grey is ~3.4:1 - too faint in sunlight. We use
+     the "Increase Contrast" variant: 5.9:1 on white. */
+  --label-2: #5f646c;
+  --label-3: #8a8a8e; /* placeholders and disabled only */
+
+  /* --- Lines and fills -------------------------------------------------- */
+  --separator: #c6c6c8; /* drawn as a 0.5px hairline */
+  --fill: #e9e9eb; /* grey controls: steppers, segmented track */
+  --fill-pressed: #d8d8dc;
+  --thumb: #ffffff; /* segmented-control thumb, switch knob */
+  --track-off: #e9e9ea; /* switch when off */
+  --chevron: #c4c4c7;
+  --scrim: rgb(0 0 0 / 0.4); /* dims the screen behind sheets */
+  --shadow-control: 0 3px 8px rgb(0 0 0 / 0.12), 0 3px 1px rgb(0 0 0 / 0.04);
+
+  /* --- Type: Apple's text styles. 1rem = Body (17pt), and on iPhone it
+         follows Settings > Display > Text Size (Dynamic Type). ---------- */
   --font: system-ui, -apple-system, 'SF Pro Text', 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
-  --text-caption: 13px;
-  --text-small: 15px;
-  --text-body: 17px;
-  --text-title: 26px;
-  --text-large: 32px;
+  --font-rounded: ui-rounded, 'SF Pro Rounded', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --text-large-title: 2rem; /* 34 */
+  --text-title1: 1.647rem; /* 28 */
+  --text-title2: 1.294rem; /* 22 */
+  --text-title3: 1.176rem; /* 20 */
+  --text-headline: 1rem; /* 17 semibold */
+  --text-body: 1rem; /* 17 */
+  --text-callout: 0.941rem; /* 16 */
+  --text-subhead: 0.882rem; /* 15 */
+  --text-footnote: 0.765rem; /* 13 */
+  --text-caption: 0.706rem; /* 12 */
 
-  /* Shape */
-  --radius-group: 14px;
+  /* --- Shape ------------------------------------------------------------ */
+  --radius-group: 12px; /* inset grouped lists */
+  --radius-card: 14px;
   --radius-button: 12px;
-  --radius-control: 10px;
-  --radius-sheet: 16px;
+  --radius-control: 9px;
+  --radius-sheet: 14px;
 
-  /* Spacing */
+  /* --- Spacing and sizes ------------------------------------------------ */
   --space-1: 4px;
   --space-2: 8px;
   --space-3: 12px;
   --space-4: 16px;
   --space-5: 24px;
   --space-6: 32px;
-  --gutter: 16px;
-
-  /* Sizes */
-  --tap: 48px; /* minimum tap target */
-  --row: 56px; /* list row height */
-  --topbar: 60px;
-  --tabbar: 64px;
+  --gutter: 16px; /* Apple's layout margin on phones */
+  --tap: 48px; /* field-use minimum (Apple's own minimum is 44pt) */
+  --nav: 52px; /* navigation bar */
+  --tabbar: 56px; /* tab bar (plus the home-indicator area) */
   --content: 720px; /* widest content column on big screens */
 
-  /* Motion */
-  --fast: 150ms;
-  --ease: cubic-bezier(0.2, 0, 0, 1);
+  /* --- Motion: Apple's spring-like curve -------------------------------- */
+  --ease: cubic-bezier(0.32, 0.72, 0, 1);
+  --fast: 0.2s;
+  --medium: 0.38s;
+}
+
+/* Dark Mode - follows the phone. Every role has a dark partner. */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --tint: #6e7bff; /* lighter so it stays readable on black: 4.8:1+ */
+    --tint-solid: #3d4dff; /* white on it: 5.7:1 */
+    --tint-pressed: #2b3cf0;
+    --tint-fill: #161a3d;
+    --destructive: #ff6b78;
+    --destructive-solid: #d0263a;
+    --destructive-fill: #3a1418;
+
+    --bg: #000000;
+    --surface: #1c1c1e;
+    --surface-2: #2c2c2e;
+    --bar: #121214;
+    --sheet: #1c1c1e;
+    --sheet-cell: #2c2c2e;
+
+    --label: #ffffff;
+    --label-2: #aeaeb2; /* 7.6:1 on cells */
+    --label-3: #7c7c80;
+
+    --separator: #38383a;
+    --fill: #2f2f33;
+    --fill-pressed: #3d3d42;
+    --thumb: #636366;
+    --track-off: #39393d;
+    --chevron: #5a5a5e;
+    --scrim: rgb(0 0 0 / 0.6);
+    --shadow-control: 0 3px 8px rgb(0 0 0 / 0.3);
+  }
+}
+
+/* The phone's "Increase Contrast" setting: stronger text and lines. */
+@media (prefers-contrast: more) {
+  :root {
+    --label-2: #3c3c43;
+    --separator: #8e8e93;
+    --chevron: #8e8e93;
+  }
+}
+
+@media (prefers-contrast: more) and (prefers-color-scheme: dark) {
+  :root {
+    --label-2: #d1d1d6;
+    --separator: #6c6c70;
+  }
 }

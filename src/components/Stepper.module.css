@@ -3,20 +3,21 @@
   align-items: center;
   flex: none;
   height: var(--tap);
-  background: var(--fill);
   border-radius: var(--radius-control);
+  background: var(--fill);
 }
 
 .button {
+  position: relative;
   display: grid;
   place-items: center;
-  width: var(--tap);
+  width: 46px;
   height: var(--tap);
   padding: 0;
   background: none;
   border: 0;
   border-radius: var(--radius-control);
-  color: var(--ink);
+  color: var(--label);
   cursor: pointer;
 }
 
@@ -25,19 +26,29 @@
 }
 
 .button:disabled {
-  color: var(--chevron);
+  color: var(--label-3);
   cursor: not-allowed;
 }
 
 .button:focus-visible {
-  outline: 2px solid var(--blue);
+  outline: 2px solid var(--tint);
   outline-offset: -2px;
 }
 
 .value {
-  min-width: 56px;
+  min-width: 58px;
+  padding: 0 4px;
+  border-right: 0.5px solid var(--separator);
+  border-left: 0.5px solid var(--separator);
+  font-family: var(--font-rounded);
   font-weight: 600;
   font-variant-numeric: tabular-nums;
+  line-height: 24px;
   text-align: center;
-  color: var(--ink);
+  color: var(--label);
+}
+
+.unit {
+  font-weight: 500;
+  color: var(--label-2);
 }

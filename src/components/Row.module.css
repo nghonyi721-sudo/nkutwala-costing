@@ -5,33 +5,31 @@
   align-items: center;
   gap: 14px;
   width: 100%;
-  min-height: var(--row);
-  padding: var(--space-2) var(--gutter);
+  min-height: var(--tap);
+  padding: 9px var(--gutter);
   background: var(--surface);
   border: 0;
-  color: inherit;
+  color: var(--label);
   font: inherit;
   text-align: left;
 }
 
-/* Thin line between rows, starting after the icon (like phone lists) */
+/* Hairline between rows, starting where the text starts (like iOS) */
 .row + .row::before {
   content: '';
   position: absolute;
   top: 0;
   right: 0;
   left: var(--inset);
-  height: 1px;
-  background: var(--sep);
+  border-top: 0.5px solid var(--separator);
 }
 
 .withIcon {
-  --inset: 54px;
+  --inset: 60px;
 }
 
 button.row {
   cursor: pointer;
-  transition: background var(--fast) var(--ease);
 }
 
 button.row:active {
@@ -39,7 +37,7 @@ button.row:active {
 }
 
 button.row:focus-visible {
-  outline: 2px solid var(--blue);
+  outline: 2px solid var(--tint);
   outline-offset: -2px;
 }
 
@@ -47,9 +45,32 @@ button.row:disabled {
   cursor: not-allowed;
 }
 
-.icon {
+/* Settings-style icon tile */
+.tile {
+  display: grid;
+  place-items: center;
   flex: none;
-  color: var(--ink-2);
+  width: 30px;
+  height: 30px;
+  border-radius: 7px;
+  color: #fff;
+}
+
+.tileBlue {
+  background: var(--tint-solid);
+}
+
+.tileRed {
+  background: var(--destructive-solid);
+}
+
+.tileGrey {
+  background: var(--label-3);
+}
+
+.plainIcon {
+  flex: none;
+  width: 30px;
 }
 
 .main {
@@ -64,38 +85,41 @@ button.row:disabled {
 
 .subtitle {
   display: block;
-  font-size: var(--text-small);
-  color: var(--ink-2);
+  margin-top: 1px;
+  font-size: var(--text-subhead);
+  color: var(--label-2);
 }
 
 .trailing {
   display: inline-flex;
   align-items: center;
   flex: none;
-  color: var(--ink-2);
+  max-width: 60%;
+  color: var(--label-2);
   font-variant-numeric: tabular-nums;
   text-align: right;
 }
 
 .chevron {
   flex: none;
+  margin-left: -4px;
   color: var(--chevron);
 }
 
 /* Tones */
 .accent .title,
-.accent .icon {
-  color: var(--blue);
+.accent .plainIcon {
+  color: var(--tint);
 }
 
 .danger .title,
-.danger .icon {
-  color: var(--red-ink);
+.danger .plainIcon {
+  color: var(--destructive);
 }
 
 .strong .title,
 .strong .trailing {
-  color: var(--ink);
+  color: var(--label);
   font-weight: 600;
 }
 
@@ -108,18 +132,14 @@ button.row:disabled {
   padding: 0;
   background: transparent;
   border: 0;
-  color: var(--ink);
+  color: var(--label);
+  font-size: max(16px, 1rem); /* 16px+ stops iPhones zooming in */
   font-variant-numeric: tabular-nums;
   text-align: right;
 }
 
-.input[type='date'],
-.input[type='time'] {
-  width: auto;
-}
-
 .input::placeholder {
-  color: var(--edge);
+  color: var(--label-3);
 }
 
 .input:focus {
@@ -127,60 +147,53 @@ button.row:disabled {
 }
 
 .input:focus-visible {
-  outline: 2px solid var(--blue);
+  outline: 2px solid var(--tint);
   outline-offset: 4px;
   border-radius: 6px;
 }
 
 .input:disabled {
-  color: var(--ink-2);
+  color: var(--label-2);
 }
 
 .suffix {
   flex: none;
   margin-left: -8px;
-  color: var(--ink-2);
+  color: var(--label-2);
 }
 
-/* On/off switch */
+/* iOS switch: 51 x 31 with a white knob */
 .switch {
   position: relative;
   flex: none;
-  width: 54px;
-  height: 32px;
-  background: var(--surface);
-  border: 2px solid var(--edge);
+  width: 51px;
+  height: 31px;
   border-radius: 16px;
-  transition:
-    background var(--fast) var(--ease),
-    border-color var(--fast) var(--ease);
+  background: var(--track-off);
+  transition: background var(--fast) ease;
 }
 
 .switch::after {
   content: '';
   position: absolute;
-  top: 3px;
-  left: 3px;
-  width: 22px;
-  height: 22px;
+  top: 2px;
+  left: 2px;
+  width: 27px;
+  height: 27px;
   border-radius: 50%;
-  background: var(--edge);
-  transition:
-    transform var(--fast) var(--ease),
-    background var(--fast) var(--ease);
+  background: #fff;
+  box-shadow: var(--shadow-control);
+  transition: transform var(--medium) var(--ease);
 }
 
 [aria-checked='true'] .switch {
-  background: var(--blue);
-  border-color: var(--blue);
+  background: var(--tint-solid);
 }
 
 [aria-checked='true'] .switch::after {
-  background: #fff;
-  transform: translateX(22px);
+  transform: translateX(20px);
 }
 
 [aria-checked='true'] .switchAlert {
-  background: var(--red);
-  border-color: var(--red);
+  background: var(--destructive-solid);
 }

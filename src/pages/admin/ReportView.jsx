@@ -108,7 +108,8 @@ function ReportView({ reportId, onBack }) {
         <Sheet
           title="Reopen report"
           hint="The site manager will be able to change it again. The submitted version is kept in the audit log."
-          doneLabel="Cancel"
+          cancelLabel="Cancel"
+          showDone={false}
           onClose={() => setReopening(false)}
           footer={
             <Button variant="danger" busy={busy} onClick={reopen}>

@@ -1,5 +1,6 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { ROLE_LABELS, isOwnerOrAdmin } from '../lib/labels'
+import ConfirmSheet from './ConfirmSheet'
 import {
   BulldozerIcon,
   ClipboardTextIcon,
@@ -9,8 +10,6 @@ import {
   UserCircleIcon,
   UsersThreeIcon,
 } from './icons'
-import BrandMark from './BrandMark'
-import Logo from './Logo'
 import { Row } from './Row'
 import Sheet, { SheetGroup } from './Sheet'
 import { ShellContext } from './shellContext'
@@ -28,27 +27,29 @@ const SITE_MANAGER_TABS = [
   { key: 'new-report', label: 'New report', Icon: PlusCircleIcon },
 ]
 
-function initials(name = '') {
-  return name
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((word) => word[0].toUpperCase())
-    .join('')
-}
-
-// The frame around every logged-in screen:
-// - white top bar: logo, (wide screens) the tabs, and an account button
-// - phones: a tab bar at the bottom, hidden while a form is open
-// - the Account sheet with name, role and Log out
+// The frame around every logged-in screen. Each screen draws its own
+// navigation bar (see Page/NavBar); the shell provides:
+// - the iOS tab bar at the bottom on phones (hidden while a pushed screen
+//   such as a form is open; wide screens show the tabs in the nav bar)
+// - the Account sheet, with a confirmed Log out
 // Hiding tabs is only tidiness - the database decides who sees what.
 function AppShell({ profile, screen, onNavigate, onLogout, children }) {
   const [pushedScreens, setPushedScreens] = useState(0)
+  const pushedRef = useRef(0)
   const [accountOpen, setAccountOpen] = useState(false)
-  const shell = useMemo(
+  const [confirmingLogout, setConfirmingLogout] = useState(false)
+
+  const pushApi = useMemo(
     () => ({
-      push: () => setPushedScreens((count) => count + 1),
-      pop: () => setPushedScreens((count) => count - 1),
+      push: () => {
+        pushedRef.current += 1
+        setPushedScreens((count) => count + 1)
+      },
+      pop: () => {
+        pushedRef.current -= 1
+        setPushedScreens((count) => count - 1)
+      },
+      isReturning: () => pushedRef.current > 0,
     }),
     [],
   )
@@ -58,43 +59,18 @@ function AppShell({ profile, screen, onNavigate, onLogout, children }) {
   else if (profile?.role === 'site_manager') tabs = SITE_MANAGER_TABS
   const showTabBar = tabs.length > 0 && pushedScreens === 0
 
+  const shell = {
+    ...pushApi,
+    tabs,
+    screen,
+    onNavigate,
+    profile,
+    openAccount: () => setAccountOpen(true),
+  }
+
   return (
     <ShellContext.Provider value={shell}>
-      <header className={s.topBar}>
-        <div className={s.topInner}>
-          <Logo width={104} />
-
-          {tabs.length > 0 && (
-            <nav className={s.topNav} aria-label="Main">
-              {tabs.map(({ key, label }) => (
-                <button
-                  key={key}
-                  type="button"
-                  className={s.topTab}
-                  aria-current={screen === key ? 'page' : undefined}
-                  onClick={() => onNavigate(key)}
-                >
-                  {label}
-                  {screen === key && <BrandMark size="sm" className={s.topTabMark} />}
-                </button>
-              ))}
-            </nav>
-          )}
-
-          <button
-            type="button"
-            className={s.account}
-            aria-label="Account"
-            disabled={!profile}
-            onClick={() => setAccountOpen(true)}
-          >
-            {/* A black dot inside a blue ring - the dot in the logo's cog */}
-            <span className={s.accountDot}>{profile ? initials(profile.full_name) : ''}</span>
-          </button>
-        </div>
-      </header>
-
-      <main className={showTabBar ? s.mainWithTabs : s.main}>{children}</main>
+      <main className={showTabBar ? s.mainWithTabs : undefined}>{children}</main>
 
       {showTabBar && (
         <nav className={s.tabBar} aria-label="Main">
@@ -108,8 +84,7 @@ function AppShell({ profile, screen, onNavigate, onLogout, children }) {
                 aria-current={current ? 'page' : undefined}
                 onClick={() => onNavigate(key)}
               >
-                {current && <BrandMark size="sm" className={s.tabMark} />}
-                <Icon size={26} weight={current ? 'fill' : 'regular'} aria-hidden="true" />
+                <Icon size={27} weight={current ? 'fill' : 'regular'} aria-hidden="true" />
                 <span>{label}</span>
               </button>
             )
@@ -122,14 +97,31 @@ function AppShell({ profile, screen, onNavigate, onLogout, children }) {
           <SheetGroup>
             <Row
               icon={UserCircleIcon}
+              iconTone="grey"
               title={profile.full_name}
               subtitle={ROLE_LABELS[profile.role] ?? profile.role}
             />
           </SheetGroup>
           <SheetGroup>
-            <Row icon={SignOutIcon} title="Log out" tone="danger" onClick={onLogout} />
+            <Row
+              icon={SignOutIcon}
+              title="Log out"
+              tone="danger"
+              onClick={() => setConfirmingLogout(true)}
+            />
           </SheetGroup>
         </Sheet>
+      )}
+
+      {confirmingLogout && (
+        <ConfirmSheet
+          title="Log out?"
+          message="You'll need your email and password to log in again."
+          actionLabel="Log out"
+          destructive
+          onConfirm={onLogout}
+          onCancel={() => setConfirmingLogout(false)}
+        />
       )}
     </ShellContext.Provider>
   )

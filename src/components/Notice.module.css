@@ -4,8 +4,8 @@
   gap: var(--space-3);
   margin: var(--space-5) var(--gutter) 0;
   padding: var(--space-3) var(--space-4);
-  border-radius: var(--radius-button);
-  font-size: var(--text-small);
+  border-radius: var(--radius-group);
+  font-size: var(--text-subhead);
   line-height: 1.4;
 }
 
@@ -20,20 +20,29 @@
 
 .info,
 .success {
-  background: var(--blue-tint);
-  color: var(--blue-dk);
+  background: var(--tint-fill);
+  color: var(--label);
+}
+
+.info .icon,
+.success .icon {
+  color: var(--tint);
 }
 
 .error {
-  background: var(--red-tint);
-  color: var(--red-ink);
+  background: var(--destructive-fill);
+  color: var(--label);
+}
+
+.error .icon {
+  color: var(--destructive);
 }
 
 .locked {
   background: var(--surface);
-  color: var(--ink);
+  color: var(--label);
 }
 
 .locked .icon {
-  color: var(--ink-2);
+  color: var(--label-2);
 }

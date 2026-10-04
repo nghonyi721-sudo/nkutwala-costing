@@ -1,18 +1,18 @@
 import s from './Section.module.css'
 
-// A titled group: small grey caption, a white rounded group holding rows,
-// and an optional footer note. Whitespace separates sections.
-//   action: { label, onClick } - a small text button by the caption (e.g. "Edit")
-//   plain:  children sit on the grey background instead of in a white group
-//           (for segmented controls, buttons, notes)
+// An Apple "inset grouped" section: a small grey header, a white rounded
+// group of rows, and an optional footer note.
+//   action: { label, onClick } - a small text button in the header (e.g. "Edit")
+//   plain:  children sit on the background instead of in a white group
+//           (for segmented controls, buttons, text areas)
 function Section({ title, action, footer, plain = false, children }) {
   return (
     <section className={s.section}>
       {(title || action) && (
-        <div className={s.caption}>
-          {title && <h2 className={s.captionTitle}>{title}</h2>}
+        <div className={s.header}>
+          {title && <h2 className={s.title}>{title}</h2>}
           {action && (
-            <button type="button" className={s.captionAction} onClick={action.onClick}>
+            <button type="button" className={s.action} onClick={action.onClick}>
               {action.label}
             </button>
           )}

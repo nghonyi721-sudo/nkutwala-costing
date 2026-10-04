@@ -1,39 +1,42 @@
 .section {
-  margin-top: var(--space-5);
+  margin-top: 28px;
 }
 
-.caption {
+.header {
   display: flex;
   align-items: flex-end;
   justify-content: space-between;
   gap: var(--space-3);
-  min-height: 28px;
+  min-height: 22px;
   padding: 0 calc(var(--gutter) * 2) 7px;
 }
 
-.captionTitle {
-  font-size: var(--text-caption);
+.title {
+  font-size: var(--text-footnote);
   font-weight: 400;
-  letter-spacing: 0.02em;
+  letter-spacing: 0.01em;
   text-transform: uppercase;
-  color: var(--ink-2);
+  color: var(--label-2);
 }
 
-.captionAction {
+.action {
   min-height: var(--tap);
-  margin: -14px -12px -10px 0;
+  margin: -16px -12px -12px 0;
   padding: 0 12px;
   background: none;
   border: 0;
-  color: var(--blue);
-  font-size: 16px;
-  font-weight: 500;
+  color: var(--tint);
+  font-size: var(--text-subhead);
   cursor: pointer;
 }
 
-.captionAction:focus-visible {
-  outline: 2px solid var(--blue);
-  outline-offset: -2px;
+.action:active {
+  opacity: 0.6;
+}
+
+.action:focus-visible {
+  outline: 2px solid var(--tint);
+  outline-offset: -4px;
   border-radius: 8px;
 }
 
@@ -52,7 +55,8 @@
 }
 
 .footer {
-  padding: var(--space-2) calc(var(--gutter) * 2) 0;
-  font-size: var(--text-caption);
-  color: var(--ink-2);
+  padding: 7px calc(var(--gutter) * 2) 0;
+  font-size: var(--text-footnote);
+  line-height: 1.35;
+  color: var(--label-2);
 }

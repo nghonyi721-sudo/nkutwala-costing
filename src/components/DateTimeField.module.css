@@ -1,0 +1,45 @@
+.pill {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  min-height: 36px;
+  padding: 0 12px;
+  border-radius: 8px;
+  background: var(--fill);
+  color: var(--label);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.pill:active {
+  background: var(--fill-pressed);
+}
+
+.empty {
+  color: var(--tint);
+}
+
+/* The real input sits invisibly over the pill (and a little beyond it, for
+   a 48px tap target), so tapping anywhere on it opens the picker. */
+.native {
+  position: absolute;
+  inset: -6px -4px;
+  width: calc(100% + 8px);
+  height: calc(100% + 12px);
+  margin: 0;
+  padding: 0;
+  border: 0;
+  opacity: 0;
+  font-size: 16px;
+  cursor: pointer;
+}
+
+/* Shows it is being edited, like iOS */
+.pill:focus-within {
+  color: var(--tint);
+}
+
+.pill:has(.native:focus-visible) {
+  outline: 2px solid var(--tint);
+  outline-offset: 2px;
+}
