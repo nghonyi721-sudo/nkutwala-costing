@@ -1,0 +1,130 @@
+.screen {
+  display: flex;
+  flex-direction: column;
+  max-width: 560px;
+  min-height: 100svh;
+  margin: 0 auto;
+}
+
+/* Grey area with the logo on a white card */
+.stage {
+  flex: 1;
+  display: grid;
+  place-items: center;
+  padding: var(--space-6) var(--gutter);
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: var(--space-6) var(--space-5) 26px;
+  background: var(--surface);
+  border-radius: 20px;
+  text-align: center;
+}
+
+.card img {
+  margin-bottom: 10px;
+}
+
+.product {
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: -0.015em;
+}
+
+.tagline {
+  font-size: var(--text-small);
+  color: var(--ink-2);
+}
+
+/* Bottom panel with the form */
+.sheet {
+  position: sticky;
+  bottom: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 20px var(--gutter) calc(20px + env(safe-area-inset-bottom));
+  background: var(--surface);
+  border-radius: 20px 20px 0 0;
+}
+
+.title {
+  font-size: var(--text-title);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.lead {
+  margin-top: var(--space-1);
+  font-size: var(--text-small);
+  color: var(--ink-2);
+}
+
+.fields {
+  overflow: hidden;
+  background: var(--canvas);
+  border-radius: var(--radius-button);
+}
+
+.fieldRow {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: 54px;
+  padding: 0 var(--gutter);
+}
+
+.fieldRow + .fieldRow::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: var(--gutter);
+  height: 1px;
+  background: #dcdfe4;
+}
+
+.fieldRow:focus-within {
+  outline: 2px solid var(--blue);
+  outline-offset: -2px;
+}
+
+.fieldLabel {
+  flex: none;
+  width: 92px;
+  font-weight: 500;
+}
+
+.input {
+  flex: 1;
+  min-width: 0;
+  min-height: 52px;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  outline: none;
+  color: var(--ink);
+}
+
+.input::placeholder {
+  color: var(--edge);
+}
+
+.error {
+  font-size: var(--text-small);
+  font-weight: 500;
+  color: var(--red-ink);
+  text-align: center;
+}
+
+.note {
+  font-size: 14px;
+  color: var(--ink-2);
+  text-align: center;
+}

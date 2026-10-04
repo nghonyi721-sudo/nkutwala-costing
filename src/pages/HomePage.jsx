@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabaseClient'
 import { isOwnerOrAdmin } from '../lib/labels'
 import AppShell from '../components/AppShell'
+import Notice from '../components/Notice'
+import Page from '../components/Page'
 import Skeleton from '../components/Skeleton'
 import ProjectsPage from './admin/ProjectsPage'
 import EmployeesPage from './admin/EmployeesPage'
@@ -65,7 +67,14 @@ function HomePage({ user }) {
   if (isAdmin && current === 'employees') page = <EmployeesPage key={pageKey} />
   if (isAdmin && current === 'equipment') page = <EquipmentPage key={pageKey} />
   if (isSiteManager && (current === 'new-report' || current === 'my-reports')) {
-    page = <MyReportsPage key={pageKey} user={user} startNew={current === 'new-report'} />
+    page = (
+      <MyReportsPage
+        key={pageKey}
+        user={user}
+        startNew={current === 'new-report'}
+        onShowList={() => navigate('my-reports')}
+      />
+    )
   }
 
   return (
@@ -76,17 +85,17 @@ function HomePage({ user }) {
       onLogout={() => supabase.auth.signOut()}
     >
       {error && (
-        <p className="error" role="alert">
-          {error}
-        </p>
+        <Page title="Can't load your account">
+          <Notice tone="error">{error}</Notice>
+        </Page>
       )}
 
       {!error && profile === undefined && <Skeleton rows={2} />}
 
       {!error && profile === null && (
-        <p className="error" role="alert">
-          Your account has no profile yet - ask the administrator.
-        </p>
+        <Page title="No profile yet">
+          <Notice tone="error">Your account has no profile yet - ask the administrator.</Notice>
+        </Page>
       )}
 
       {page}

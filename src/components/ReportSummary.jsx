@@ -1,112 +1,111 @@
-import { formatDate, formatDateTime, formatTime } from '../lib/labels'
+import { formatDate, formatDateTime, formatTime, hoursBetween } from '../lib/labels'
 import { totalHours } from '../lib/reports'
-import DataTable from './DataTable'
-import Figure from './Figure'
-import PageHeader from './PageHeader'
-import SectionHeading from './SectionHeading'
-import StatusTag from './StatusTag'
+import {
+  CalendarBlankIcon,
+  CheckCircleIcon,
+  ClipboardTextIcon,
+  ClockIcon,
+  CloudRainIcon,
+  GasPumpIcon,
+  HardHatIcon,
+  HourglassIcon,
+  ListChecksIcon,
+  UserCircleIcon,
+  WarningIcon,
+} from './icons'
+import Notice from './Notice'
+import { Row } from './Row'
+import Section from './Section'
+import StatusBadge from './StatusBadge'
+import s from './ReportSummary.module.css'
 
+// alert: a "yes" is a warning (shown red), not a box ticked.
 const SAFETY_ITEMS = [
-  ['dsti_done', 'DSTI done'],
-  ['internal_audit', 'Internal audit'],
-  ['near_miss', 'Near miss'],
-  ['safety_moment', 'Safety moment'],
+  { key: 'dsti_done', label: 'DSTI done', icon: ListChecksIcon },
+  { key: 'internal_audit', label: 'Internal audit', icon: ClipboardTextIcon },
+  { key: 'near_miss', label: 'Near miss', icon: WarningIcon, alert: true },
+  { key: 'safety_moment', label: 'Safety moment', icon: HardHatIcon },
 ]
 
-const NAME_HOURS = (nameLabel, nameOf) => [
-  { key: 'name', label: nameLabel, render: nameOf },
-  { key: 'hours', label: 'Hours', numeric: true, render: (line) => Number(line.hours).toFixed(1) },
-]
-
-const LABEL_VALUE = (valueLabel) => [
-  { key: 'label', label: 'Item' },
-  { key: 'value', label: valueLabel, numeric: true },
-]
+const hours = (value) => `${Number(value).toFixed(1)} h`
 
 // Read-only view of one report (from fetchReport). Used by the site manager
 // for submitted reports and by owners for every report. Quantities only.
 function ReportSummary({ report }) {
   const crew = report.report_crew ?? []
   const equipment = report.report_equipment ?? []
-
-  const conditions = [
-    { id: 'start', label: 'Start', value: formatTime(report.start_time) },
-    { id: 'end', label: 'End', value: formatTime(report.end_time) },
-    { id: 'delay', label: 'Delay (h)', value: Number(report.delay_hours).toFixed(1) },
-  ]
-  const safety = SAFETY_ITEMS.map(([key, label]) => ({
-    id: key,
-    label,
-    value: report[key] ? 'Yes' : 'No',
-  }))
+  const onSite = hoursBetween(report.start_time, report.end_time)
 
   return (
-    <div className="card summary">
-      <PageHeader
-        eyebrow="Daily activity report"
-        title={report.project?.name}
-        meta={
-          <>
-            <span className="num">{formatDate(report.report_date)}</span>
-            {report.reporter?.full_name && <> · {report.reporter.full_name}</>}
-            {report.submitted_at && (
-              <>
-                {' '}
-                · Submitted <span className="num">{formatDateTime(report.submitted_at)}</span>
-              </>
-            )}
-          </>
-        }
-      />
-      <StatusTag status={report.status} />
-
+    <>
       {report.reopened_at && (
-        <p className="notice">
-          Reopened <span className="num">{formatDateTime(report.reopened_at)}</span>
-          {report.reopener?.full_name ? ` by ${report.reopener.full_name}` : ''}
+        <Notice tone="info">
+          Reopened {formatDateTime(report.reopened_at)}
+          {report.reopener?.full_name ? ` by ${report.reopener.full_name}` : ''}.
           <br />
           Reason: {report.reopen_reason}
-        </p>
+        </Notice>
       )}
 
-      <div className="figures">
-        <Figure label="Man-hours" value={totalHours(crew).toFixed(1)} unit="h" />
-        <Figure label="Plant hours" value={totalHours(equipment).toFixed(1)} unit="h" />
-        <Figure label="Fuel" value={Number(report.fuel_litres).toFixed(1)} unit="L" />
-        <Figure label="Rain" value={report.rain_percent} unit="%" />
-      </div>
+      <Section title="Details">
+        <Row icon={CalendarBlankIcon} title="Date" trailing={formatDate(report.report_date)} />
+        {report.reporter?.full_name && (
+          <Row icon={UserCircleIcon} title="Site manager" trailing={report.reporter.full_name} />
+        )}
+        <Row icon={CheckCircleIcon} title="Status" trailing={<StatusBadge status={report.status} />} />
+        {report.submitted_at && (
+          <Row icon={ClockIcon} title="Submitted" trailing={formatDateTime(report.submitted_at)} />
+        )}
+      </Section>
 
-      <SectionHeading number={1}>Crew</SectionHeading>
-      {crew.length === 0 ? (
-        <p className="label">No crew recorded.</p>
-      ) : (
-        <DataTable
-          caption="Crew hours"
-          columns={NAME_HOURS('Name', (line) => line.employee?.full_name)}
-          rows={crew}
-        />
-      )}
+      <Section title="Times" footer={onSite ? `${onSite.toFixed(1)} hours on site` : undefined}>
+        <Row icon={ClockIcon} title="Start" trailing={formatTime(report.start_time)} />
+        <Row icon={ClockIcon} title="End" trailing={formatTime(report.end_time)} />
+      </Section>
 
-      <SectionHeading number={2}>Equipment</SectionHeading>
-      {equipment.length === 0 ? (
-        <p className="label">No equipment recorded.</p>
-      ) : (
-        <DataTable
-          caption="Equipment hours"
-          columns={NAME_HOURS('Equipment', (line) => line.equipment?.name)}
-          rows={equipment}
-        />
-      )}
+      <Section title={`Crew · ${crew.length}`}>
+        {crew.length === 0 && <Row title="No crew recorded" />}
+        {crew.map((line) => (
+          <Row key={line.id} title={line.employee?.full_name} trailing={hours(line.hours)} />
+        ))}
+        <Row tone="strong" title="Total man-hours" trailing={hours(totalHours(crew))} />
+      </Section>
 
-      <SectionHeading number={3}>Times &amp; delays</SectionHeading>
-      <DataTable caption="Times and delays" columns={LABEL_VALUE('Value')} rows={conditions} />
+      <Section title={`Equipment · ${equipment.length}`}>
+        {equipment.length === 0 && <Row title="No equipment recorded" />}
+        {equipment.map((line) => (
+          <Row key={line.id} title={line.equipment?.name} trailing={hours(line.hours)} />
+        ))}
+        <Row tone="strong" title="Plant hours" trailing={hours(totalHours(equipment))} />
+      </Section>
 
-      <SectionHeading number={4}>Safety</SectionHeading>
-      <DataTable caption="Safety checks" columns={LABEL_VALUE('Done')} rows={safety} />
+      <Section title="Conditions">
+        <Row icon={GasPumpIcon} title="Fuel" trailing={`${Number(report.fuel_litres).toFixed(1)} L`} />
+        <Row icon={CloudRainIcon} title="Rain" trailing={`${report.rain_percent}%`} />
+        <Row icon={HourglassIcon} title="Delay" trailing={hours(report.delay_hours)} />
+      </Section>
 
-      <SectionHeading number={5}>Activities</SectionHeading>
-      <p className="activities">{report.activities || 'None recorded.'}</p>
-    </div>
+      <Section title="Safety">
+        {SAFETY_ITEMS.map((item) => (
+          <Row
+            key={item.key}
+            icon={item.icon}
+            title={item.label}
+            trailing={
+              report[item.key] ? (
+                <StatusBadge status={item.alert ? 'alert' : 'active'} label="Yes" />
+              ) : (
+                'No'
+              )
+            }
+          />
+        ))}
+      </Section>
+
+      <Section title="Activities">
+        <p className={s.activities}>{report.activities || 'None recorded.'}</p>
+      </Section>
+    </>
   )
 }
 

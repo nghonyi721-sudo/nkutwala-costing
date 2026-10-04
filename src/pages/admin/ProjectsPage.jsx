@@ -2,10 +2,14 @@ import { useEffect, useState } from 'react'
 import { supabase } from '../../lib/supabaseClient'
 import { PROJECT_STATUS_LABELS } from '../../lib/labels'
 import Button from '../../components/Button'
-import StatusTag from '../../components/StatusTag'
-import ListRow from '../../components/ListRow'
-import PageHeader from '../../components/PageHeader'
+import EmptyState from '../../components/EmptyState'
+import { MapPinIcon, PlusIcon } from '../../components/icons'
+import Notice from '../../components/Notice'
+import Page from '../../components/Page'
+import { Row } from '../../components/Row'
+import Section from '../../components/Section'
 import Skeleton from '../../components/Skeleton'
+import StatusBadge from '../../components/StatusBadge'
 import ProjectForm from './ProjectForm'
 
 // Owner/admin: list of projects. Tap one to edit, or add a new one.
@@ -52,42 +56,46 @@ function ProjectsPage() {
   }
 
   return (
-    <div className="card">
-      <PageHeader
-        eyebrow="Setup"
-        title="Projects"
-        meta={projects ? `${projects.length} project${projects.length === 1 ? '' : 's'}` : null}
-      />
-
-      <Button onClick={() => setEditing('new')}>Add project</Button>
-
-      {error && (
-        <p className="error" role="alert">
-          {error}
-        </p>
-      )}
+    <Page
+      title="Projects"
+      subtitle={projects ? `${projects.length} project${projects.length === 1 ? '' : 's'}` : undefined}
+      action={
+        <Button variant="plain" inline icon={PlusIcon} onClick={() => setEditing('new')}>
+          Add
+        </Button>
+      }
+    >
+      {error && <Notice tone="error">{error}</Notice>}
 
       {!error && projects === undefined && <Skeleton />}
 
-      {projects?.length === 0 && <p className="label">No projects yet.</p>}
+      {projects?.length === 0 && (
+        <EmptyState
+          icon={MapPinIcon}
+          title="No projects yet"
+          text="Add a project so site managers can report on it."
+          action={<Button onClick={() => setEditing('new')}>Add project</Button>}
+        />
+      )}
 
       {projects?.length > 0 && (
-        <ul className="list">
+        <Section>
           {projects.map((project) => (
-            <li key={project.id}>
-              <ListRow
-                title={project.name}
-                detail={project.contract_number}
-                mono
-                muted={project.status === 'complete'}
-                tag={<StatusTag status={project.status} label={PROJECT_STATUS_LABELS[project.status]} />}
-                onClick={() => setEditing(project)}
-              />
-            </li>
+            <Row
+              key={project.id}
+              title={project.name}
+              subtitle={project.contract_number}
+              mono
+              trailing={
+                <StatusBadge status={project.status} label={PROJECT_STATUS_LABELS[project.status]} />
+              }
+              chevron
+              onClick={() => setEditing(project)}
+            />
           ))}
-        </ul>
+        </Section>
       )}
-    </div>
+    </Page>
   )
 }
 

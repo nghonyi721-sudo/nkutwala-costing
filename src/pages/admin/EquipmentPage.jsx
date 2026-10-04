@@ -2,10 +2,14 @@ import { useEffect, useState } from 'react'
 import { supabase } from '../../lib/supabaseClient'
 import { EQUIPMENT_OWNERSHIP_LABELS } from '../../lib/labels'
 import Button from '../../components/Button'
-import StatusTag from '../../components/StatusTag'
-import ListRow from '../../components/ListRow'
-import PageHeader from '../../components/PageHeader'
+import EmptyState from '../../components/EmptyState'
+import { BulldozerIcon, PlusIcon } from '../../components/icons'
+import Notice from '../../components/Notice'
+import Page from '../../components/Page'
+import { Row } from '../../components/Row'
+import Section from '../../components/Section'
 import Skeleton from '../../components/Skeleton'
+import StatusBadge from '../../components/StatusBadge'
 import EquipmentForm from './EquipmentForm'
 
 // Owner/admin: list of equipment. Tap one to edit, or add a new one.
@@ -52,41 +56,45 @@ function EquipmentPage() {
   }
 
   return (
-    <div className="card">
-      <PageHeader
-        eyebrow="Setup"
-        title="Equipment"
-        meta={machines ? `${machines.filter((m) => m.active).length} active of ${machines.length}` : null}
-      />
-
-      <Button onClick={() => setEditing('new')}>Add equipment</Button>
-
-      {error && (
-        <p className="error" role="alert">
-          {error}
-        </p>
-      )}
+    <Page
+      title="Equipment"
+      subtitle={
+        machines ? `${machines.filter((m) => m.active).length} active of ${machines.length}` : undefined
+      }
+      action={
+        <Button variant="plain" inline icon={PlusIcon} onClick={() => setEditing('new')}>
+          Add
+        </Button>
+      }
+    >
+      {error && <Notice tone="error">{error}</Notice>}
 
       {!error && machines === undefined && <Skeleton />}
 
-      {machines?.length === 0 && <p className="label">No equipment yet.</p>}
+      {machines?.length === 0 && (
+        <EmptyState
+          icon={BulldozerIcon}
+          title="No equipment yet"
+          text="Add the machines used on site so they can go on daily reports."
+          action={<Button onClick={() => setEditing('new')}>Add equipment</Button>}
+        />
+      )}
 
       {machines?.length > 0 && (
-        <ul className="list">
+        <Section>
           {machines.map((machine) => (
-            <li key={machine.id}>
-              <ListRow
-                title={machine.name}
-                detail={EQUIPMENT_OWNERSHIP_LABELS[machine.ownership]}
-                muted={!machine.active}
-                tag={machine.active ? null : <StatusTag status="inactive" label="Inactive" />}
-                onClick={() => setEditing(machine)}
-              />
-            </li>
+            <Row
+              key={machine.id}
+              title={machine.name}
+              subtitle={EQUIPMENT_OWNERSHIP_LABELS[machine.ownership]}
+              trailing={machine.active ? null : <StatusBadge status="inactive" label="Inactive" />}
+              chevron
+              onClick={() => setEditing(machine)}
+            />
           ))}
-        </ul>
+        </Section>
       )}
-    </div>
+    </Page>
   )
 }
 

@@ -1,8 +1,8 @@
 import { useState } from 'react'
 import { supabase } from '../lib/supabaseClient'
 import Button from '../components/Button'
-import Field from '../components/Field'
-import PageHeader from '../components/PageHeader'
+import Logo from '../components/Logo'
+import s from './LoginPage.module.css'
 
 // Email + password login. There is no sign-up: accounts are created by the
 // administrator in the Supabase dashboard.
@@ -34,46 +34,53 @@ function LoginPage() {
   }
 
   return (
-    <div className="login-screen">
-      <div className="login-brand">
-        <span className="wordmark">
-          <span className="wordmark-name">Nkutwala</span>
-          <span className="wordmark-sub">Construction</span>
-        </span>
-        <p className="login-product">Site Costing</p>
+    <form className={s.screen} onSubmit={handleSubmit}>
+      {/* The logo needs white, so it sits on a white card. */}
+      <div className={s.stage}>
+        <div className={s.card}>
+          <Logo width={120} />
+          <p className={s.product}>Site Costing</p>
+          <p className={s.tagline}>Daily activity reports and job costing</p>
+        </div>
       </div>
 
-      <form className="card login-form" onSubmit={handleSubmit}>
-        <PageHeader
-          eyebrow="Welcome"
-          title="Log in"
-          meta="Use the account your administrator gave you."
-        />
+      {/* The form sits at the bottom, within thumb reach. */}
+      <div className={s.sheet}>
+        <div>
+          <h1 className={s.title}>Log in</h1>
+          <p className={s.lead}>Use the account the office set up for you.</p>
+        </div>
 
-        <Field
-          id="email"
-          label="Email"
-          type="email"
-          inputMode="email"
-          autoComplete="username"
-          autoCapitalize="none"
-          required
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-        />
-
-        <Field
-          id="password"
-          label="Password"
-          type="password"
-          autoComplete="current-password"
-          required
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-        />
+        <div className={s.fields}>
+          <label className={s.fieldRow}>
+            <span className={s.fieldLabel}>Email</span>
+            <input
+              className={s.input}
+              type="email"
+              inputMode="email"
+              autoComplete="username"
+              autoCapitalize="none"
+              placeholder="name@example.co.za"
+              required
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+            />
+          </label>
+          <label className={s.fieldRow}>
+            <span className={s.fieldLabel}>Password</span>
+            <input
+              className={s.input}
+              type="password"
+              autoComplete="current-password"
+              required
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+            />
+          </label>
+        </div>
 
         {error && (
-          <p className="error" role="alert">
+          <p className={s.error} role="alert">
             {error}
           </p>
         )}
@@ -81,8 +88,9 @@ function LoginPage() {
         <Button type="submit" disabled={busy}>
           {busy ? 'Logging in…' : 'Log in'}
         </Button>
-      </form>
-    </div>
+        <p className={s.note}>Forgot your password? Ask the office.</p>
+      </div>
+    </form>
   )
 }
 

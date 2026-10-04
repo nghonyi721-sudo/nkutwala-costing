@@ -2,15 +2,21 @@ import { useEffect, useState } from 'react'
 import { supabase } from '../../lib/supabaseClient'
 import { formatDate } from '../../lib/labels'
 import Button from '../../components/Button'
-import StatusTag from '../../components/StatusTag'
-import ListRow from '../../components/ListRow'
-import PageHeader from '../../components/PageHeader'
+import EmptyState from '../../components/EmptyState'
+import { ClipboardTextIcon, PlusIcon } from '../../components/icons'
+import Notice from '../../components/Notice'
+import Page from '../../components/Page'
+import { Row } from '../../components/Row'
+import Section from '../../components/Section'
 import Skeleton from '../../components/Skeleton'
+import StatusBadge from '../../components/StatusBadge'
 import ReportForm from './ReportForm'
 
 // Site manager: their own reports, newest first. The database only ever
 // returns this user's own reports.
-function MyReportsPage({ user, startNew }) {
+// onShowList: called when a report opened from the "New report" tab is
+// closed, so the tabs switch back to "My reports".
+function MyReportsPage({ user, startNew, onShowList }) {
   // undefined = loading, array = loaded
   const [reports, setReports] = useState(undefined)
   const [error, setError] = useState('')
@@ -48,6 +54,10 @@ function MyReportsPage({ user, startNew }) {
         user={user}
         reportId={open === 'new' ? null : open}
         onDone={() => {
+          if (startNew && onShowList) {
+            onShowList()
+            return
+          }
           setOpen(null)
           setReloadCount((count) => count + 1)
         }}
@@ -56,47 +66,50 @@ function MyReportsPage({ user, startNew }) {
   }
 
   return (
-    <div className="card">
-      <PageHeader
-        eyebrow="Site"
-        title="My reports"
-        meta={
-          reports
-            ? `${reports.filter((r) => r.status === 'draft').length} draft · ${
-                reports.filter((r) => r.status === 'submitted').length
-              } submitted`
-            : null
-        }
-      />
-
-      <Button onClick={() => setOpen('new')}>New daily report</Button>
-
-      {error && (
-        <p className="error" role="alert">
-          {error}
-        </p>
-      )}
+    <Page
+      title="My reports"
+      subtitle={
+        reports
+          ? `${reports.filter((r) => r.status === 'draft').length} draft · ${
+              reports.filter((r) => r.status === 'submitted').length
+            } submitted`
+          : undefined
+      }
+      action={
+        <Button variant="plain" inline icon={PlusIcon} onClick={() => setOpen('new')}>
+          New
+        </Button>
+      }
+    >
+      {error && <Notice tone="error">{error}</Notice>}
 
       {!error && reports === undefined && <Skeleton />}
 
-      {reports?.length === 0 && <p className="label">No reports yet. Tap New daily report to start today's.</p>}
+      {reports?.length === 0 && (
+        <EmptyState
+          icon={ClipboardTextIcon}
+          title="No reports yet"
+          text="Start today's daily report."
+          action={<Button onClick={() => setOpen('new')}>New daily report</Button>}
+        />
+      )}
 
       {reports?.length > 0 && (
-        <ul className="list">
+        <Section>
           {reports.map((report) => (
-            <li key={report.id}>
-              <ListRow
-                title={report.project?.name}
-                detail={formatDate(report.report_date)}
-                mono
-                tag={<StatusTag status={report.status} />}
-                onClick={() => setOpen(report.id)}
-              />
-            </li>
+            <Row
+              key={report.id}
+              title={report.project?.name}
+              subtitle={formatDate(report.report_date)}
+              mono
+              trailing={<StatusBadge status={report.status} />}
+              chevron
+              onClick={() => setOpen(report.id)}
+            />
           ))}
-        </ul>
+        </Section>
       )}
-    </div>
+    </Page>
   )
 }
 

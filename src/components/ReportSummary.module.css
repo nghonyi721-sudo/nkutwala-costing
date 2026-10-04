@@ -1,0 +1,5 @@
+.activities {
+  padding: 14px var(--gutter);
+  line-height: 1.45;
+  white-space: pre-wrap;
+}

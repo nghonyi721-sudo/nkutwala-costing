@@ -1,0 +1,134 @@
+/* ------------------------------------------------------------- top bar */
+
+.topBar {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  background: var(--surface);
+  border-bottom: 1px solid var(--sep);
+}
+
+.topInner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  height: var(--topbar);
+  max-width: 1040px;
+  margin: 0 auto;
+  padding: 0 var(--space-3) 0 var(--gutter);
+}
+
+/* Tabs in the top bar - wide screens only */
+.topNav {
+  display: none;
+  flex: 1;
+  justify-content: center;
+  gap: var(--space-1);
+}
+
+.topTab {
+  min-height: var(--tap);
+  padding: 0 14px;
+  background: none;
+  border: 0;
+  border-radius: var(--radius-control);
+  color: var(--ink-2);
+  font-size: var(--text-small);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.topTab:hover {
+  color: var(--ink);
+}
+
+.topTab[aria-current='page'] {
+  background: var(--blue-tint);
+  color: var(--blue-dk);
+}
+
+/* Round account button with the user's initials */
+.account {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: var(--tap);
+  height: var(--tap);
+  padding: 0;
+  background: var(--fill);
+  border: 0;
+  border-radius: 50%;
+  color: var(--ink);
+  font-size: var(--text-small);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+}
+
+.account:active {
+  background: var(--fill-pressed);
+}
+
+.topTab:focus-visible,
+.account:focus-visible,
+.tab:focus-visible {
+  outline: 2px solid var(--blue);
+  outline-offset: -2px;
+}
+
+/* ------------------------------------------------------------ content */
+
+.mainWithTabs {
+  padding-bottom: calc(var(--tabbar) + env(safe-area-inset-bottom));
+}
+
+/* -------------------------------------------- tab bar (phones only) */
+
+.tabBar {
+  position: fixed;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 30;
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+  padding-bottom: env(safe-area-inset-bottom);
+  background: var(--surface);
+  border-top: 1px solid var(--sep);
+}
+
+.tab {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  min-height: var(--tabbar);
+  padding: 0;
+  background: none;
+  border: 0;
+  color: var(--ink-2);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.tab[aria-current='page'] {
+  color: var(--blue);
+}
+
+@media (min-width: 768px) {
+  .topNav {
+    display: flex;
+  }
+
+  .tabBar {
+    display: none;
+  }
+
+  .mainWithTabs {
+    padding-bottom: 0;
+  }
+}

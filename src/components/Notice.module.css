@@ -1,0 +1,39 @@
+.notice {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  margin: var(--space-5) var(--gutter) 0;
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-button);
+  font-size: var(--text-small);
+  line-height: 1.4;
+}
+
+.icon {
+  flex: none;
+  margin-top: 1px;
+}
+
+.text {
+  min-width: 0;
+}
+
+.info,
+.success {
+  background: var(--blue-tint);
+  color: var(--blue-dk);
+}
+
+.error {
+  background: var(--red-tint);
+  color: var(--red-ink);
+}
+
+.locked {
+  background: var(--surface);
+  color: var(--ink);
+}
+
+.locked .icon {
+  color: var(--ink-2);
+}

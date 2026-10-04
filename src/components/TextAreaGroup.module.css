@@ -1,0 +1,31 @@
+.group {
+  overflow: hidden;
+  background: var(--surface);
+  border-radius: var(--radius-group);
+}
+
+.group:focus-within {
+  outline: 2px solid var(--blue);
+  outline-offset: 0;
+}
+
+.textarea {
+  display: block;
+  width: 100%;
+  min-height: 128px;
+  padding: 14px var(--gutter);
+  background: transparent;
+  border: 0;
+  outline: none;
+  color: var(--ink);
+  line-height: 1.4;
+  resize: vertical;
+}
+
+.textarea::placeholder {
+  color: var(--edge);
+}
+
+.textarea:disabled {
+  color: var(--ink-2);
+}

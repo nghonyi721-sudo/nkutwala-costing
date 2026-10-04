@@ -2,17 +2,32 @@ import { useEffect, useState } from 'react'
 import { supabase } from '../../lib/supabaseClient'
 import { formatDate, hoursBetween, todayLocal } from '../../lib/labels'
 import { fetchReport, totalHours } from '../../lib/reports'
-import ChoiceButtons from '../../components/ChoiceButtons'
-import Stepper from '../../components/Stepper'
-import ReportSummary from '../../components/ReportSummary'
+import ActionBar from '../../components/ActionBar'
 import Button from '../../components/Button'
-import Field from '../../components/Field'
-import StatusTag from '../../components/StatusTag'
-import Figure from '../../components/Figure'
-import ListRow from '../../components/ListRow'
-import PageHeader from '../../components/PageHeader'
-import SectionHeading from '../../components/SectionHeading'
+import {
+  CalendarBlankIcon,
+  ClipboardTextIcon,
+  ClockIcon,
+  CloudRainIcon,
+  GasPumpIcon,
+  HardHatIcon,
+  HourglassIcon,
+  ListChecksIcon,
+  MapPinIcon,
+  MinusCircleIcon,
+  PlusIcon,
+  WarningIcon,
+} from '../../components/icons'
+import Notice from '../../components/Notice'
+import Page from '../../components/Page'
+import ReportSummary from '../../components/ReportSummary'
+import { FieldRow, Row, SwitchRow } from '../../components/Row'
+import Section from '../../components/Section'
+import { PickSheet } from '../../components/Sheet'
 import Skeleton from '../../components/Skeleton'
+import Stepper from '../../components/Stepper'
+import TextAreaGroup from '../../components/TextAreaGroup'
+import s from './ReportForm.module.css'
 
 const SAFETY_ITEMS = [
   ['dsti_done', 'DSTI done'],
@@ -20,6 +35,13 @@ const SAFETY_ITEMS = [
   ['near_miss', 'Near miss'],
   ['safety_moment', 'Safety moment'],
 ]
+
+const SAFETY_ICONS = {
+  dsti_done: ListChecksIcon,
+  internal_audit: ClipboardTextIcon,
+  near_miss: WarningIcon,
+  safety_moment: HardHatIcon,
+}
 
 const EMPTY_FORM = {
   project_id: '',
@@ -72,6 +94,8 @@ function ReportForm({ user, reportId, onDone }) {
   const [error, setError] = useState('')
   const [message, setMessage] = useState('')
   const [confirming, setConfirming] = useState(false)
+  const [pickingProject, setPickingProject] = useState(false)
+  const [editingList, setEditingList] = useState(null) // 'crew' | 'equipment' | null
 
   function applyReport(report) {
     if (report.status === 'submitted') {
@@ -272,48 +296,41 @@ function ReportForm({ user, reportId, onDone }) {
   }
 
   // --- Rendering -------------------------------------------------------------
-  const backButton = (
-    <Button variant="secondary" inline onClick={onDone}>
-      Back to my reports
-    </Button>
-  )
+  const pageTitle = id ? 'Daily report' : 'New daily report'
 
   if (loading) {
     return (
-      <div className="card">
-        {backButton}
+      <Page title={pageTitle} onBack={onDone} backLabel="My reports">
         <Skeleton rows={4} />
-      </div>
+      </Page>
     )
   }
 
   if (loadError) {
     return (
-      <div className="card">
-        {backButton}
-        <p className="error" role="alert">
-          {loadError}
-        </p>
-      </div>
+      <Page title={pageTitle} onBack={onDone} backLabel="My reports">
+        <Notice tone="error">{loadError}</Notice>
+      </Page>
     )
   }
 
   if (submittedReport) {
     return (
-      <div className="card">
-        {backButton}
-        <p className="notice">This report has been submitted and can no longer be changed.</p>
+      <Page
+        title={submittedReport.project?.name ?? 'Daily report'}
+        subtitle={formatDate(submittedReport.report_date)}
+        onBack={onDone}
+        backLabel="My reports"
+      >
+        <Notice tone="locked">Submitted and locked. Only the owner can reopen it.</Notice>
         <ReportSummary report={submittedReport} />
-      </div>
+      </Page>
     )
   }
 
   // Show active items, plus anything already on this report.
-  const projectOptions = Object.fromEntries(
-    projects
-      .filter((p) => p.status === 'active' || p.id === form.project_id)
-      .map((p) => [p.id, p.name]),
-  )
+  const projectChoices = projects.filter((p) => p.status === 'active' || p.id === form.project_id)
+  const projectName = projectChoices.find((p) => p.id === form.project_id)?.name
   const employeeName = Object.fromEntries(employees.map((e) => [e.id, e.full_name]))
   const machineName = Object.fromEntries(machines.map((m) => [m.id, m.name]))
   const availableEmployees = employees.filter(
@@ -322,267 +339,278 @@ function ReportForm({ user, reportId, onDone }) {
   const availableMachines = machines.filter(
     (m) => m.active && !equipmentLines.some((line) => line.equipment_id === m.id),
   )
-  const projectName = projectOptions[form.project_id] ?? 'this project'
+  const siteHours = hoursBetween(form.start_time, form.end_time)
+  const dateText = form.report_date ? formatDate(form.report_date) : 'No date'
+  const toggleEditing = (list) => setEditingList((current) => (current === list ? null : list))
+
+  const removeButton = (label, onRemove) => (
+    <button type="button" className={s.remove} aria-label={label} onClick={onRemove}>
+      <MinusCircleIcon size={28} weight="fill" />
+    </button>
+  )
+
+  const footer = (
+    <ActionBar
+      message={
+        confirming
+          ? `Submit the report for ${projectName ?? 'this project'}, ${dateText}? You can't change it after this.`
+          : error || message
+      }
+      tone={error && !confirming ? 'error' : 'info'}
+    >
+      {confirming ? (
+        <>
+          <Button variant="secondary" onClick={() => setConfirming(false)}>
+            Go back
+          </Button>
+          <Button disabled={busy} onClick={submit}>
+            {busy ? 'Submitting…' : 'Yes, submit'}
+          </Button>
+        </>
+      ) : (
+        <>
+          <Button variant="secondary" disabled={busy} onClick={save}>
+            {busy ? 'Saving…' : 'Save draft'}
+          </Button>
+          <Button
+            disabled={busy}
+            onClick={() => {
+              setError('')
+              setConfirming(true)
+            }}
+          >
+            Submit
+          </Button>
+        </>
+      )}
+    </ActionBar>
+  )
 
   return (
-    <div className="card report-form">
-      {backButton}
-      <PageHeader
-        eyebrow="Site · Daily activity report"
-        title={id ? 'Daily report' : 'New daily report'}
-        meta={
-          <>
-            <span className="num">{form.report_date ? formatDate(form.report_date) : 'No date'}</span>
-            {form.project_id && <> · {projectName}</>}
-          </>
-        }
-      />
-      {id && <StatusTag status="draft" />}
-
-      {/* 1. Project and date */}
-      <SectionHeading number={1}>Project &amp; date</SectionHeading>
-      {Object.keys(projectOptions).length === 0 ? (
-        <p className="error">There are no active projects. Ask the owner to add one.</p>
-      ) : (
-        <ChoiceButtons
-          label="Project"
-          options={projectOptions}
-          value={form.project_id}
-          onChange={(value) => setField('project_id', value)}
+    <Page
+      title={pageTitle}
+      subtitle={projectName ? `${dateText} · ${projectName}` : dateText}
+      onBack={onDone}
+      backLabel="My reports"
+      footer={footer}
+    >
+      <Section title="Project">
+        {projectChoices.length === 0 ? (
+          <Row icon={MapPinIcon} title="No active projects" subtitle="Ask the owner to add one." />
+        ) : (
+          <Row
+            icon={MapPinIcon}
+            title={projectName ?? 'Choose a project'}
+            tone={projectName ? undefined : 'accent'}
+            chevron
+            onClick={() => setPickingProject(true)}
+          />
+        )}
+        <FieldRow
+          icon={CalendarBlankIcon}
+          label="Date"
+          type="date"
+          value={form.report_date}
+          onChange={(e) => setField('report_date', e.target.value)}
         />
-      )}
+      </Section>
 
-      <Field
-        id="report-date"
-        label="Date"
-        type="date"
-        value={form.report_date}
-        onChange={(e) => setField('report_date', e.target.value)}
-      />
-
-      {/* 2. Times */}
-      <SectionHeading number={2}>Times</SectionHeading>
-      <div className="two-columns">
-        <Field
-          id="start-time"
+      <Section
+        title="Times"
+        footer={siteHours ? `${siteHours.toFixed(1)} hours on site` : 'Set a start and end time.'}
+      >
+        <FieldRow
+          icon={ClockIcon}
           label="Start"
           type="time"
           value={form.start_time}
           onChange={(e) => setField('start_time', e.target.value)}
         />
-        <Field
-          id="end-time"
+        <FieldRow
+          icon={ClockIcon}
           label="End"
           type="time"
           value={form.end_time}
           onChange={(e) => setField('end_time', e.target.value)}
         />
-      </div>
+      </Section>
 
-      {/* 3. Crew */}
-      <SectionHeading number={3}>Crew</SectionHeading>
-      {crew.length === 0 && <p className="label">No one added yet.</p>}
-      {crew.length > 0 && (
-        <ul className="list">
-          {crew.map((line) => (
-            <li key={line.employee_id} className="line-row">
-              <span className="list-title">{employeeName[line.employee_id] ?? 'Unknown'}</span>
-              <Stepper
-                label="Hours"
-                value={line.hours}
-                min={0.5}
-                unit="h"
-                onChange={(hours) => setCrewHours(line.employee_id, hours)}
-              />
-              <Button variant="secondary" onClick={() => removeCrew(line.employee_id)}>
-                Remove
-              </Button>
-            </li>
-          ))}
-        </ul>
-      )}
+      <Section
+        title={`Crew · ${crew.length}`}
+        action={
+          crew.length > 0
+            ? { label: editingList === 'crew' ? 'Done' : 'Edit', onClick: () => toggleEditing('crew') }
+            : undefined
+        }
+      >
+        {crew.map((line) => {
+          const name = employeeName[line.employee_id] ?? 'Unknown'
+          return (
+            <Row
+              key={line.employee_id}
+              title={name}
+              leading={
+                editingList === 'crew'
+                  ? removeButton(`Remove ${name}`, () => removeCrew(line.employee_id))
+                  : undefined
+              }
+              trailing={
+                <Stepper
+                  label={`${name} hours`}
+                  value={line.hours}
+                  min={0.5}
+                  unit="h"
+                  onChange={(hours) => setCrewHours(line.employee_id, hours)}
+                />
+              }
+            />
+          )
+        })}
+        <Row icon={PlusIcon} tone="accent" title="Add person" onClick={() => setShowCrewPicker(true)} />
+        <Row tone="strong" title="Total man-hours" trailing={`${totalHours(crew).toFixed(1)} h`} />
+      </Section>
 
-      {showCrewPicker ? (
-        <div className="picker">
-          <p className="label">Tap a person to add them:</p>
-          {availableEmployees.length === 0 && <p>Everyone is already on the report.</p>}
-          {availableEmployees.length > 0 && (
-            <ul className="list">
-              {availableEmployees.map((employee) => (
-                <li key={employee.id}>
-                  <ListRow
-                    title={employee.full_name}
-                    action="Add"
-                    onClick={() => addCrew(employee.id)}
-                  />
-                </li>
-              ))}
-            </ul>
-          )}
-          <Button variant="secondary" onClick={() => setShowCrewPicker(false)}>
-            Close list
-          </Button>
-        </div>
-      ) : (
-        <Button variant="secondary" onClick={() => setShowCrewPicker(true)}>
-          Add person
-        </Button>
-      )}
+      <Section
+        title={`Equipment · ${equipmentLines.length}`}
+        action={
+          equipmentLines.length > 0
+            ? {
+                label: editingList === 'equipment' ? 'Done' : 'Edit',
+                onClick: () => toggleEditing('equipment'),
+              }
+            : undefined
+        }
+      >
+        {equipmentLines.map((line) => {
+          const name = machineName[line.equipment_id] ?? 'Unknown'
+          return (
+            <Row
+              key={line.equipment_id}
+              title={name}
+              leading={
+                editingList === 'equipment'
+                  ? removeButton(`Remove ${name}`, () => removeEquipment(line.equipment_id))
+                  : undefined
+              }
+              trailing={
+                <Stepper
+                  label={`${name} hours`}
+                  value={line.hours}
+                  min={0.5}
+                  unit="h"
+                  onChange={(hours) => setEquipmentHours(line.equipment_id, hours)}
+                />
+              }
+            />
+          )
+        })}
+        <Row
+          icon={PlusIcon}
+          tone="accent"
+          title="Add equipment"
+          onClick={() => setShowEquipmentPicker(true)}
+        />
+        <Row tone="strong" title="Plant hours" trailing={`${totalHours(equipmentLines).toFixed(1)} h`} />
+      </Section>
 
-      <Figure label="Total man-hours" value={totalHours(crew).toFixed(1)} unit="h" emphasis />
+      <Section title="Conditions">
+        <FieldRow
+          icon={GasPumpIcon}
+          label="Fuel"
+          type="number"
+          inputMode="decimal"
+          min="0"
+          step="0.1"
+          placeholder="0"
+          suffix="L"
+          inputWidth="5.5rem"
+          value={form.fuel_litres}
+          onChange={(e) => setField('fuel_litres', e.target.value)}
+        />
+        <Row
+          icon={CloudRainIcon}
+          title="Rain"
+          trailing={
+            <Stepper
+              label="Rain"
+              value={form.rain_percent}
+              step={10}
+              max={100}
+              unit="%"
+              onChange={(value) => setField('rain_percent', value)}
+            />
+          }
+        />
+        <Row
+          icon={HourglassIcon}
+          title="Delay"
+          trailing={
+            <Stepper
+              label="Delay hours"
+              value={form.delay_hours}
+              unit="h"
+              onChange={(value) => setField('delay_hours', value)}
+            />
+          }
+        />
+      </Section>
 
-      {/* 4. Equipment */}
-      <SectionHeading number={4}>Equipment</SectionHeading>
-      {equipmentLines.length === 0 && <p className="label">No equipment added yet.</p>}
-      {equipmentLines.length > 0 && (
-        <ul className="list">
-          {equipmentLines.map((line) => (
-            <li key={line.equipment_id} className="line-row">
-              <span className="list-title">{machineName[line.equipment_id] ?? 'Unknown'}</span>
-              <Stepper
-                label="Hours"
-                value={line.hours}
-                min={0.5}
-                unit="h"
-                onChange={(hours) => setEquipmentHours(line.equipment_id, hours)}
-              />
-              <Button variant="secondary" onClick={() => removeEquipment(line.equipment_id)}>
-                Remove
-              </Button>
-            </li>
-          ))}
-        </ul>
-      )}
-
-      {showEquipmentPicker ? (
-        <div className="picker">
-          <p className="label">Tap a machine to add it:</p>
-          {availableMachines.length === 0 && <p>All equipment is already on the report.</p>}
-          {availableMachines.length > 0 && (
-            <ul className="list">
-              {availableMachines.map((machine) => (
-                <li key={machine.id}>
-                  <ListRow
-                    title={machine.name}
-                    action="Add"
-                    onClick={() => addEquipment(machine.id)}
-                  />
-                </li>
-              ))}
-            </ul>
-          )}
-          <Button variant="secondary" onClick={() => setShowEquipmentPicker(false)}>
-            Close list
-          </Button>
-        </div>
-      ) : (
-        <Button variant="secondary" onClick={() => setShowEquipmentPicker(true)}>
-          Add equipment
-        </Button>
-      )}
-
-      {/* 5. Site conditions */}
-      <SectionHeading number={5}>Conditions</SectionHeading>
-      <Field
-        id="fuel"
-        label="Fuel (litres)"
-        type="number"
-        inputMode="decimal"
-        min="0"
-        step="0.1"
-        value={form.fuel_litres}
-        onChange={(e) => setField('fuel_litres', e.target.value)}
-      />
-      <Stepper
-        label="Rain"
-        value={form.rain_percent}
-        step={10}
-        max={100}
-        unit="%"
-        onChange={(value) => setField('rain_percent', value)}
-      />
-      <Stepper
-        label="Delay"
-        value={form.delay_hours}
-        unit="h"
-        onChange={(value) => setField('delay_hours', value)}
-      />
-
-      {/* 6. Safety */}
-      <SectionHeading number={6}>Safety</SectionHeading>
-      <div className="choice-grid">
+      <Section title="Safety">
         {SAFETY_ITEMS.map(([key, label]) => (
-          <button
+          <SwitchRow
             key={key}
-            type="button"
-            className="choice toggle"
-            aria-pressed={form[key]}
-            onClick={() => setField(key, !form[key])}
-          >
-            {label}
-            <span className="toggle-state">{form[key] ? 'Yes' : 'No'}</span>
-          </button>
+            icon={SAFETY_ICONS[key]}
+            title={label}
+            checked={form[key]}
+            alert={key === 'near_miss'}
+            onChange={(value) => setField(key, value)}
+          />
         ))}
-      </div>
+      </Section>
 
-      {/* 7. Activities */}
-      <SectionHeading number={7}>Activities</SectionHeading>
-      <Field
-        id="activities"
-        label="What was done today"
-        multiline
-        rows={5}
-        value={form.activities}
-        onChange={(e) => setField('activities', e.target.value)}
-      />
+      <Section title="Activities" plain>
+        <TextAreaGroup
+          label="Activities"
+          placeholder="What was done today, e.g. excavated and bedded 18 m of 900 mm pipe."
+          value={form.activities}
+          onChange={(e) => setField('activities', e.target.value)}
+        />
+      </Section>
 
-      {/* Save / submit - pinned to the bottom of the screen */}
-      <div className="action-bar">
-        {error && (
-          <p className="error" role="alert">
-            {error}
-          </p>
-        )}
-        {message && (
-          <p className="success" role="status">
-            {message}
-          </p>
-        )}
+      {pickingProject && (
+        <PickSheet
+          title="Project"
+          options={projectChoices.map((p) => ({ value: p.id, title: p.name }))}
+          selected={form.project_id}
+          onPick={(value) => setField('project_id', value)}
+          onClose={() => setPickingProject(false)}
+        />
+      )}
 
-        {confirming ? (
-          <div className="confirm">
-            <p>
-              Submit report for <strong>{projectName}</strong>,{' '}
-              <span className="num">{formatDate(form.report_date)}</span>? You can&apos;t change
-              it after this.
-            </p>
-            <div className="action-bar-buttons">
-              <Button variant="secondary" onClick={() => setConfirming(false)}>
-                Go back
-              </Button>
-              <Button disabled={busy} onClick={submit}>
-                {busy ? 'Submitting…' : 'Yes, submit'}
-              </Button>
-            </div>
-          </div>
-        ) : (
-          <div className="action-bar-buttons">
-            <Button variant="secondary" disabled={busy} onClick={save}>
-              {busy ? 'Saving…' : 'Save draft'}
-            </Button>
-            <Button
-              disabled={busy}
-              onClick={() => {
-                setError('')
-                setConfirming(true)
-              }}
-            >
-              Submit
-            </Button>
-          </div>
-        )}
-      </div>
-    </div>
+      {showCrewPicker && (
+        <PickSheet
+          title="Add person"
+          hint="People already on the report aren’t shown."
+          mode="add"
+          options={availableEmployees.map((e) => ({ value: e.id, title: e.full_name }))}
+          emptyText="Everyone is already on the report."
+          onPick={addCrew}
+          onClose={() => setShowCrewPicker(false)}
+        />
+      )}
+
+      {showEquipmentPicker && (
+        <PickSheet
+          title="Add equipment"
+          hint="Machines already on the report aren’t shown."
+          mode="add"
+          options={availableMachines.map((m) => ({ value: m.id, title: m.name }))}
+          emptyText="All equipment is already on the report."
+          onPick={addEquipment}
+          onClose={() => setShowEquipmentPicker(false)}
+        />
+      )}
+    </Page>
   )
 }
 

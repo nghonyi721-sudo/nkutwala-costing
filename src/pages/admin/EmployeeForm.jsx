@@ -1,13 +1,14 @@
 import { useState } from 'react'
 import { supabase } from '../../lib/supabaseClient'
 import { EMPLOYEE_CATEGORY_LABELS } from '../../lib/labels'
-import ChoiceButtons from '../../components/ChoiceButtons'
+import ActionBar from '../../components/ActionBar'
 import Button from '../../components/Button'
-import Field from '../../components/Field'
-import PageHeader from '../../components/PageHeader'
+import { CheckCircleIcon, TagIcon, UserCircleIcon } from '../../components/icons'
+import Page from '../../components/Page'
+import { FieldRow, Row, SwitchRow } from '../../components/Row'
+import Section from '../../components/Section'
+import { PickSheet } from '../../components/Sheet'
 import EmployeeRates from './EmployeeRates'
-
-const ACTIVE_OPTIONS = { yes: 'Active', no: 'Inactive' }
 
 // Add an employee (employee = null) or edit one. Employees are never deleted:
 // mark them Inactive instead. When editing, their rates are shown below.
@@ -17,6 +18,7 @@ function EmployeeForm({ employee, onDone }) {
   const [active, setActive] = useState(employee?.active ?? true)
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
+  const [pickingCategory, setPickingCategory] = useState(false)
 
   async function handleSubmit(event) {
     event.preventDefault()
@@ -44,49 +46,66 @@ function EmployeeForm({ employee, onDone }) {
     }
   }
 
+  const categoryOptions = Object.entries(EMPLOYEE_CATEGORY_LABELS).map(([value, title]) => ({
+    value,
+    title,
+  }))
+
   return (
-    <div className="card">
-      <form className="card" onSubmit={handleSubmit}>
-        <PageHeader eyebrow="Setup · Employees" title={employee ? employee.full_name : 'Add employee'} />
+    <Page
+      title={employee ? employee.full_name : 'New employee'}
+      subtitle={employee ? 'Edit employee and hourly rates' : 'Add a person'}
+      onBack={() => onDone(false)}
+      backLabel="Employees"
+      footer={
+        <ActionBar message={error} tone="error">
+          <Button variant="secondary" onClick={() => onDone(false)}>
+            Cancel
+          </Button>
+          {/* Linked to the details form below by its id, so the rates
+              section can have its own separate form. */}
+          <Button type="submit" form="employee-details" disabled={busy}>
+            {busy ? 'Saving…' : employee ? 'Save details' : 'Save'}
+          </Button>
+        </ActionBar>
+      }
+    >
+      <form id="employee-details" onSubmit={handleSubmit}>
+        <Section title="Details">
+          <FieldRow
+            icon={UserCircleIcon}
+            label="Full name"
+            placeholder="Name and surname"
+            required
+            value={fullName}
+            onChange={(e) => setFullName(e.target.value)}
+          />
+          <Row
+            icon={TagIcon}
+            title="Category"
+            trailing={EMPLOYEE_CATEGORY_LABELS[category] ?? 'Choose'}
+            chevron
+            onClick={() => setPickingCategory(true)}
+          />
+        </Section>
 
-        <Field
-          id="full-name"
-          label="Full name"
-          required
-          value={fullName}
-          onChange={(e) => setFullName(e.target.value)}
-        />
-
-        <ChoiceButtons
-          label="Category"
-          options={EMPLOYEE_CATEGORY_LABELS}
-          value={category}
-          onChange={setCategory}
-        />
-
-        <ChoiceButtons
-          label="Status"
-          options={ACTIVE_OPTIONS}
-          value={active ? 'yes' : 'no'}
-          onChange={(choice) => setActive(choice === 'yes')}
-        />
-
-        {error && (
-          <p className="error" role="alert">
-            {error}
-          </p>
-        )}
-
-        <Button type="submit" disabled={busy}>
-          {busy ? 'Saving…' : 'Save employee'}
-        </Button>
-        <Button variant="secondary" onClick={() => onDone(false)}>
-          {employee ? 'Back to employees' : 'Cancel'}
-        </Button>
+        <Section footer="Employees are never deleted. Switch them off when they leave.">
+          <SwitchRow icon={CheckCircleIcon} title="Active" checked={active} onChange={setActive} />
+        </Section>
       </form>
 
       {employee && <EmployeeRates employeeId={employee.id} />}
-    </div>
+
+      {pickingCategory && (
+        <PickSheet
+          title="Category"
+          options={categoryOptions}
+          selected={category}
+          onPick={setCategory}
+          onClose={() => setPickingCategory(false)}
+        />
+      )}
+    </Page>
   )
 }
 

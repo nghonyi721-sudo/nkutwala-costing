@@ -1,10 +1,13 @@
 import { useState } from 'react'
 import { supabase } from '../../lib/supabaseClient'
 import { PROJECT_STATUS_LABELS } from '../../lib/labels'
-import ChoiceButtons from '../../components/ChoiceButtons'
+import ActionBar from '../../components/ActionBar'
 import Button from '../../components/Button'
-import Field from '../../components/Field'
-import PageHeader from '../../components/PageHeader'
+import { HashIcon, MapPinIcon } from '../../components/icons'
+import Page from '../../components/Page'
+import { FieldRow } from '../../components/Row'
+import Section from '../../components/Section'
+import SegmentedControl from '../../components/SegmentedControl'
 
 // Add a project (project = null) or edit one. Projects are never deleted:
 // mark them Complete instead. company_id is filled in by the database.
@@ -42,45 +45,54 @@ function ProjectForm({ project, onDone }) {
   }
 
   return (
-    <form className="card" onSubmit={handleSubmit}>
-      <PageHeader eyebrow="Setup · Projects" title={project ? project.name : 'Add project'} />
+    <Page
+      title={project ? project.name : 'New project'}
+      subtitle={project ? 'Edit project' : 'Add a project'}
+      onBack={() => onDone(false)}
+      backLabel="Projects"
+      onSubmit={handleSubmit}
+      footer={
+        <ActionBar message={error} tone="error">
+          <Button variant="secondary" onClick={() => onDone(false)}>
+            Cancel
+          </Button>
+          <Button type="submit" disabled={busy}>
+            {busy ? 'Saving…' : 'Save'}
+          </Button>
+        </ActionBar>
+      }
+    >
+      <Section title="Details">
+        <FieldRow
+          icon={MapPinIcon}
+          label="Name"
+          placeholder="Project name"
+          required
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+        />
+        <FieldRow
+          icon={HashIcon}
+          label="Contract no."
+          placeholder="Optional"
+          value={contractNumber}
+          onChange={(e) => setContractNumber(e.target.value)}
+        />
+      </Section>
 
-      <Field
-        id="project-name"
-        label="Project name"
-        required
-        value={name}
-        onChange={(e) => setName(e.target.value)}
-      />
-
-      <Field
-        id="contract-number"
-        label="Contract number (optional)"
-        className="field-mono"
-        value={contractNumber}
-        onChange={(e) => setContractNumber(e.target.value)}
-      />
-
-      <ChoiceButtons
-        label="Status"
-        options={PROJECT_STATUS_LABELS}
-        value={status}
-        onChange={setStatus}
-      />
-
-      {error && (
-        <p className="error" role="alert">
-          {error}
-        </p>
-      )}
-
-      <Button type="submit" disabled={busy}>
-        {busy ? 'Saving…' : 'Save project'}
-      </Button>
-      <Button variant="secondary" onClick={() => onDone(false)}>
-        Cancel
-      </Button>
-    </form>
+      <Section
+        title="Status"
+        plain
+        footer="Projects are never deleted. Mark a finished project Complete."
+      >
+        <SegmentedControl
+          label="Project status"
+          options={PROJECT_STATUS_LABELS}
+          value={status}
+          onChange={setStatus}
+        />
+      </Section>
+    </Page>
   )
 }
 

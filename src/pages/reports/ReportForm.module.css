@@ -1,0 +1,20 @@
+/* Red remove button shown on crew/equipment rows in Edit mode */
+.remove {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: var(--tap);
+  height: var(--tap);
+  margin: -8px -8px -8px -12px;
+  padding: 0;
+  background: none;
+  border: 0;
+  color: var(--red);
+  cursor: pointer;
+}
+
+.remove:focus-visible {
+  outline: 2px solid var(--blue);
+  outline-offset: -2px;
+  border-radius: 50%;
+}

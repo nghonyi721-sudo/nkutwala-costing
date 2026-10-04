@@ -1,12 +1,10 @@
 /* Base styles on the design tokens (src/styles/tokens.css).
-   Hard rules: square corners, no shadows, no gradients. */
+   Everything else lives with its component in src/components/. */
 
 *,
 *::before,
 *::after {
   box-sizing: border-box;
-  border-radius: 0;
-  box-shadow: none;
 }
 
 html {
@@ -15,14 +13,13 @@ html {
 
 body {
   margin: 0;
-  font-family: var(--sans);
-  font-size: var(--text-base);
-  line-height: 1.5;
-  color: var(--black);
-  background: var(--bg);
+  background: var(--canvas);
+  color: var(--ink);
+  font-family: var(--font);
+  font-size: var(--text-body);
+  line-height: 1.35;
+  letter-spacing: -0.01em;
   -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-  text-rendering: optimizeLegibility;
 }
 
 button,
@@ -30,6 +27,7 @@ input,
 textarea {
   font: inherit;
   color: inherit;
+  letter-spacing: inherit;
   -webkit-appearance: none;
   appearance: none;
 }
@@ -38,9 +36,15 @@ button {
   -webkit-tap-highlight-color: transparent;
 }
 
-/* Every number (hours, litres, dates, %, rands) - so columns line up. */
+h1,
+h2,
+h3,
+p {
+  margin: 0;
+}
+
+/* Numbers with equal-width digits so columns line up. */
 .num {
-  font-family: var(--mono);
   font-variant-numeric: tabular-nums;
 }
 
@@ -53,7 +57,7 @@ button {
   white-space: nowrap;
 }
 
-/* Respect "reduce motion" on the phone: no transitions or pulsing. */
+/* Respect "reduce motion" on the phone. */
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

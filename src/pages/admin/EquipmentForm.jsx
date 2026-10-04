@@ -1,12 +1,13 @@
 import { useState } from 'react'
 import { supabase } from '../../lib/supabaseClient'
 import { EQUIPMENT_OWNERSHIP_LABELS } from '../../lib/labels'
-import ChoiceButtons from '../../components/ChoiceButtons'
+import ActionBar from '../../components/ActionBar'
 import Button from '../../components/Button'
-import Field from '../../components/Field'
-import PageHeader from '../../components/PageHeader'
-
-const ACTIVE_OPTIONS = { yes: 'Active', no: 'Inactive' }
+import { BulldozerIcon, CheckCircleIcon } from '../../components/icons'
+import Page from '../../components/Page'
+import { FieldRow, SwitchRow } from '../../components/Row'
+import Section from '../../components/Section'
+import SegmentedControl from '../../components/SegmentedControl'
 
 // Add a machine (machine = null) or edit one. Equipment is never deleted:
 // mark it Inactive instead. No rates here - quantities only.
@@ -44,44 +45,47 @@ function EquipmentForm({ machine, onDone }) {
   }
 
   return (
-    <form className="card" onSubmit={handleSubmit}>
-      <PageHeader eyebrow="Setup · Equipment" title={machine ? machine.name : 'Add equipment'} />
+    <Page
+      title={machine ? machine.name : 'New equipment'}
+      subtitle={machine ? 'Edit equipment' : 'Add a machine'}
+      onBack={() => onDone(false)}
+      backLabel="Equipment"
+      onSubmit={handleSubmit}
+      footer={
+        <ActionBar message={error} tone="error">
+          <Button variant="secondary" onClick={() => onDone(false)}>
+            Cancel
+          </Button>
+          <Button type="submit" disabled={busy}>
+            {busy ? 'Saving…' : 'Save'}
+          </Button>
+        </ActionBar>
+      }
+    >
+      <Section title="Details">
+        <FieldRow
+          icon={BulldozerIcon}
+          label="Name"
+          placeholder="e.g. CAT 320 excavator"
+          required
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+        />
+      </Section>
 
-      <Field
-        id="equipment-name"
-        label="Name"
-        required
-        value={name}
-        onChange={(e) => setName(e.target.value)}
-      />
+      <Section title="Ownership" plain>
+        <SegmentedControl
+          label="Ownership"
+          options={EQUIPMENT_OWNERSHIP_LABELS}
+          value={ownership}
+          onChange={setOwnership}
+        />
+      </Section>
 
-      <ChoiceButtons
-        label="Ownership"
-        options={EQUIPMENT_OWNERSHIP_LABELS}
-        value={ownership}
-        onChange={setOwnership}
-      />
-
-      <ChoiceButtons
-        label="Status"
-        options={ACTIVE_OPTIONS}
-        value={active ? 'yes' : 'no'}
-        onChange={(choice) => setActive(choice === 'yes')}
-      />
-
-      {error && (
-        <p className="error" role="alert">
-          {error}
-        </p>
-      )}
-
-      <Button type="submit" disabled={busy}>
-        {busy ? 'Saving…' : 'Save equipment'}
-      </Button>
-      <Button variant="secondary" onClick={() => onDone(false)}>
-        Cancel
-      </Button>
-    </form>
+      <Section footer="Equipment is never deleted. Switch it off when it leaves site.">
+        <SwitchRow icon={CheckCircleIcon} title="Active" checked={active} onChange={setActive} />
+      </Section>
+    </Page>
   )
 }
 

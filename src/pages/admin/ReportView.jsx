@@ -1,9 +1,15 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../../lib/supabaseClient'
 import { fetchReport } from '../../lib/reports'
-import ReportSummary from '../../components/ReportSummary'
+import { formatDate } from '../../lib/labels'
+import ActionBar from '../../components/ActionBar'
 import Button from '../../components/Button'
-import Field from '../../components/Field'
+import { ArrowCounterClockwiseIcon } from '../../components/icons'
+import Notice from '../../components/Notice'
+import Page from '../../components/Page'
+import ReportSummary from '../../components/ReportSummary'
+import { FieldRow } from '../../components/Row'
+import Sheet, { SheetGroup } from '../../components/Sheet'
 import Skeleton from '../../components/Skeleton'
 
 // Owner/admin: one report, read-only. A submitted report can be reopened
@@ -64,60 +70,65 @@ function ReportView({ reportId, onBack }) {
   }
 
   return (
-    <div className="card">
-      <Button variant="secondary" inline onClick={onBack}>
-        Back to reports
-      </Button>
-
-      {loadError && (
-        <p className="error" role="alert">
-          {loadError}
-        </p>
-      )}
+    <Page
+      title={report?.project?.name ?? 'Daily report'}
+      subtitle={
+        report ? `${formatDate(report.report_date)} · ${report.reporter?.full_name ?? ''}` : undefined
+      }
+      onBack={onBack}
+      backLabel="Reports"
+      footer={
+        report?.status === 'submitted' ? (
+          <ActionBar>
+            <Button
+              variant="danger"
+              icon={ArrowCounterClockwiseIcon}
+              onClick={() => {
+                setReopenError('')
+                setReopening(true)
+              }}
+            >
+              Reopen report
+            </Button>
+          </ActionBar>
+        ) : undefined
+      }
+    >
+      {loadError && <Notice tone="error">{loadError}</Notice>}
       {!loadError && report === undefined && <Skeleton rows={4} />}
-      {report === null && <p className="error">Report not found.</p>}
+      {report === null && <Notice tone="error">Report not found.</Notice>}
+
+      {report?.status === 'draft' && (
+        <Notice tone="info">This report is a draft. The site manager can still change it.</Notice>
+      )}
 
       {report && <ReportSummary report={report} />}
 
-      {report?.status === 'draft' && (
-        <p className="notice">
-          This report is a draft. The site manager can still change it.
-        </p>
-      )}
-
-      {report?.status === 'submitted' &&
-        (reopening ? (
-          <div className="void-form">
-            <Field
-              id="reopen-reason"
-              label="Why does this report need to be reopened?"
+      {reopening && (
+        <Sheet
+          title="Reopen report"
+          hint="The site manager will be able to change it again. The submitted version is kept in the audit log."
+          doneLabel="Cancel"
+          onClose={() => setReopening(false)}
+          footer={
+            <Button variant="danger" disabled={busy} onClick={reopen}>
+              {busy ? 'Reopening…' : 'Reopen report'}
+            </Button>
+          }
+        >
+          <SheetGroup>
+            <FieldRow
+              label="Reason"
+              placeholder="What needs fixing?"
+              inputWidth="62%"
               value={reason}
               onChange={(e) => setReason(e.target.value)}
             />
-            {reopenError && (
-              <p className="error" role="alert">
-                {reopenError}
-              </p>
-            )}
-            <Button variant="danger" disabled={busy} onClick={reopen}>
-              {busy ? 'Reopening…' : 'Confirm reopen'}
-            </Button>
-            <Button variant="secondary" onClick={() => setReopening(false)}>
-              Cancel
-            </Button>
-          </div>
-        ) : (
-          <Button
-            variant="danger"
-            onClick={() => {
-              setReopenError('')
-              setReopening(true)
-            }}
-          >
-            Reopen report
-          </Button>
-        ))}
-    </div>
+          </SheetGroup>
+          {reopenError && <Notice tone="error">{reopenError}</Notice>}
+        </Sheet>
+      )}
+    </Page>
   )
 }
 

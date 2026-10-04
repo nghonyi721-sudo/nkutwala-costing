@@ -2,12 +2,14 @@ import { useEffect, useState } from 'react'
 import { supabase } from '../../lib/supabaseClient'
 import { formatDate, formatRand, todayLocal } from '../../lib/labels'
 import Button from '../../components/Button'
-import DataTable from '../../components/DataTable'
-import Field from '../../components/Field'
-import StatusTag from '../../components/StatusTag'
-import Figure from '../../components/Figure'
-import SectionHeading from '../../components/SectionHeading'
+import { CalendarBlankIcon, CoinsIcon } from '../../components/icons'
+import Notice from '../../components/Notice'
+import { FieldRow, Row } from '../../components/Row'
+import Section from '../../components/Section'
+import Sheet, { SheetGroup } from '../../components/Sheet'
 import Skeleton from '../../components/Skeleton'
+import StatusBadge from '../../components/StatusBadge'
+import s from './EmployeeRates.module.css'
 
 // Owner/admin only (the database refuses site managers): an employee's dated
 // hourly rates. Rates are NEVER edited. A rate change is a new row; a wrong
@@ -114,149 +116,133 @@ function EmployeeRates({ employeeId }) {
     }
   }
 
-  function rateStatus(rate) {
-    if (rate.voided_at) return `Voided: ${rate.void_reason}`
-    if (rate.id === currentRate?.id) return 'Current rate'
-    if (rate.effective_from > today) return 'Starts later'
-    return 'Earlier rate'
+  // How a rate shows in the history: badge colour and word.
+  function rateBadge(rate) {
+    if (rate.voided_at) return { status: 'voided', label: 'Voided' }
+    if (rate.id === currentRate?.id) return { status: 'current', label: 'Current' }
+    if (rate.effective_from > today) return { status: 'later', label: 'Starts later' }
+    return { status: 'earlier', label: 'Earlier' }
+  }
+
+  function startVoid(rateId) {
+    setVoidingId(rateId)
+    setVoidReason('')
+    setVoidError('')
   }
 
   const voidingRate = rates?.find((rate) => rate.id === voidingId)
 
-  const rateColumns = [
-    {
-      key: 'hourly_rate',
-      label: 'Rate / hour',
-      numeric: true,
-      render: (rate) => <span className="rate-amount">{formatRand(rate.hourly_rate)}</span>,
-    },
-    { key: 'effective_from', label: 'From', mono: true, render: (rate) => formatDate(rate.effective_from) },
-    {
-      key: 'status',
-      label: 'Status',
-      render: (rate) =>
-        rate.voided_at ? (
-          <>
-            <StatusTag status="voided" label="Voided" />
-            <span className="cell-detail">{rate.void_reason}</span>
-          </>
-        ) : (
-          <>
-            <StatusTag status={rate.id === currentRate?.id ? 'current' : 'other'} label={rateStatus(rate)} />
-            {voidingId !== rate.id && (
-              <Button
-                variant="secondary"
-                className="cell-action"
-                onClick={() => {
-                  setVoidingId(rate.id)
-                  setVoidReason('')
-                  setVoidError('')
-                }}
-              >
-                Void
-              </Button>
-            )}
-          </>
-        ),
-    },
-  ]
-
   return (
-    <section className="card">
-      <SectionHeading>Hourly rates</SectionHeading>
-
-      {currentRate ? (
-        <Figure
-          label="Current rate"
-          value={formatRand(currentRate.hourly_rate)}
-          unit="/ hour"
-          emphasis
-        />
-      ) : (
-        rates && <p className="label">No current rate.</p>
-      )}
-
-      <form className="card" onSubmit={handleAdd}>
-        <h3 className="caps">Add new rate</h3>
-        <Field
-          id="rate-amount"
-          label="Hourly rate (R)"
-          type="number"
-          inputMode="decimal"
-          min="0.01"
-          step="0.01"
-          required
-          value={amount}
-          onChange={(e) => setAmount(e.target.value)}
-        />
-
-        <Field
-          id="rate-from"
-          label="Starts on"
-          type="date"
-          required
-          value={effectiveFrom}
-          onChange={(e) => setEffectiveFrom(e.target.value)}
-        />
-
-        {addError && (
-          <p className="error" role="alert">
-            {addError}
-          </p>
+    <>
+      <Section title="Hourly rate">
+        {currentRate ? (
+          <Row
+            icon={CoinsIcon}
+            title="Current rate"
+            subtitle={`Since ${formatDate(currentRate.effective_from)}`}
+            mono
+            trailing={
+              <span className={s.bigRate}>
+                {formatRand(currentRate.hourly_rate)}
+                <span className={s.perHour}> /h</span>
+              </span>
+            }
+          />
+        ) : (
+          rates && <Row icon={CoinsIcon} title="No current rate" subtitle="Add one below." />
         )}
+      </Section>
 
-        <Button type="submit" disabled={adding}>
-          {adding ? 'Adding…' : 'Add rate'}
-        </Button>
+      <form onSubmit={handleAdd}>
+        <Section
+          title="Add new rate"
+          footer="A rate change is a new rate from a date. Old months keep their old rate."
+        >
+          <FieldRow
+            icon={CoinsIcon}
+            label="Rate (R/hour)"
+            type="number"
+            inputMode="decimal"
+            min="0.01"
+            step="0.01"
+            placeholder="0.00"
+            required
+            inputWidth="7rem"
+            value={amount}
+            onChange={(e) => setAmount(e.target.value)}
+          />
+          <FieldRow
+            icon={CalendarBlankIcon}
+            label="Starts on"
+            type="date"
+            required
+            value={effectiveFrom}
+            onChange={(e) => setEffectiveFrom(e.target.value)}
+          />
+        </Section>
+        {addError && <Notice tone="error">{addError}</Notice>}
+        <Section plain>
+          <Button type="submit" disabled={adding}>
+            {adding ? 'Adding…' : 'Add rate'}
+          </Button>
+        </Section>
       </form>
 
-      <h3 className="caps">History</h3>
-
-      {loadError && (
-        <p className="error" role="alert">
-          {loadError}
-        </p>
-      )}
+      {loadError && <Notice tone="error">{loadError}</Notice>}
 
       {!loadError && rates === undefined && <Skeleton rows={2} />}
 
-      {rates?.length === 0 && <p className="label">No rates yet.</p>}
-
       {rates?.length > 0 && (
-        <DataTable
-          caption="Rate history"
-          columns={rateColumns}
-          rows={rates}
-          rowClassName={(rate) => (rate.voided_at ? 'voided' : '')}
-        />
+        <Section title="History" footer="Tap a rate that was entered wrongly to void it.">
+          {rates.map((rate) => {
+            const badge = rateBadge(rate)
+            const amountText = `${formatRand(rate.hourly_rate)} /h`
+            return (
+              <Row
+                key={rate.id}
+                title={rate.voided_at ? <del className={s.struck}>{amountText}</del> : amountText}
+                subtitle={
+                  rate.voided_at
+                    ? `From ${formatDate(rate.effective_from)} · ${rate.void_reason}`
+                    : `From ${formatDate(rate.effective_from)}`
+                }
+                mono
+                trailing={<StatusBadge status={badge.status} label={badge.label} />}
+                chevron={!rate.voided_at}
+                onClick={rate.voided_at ? undefined : () => startVoid(rate.id)}
+              />
+            )
+          })}
+        </Section>
       )}
 
       {voidingRate && (
-        <div className="void-form">
-          <p>
-            Void <span className="num">{formatRand(voidingRate.hourly_rate)}</span> from{' '}
-            <span className="num">{formatDate(voidingRate.effective_from)}</span>?
-          </p>
-          <Field
-            id={`void-reason-${voidingRate.id}`}
-            label="Why is this rate wrong?"
-            value={voidReason}
-            onChange={(e) => setVoidReason(e.target.value)}
-          />
-          {voidError && (
-            <p className="error" role="alert">
-              {voidError}
-            </p>
-          )}
-          <Button variant="danger" disabled={voiding} onClick={() => handleVoid(voidingRate.id)}>
-            {voiding ? 'Voiding…' : 'Confirm void'}
-          </Button>
-          <Button variant="secondary" onClick={() => setVoidingId(null)}>
-            Cancel
-          </Button>
-        </div>
+        <Sheet
+          title="Void rate"
+          hint={`Void ${formatRand(voidingRate.hourly_rate)} /h from ${formatDate(
+            voidingRate.effective_from,
+          )}? It stays in the history, crossed out, and you can then add the correct rate.`}
+          doneLabel="Cancel"
+          onClose={() => setVoidingId(null)}
+          footer={
+            <Button variant="danger" disabled={voiding} onClick={() => handleVoid(voidingRate.id)}>
+              {voiding ? 'Voiding…' : 'Void rate'}
+            </Button>
+          }
+        >
+          <SheetGroup>
+            <FieldRow
+              label="Reason"
+              placeholder="Why is it wrong?"
+              inputWidth="62%"
+              value={voidReason}
+              onChange={(e) => setVoidReason(e.target.value)}
+            />
+          </SheetGroup>
+          {voidError && <Notice tone="error">{voidError}</Notice>}
+        </Sheet>
       )}
-    </section>
+    </>
   )
 }
 

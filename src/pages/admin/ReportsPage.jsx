@@ -1,31 +1,18 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../../lib/supabaseClient'
 import { formatDate } from '../../lib/labels'
-import Button from '../../components/Button'
-import ChoiceButtons from '../../components/ChoiceButtons'
-import DataTable from '../../components/DataTable'
-import Field from '../../components/Field'
-import StatusTag from '../../components/StatusTag'
-import PageHeader from '../../components/PageHeader'
+import EmptyState from '../../components/EmptyState'
+import { CalendarBlankIcon, ClipboardTextIcon, MapPinIcon } from '../../components/icons'
+import Notice from '../../components/Notice'
+import Page from '../../components/Page'
+import { FieldRow, Row } from '../../components/Row'
+import Section from '../../components/Section'
+import { PickSheet } from '../../components/Sheet'
 import Skeleton from '../../components/Skeleton'
+import StatusBadge from '../../components/StatusBadge'
 import ReportView from './ReportView'
 
 const ALL_PROJECTS = 'all'
-
-const REPORT_COLUMNS = [
-  { key: 'report_date', label: 'Date', mono: true, render: (r) => formatDate(r.report_date) },
-  {
-    key: 'project',
-    label: 'Project',
-    render: (r) => (
-      <>
-        {r.project?.name}
-        <span className="cell-detail">{r.reporter?.full_name}</span>
-      </>
-    ),
-  },
-  { key: 'status', label: 'Status', render: (r) => <StatusTag status={r.status} /> },
-]
 
 // Owner/admin: every report in the company, filterable by project and date.
 function ReportsPage() {
@@ -38,6 +25,7 @@ function ReportsPage() {
   const [error, setError] = useState('')
   const [openId, setOpenId] = useState(null)
   const [reloadCount, setReloadCount] = useState(0)
+  const [pickingProject, setPickingProject] = useState(false)
 
   useEffect(() => {
     supabase
@@ -88,60 +76,91 @@ function ReportsPage() {
     )
   }
 
-  const projectOptions = {
-    [ALL_PROJECTS]: 'All projects',
-    ...Object.fromEntries(projects.map((p) => [p.id, p.name])),
-  }
+  const projectOptions = [
+    { value: ALL_PROJECTS, title: 'All projects' },
+    ...projects.map((p) => ({ value: p.id, title: p.name })),
+  ]
+  const projectLabel =
+    projectOptions.find((option) => option.value === projectFilter)?.title ?? 'All projects'
+  const filtered = projectFilter !== ALL_PROJECTS || dateFilter !== ''
 
   return (
-    <div className="card">
-      <PageHeader
-        eyebrow="Review"
-        title="Daily reports"
-        meta={reports ? `${reports.length} report${reports.length === 1 ? '' : 's'} shown` : null}
-      />
-
-      <ChoiceButtons
-        label="Project"
-        options={projectOptions}
-        value={projectFilter}
-        onChange={setProjectFilter}
-      />
-
-      <div className="date-filter">
-        <Field
-          id="date-filter"
+    <Page
+      title="Daily reports"
+      subtitle={reports ? `${reports.length} report${reports.length === 1 ? '' : 's'} shown` : undefined}
+    >
+      <Section
+        title="Filter"
+        action={
+          filtered
+            ? {
+                label: 'Clear',
+                onClick: () => {
+                  setProjectFilter(ALL_PROJECTS)
+                  setDateFilter('')
+                },
+              }
+            : undefined
+        }
+      >
+        <Row
+          icon={MapPinIcon}
+          title="Project"
+          trailing={projectLabel}
+          chevron
+          onClick={() => setPickingProject(true)}
+        />
+        <FieldRow
+          icon={CalendarBlankIcon}
           label="Date"
           type="date"
           value={dateFilter}
           onChange={(e) => setDateFilter(e.target.value)}
         />
-        {dateFilter && (
-          <Button variant="secondary" inline onClick={() => setDateFilter('')}>
-            Clear
-          </Button>
-        )}
-      </div>
+      </Section>
 
-      {error && (
-        <p className="error" role="alert">
-          {error}
-        </p>
-      )}
+      {error && <Notice tone="error">{error}</Notice>}
 
       {!error && reports === undefined && <Skeleton />}
 
-      {reports?.length === 0 && <p className="label">No reports match.</p>}
-
-      {reports?.length > 0 && (
-        <DataTable
-          caption="Daily reports"
-          columns={REPORT_COLUMNS}
-          rows={reports}
-          onRowClick={(report) => setOpenId(report.id)}
+      {reports?.length === 0 && (
+        <EmptyState
+          icon={ClipboardTextIcon}
+          title={filtered ? 'No reports match' : 'No reports yet'}
+          text={
+            filtered
+              ? 'Try another project or date.'
+              : 'Reports appear here as site managers save them.'
+          }
         />
       )}
-    </div>
+
+      {reports?.length > 0 && (
+        <Section title="Reports">
+          {reports.map((report) => (
+            <Row
+              key={report.id}
+              title={report.project?.name}
+              subtitle={`${formatDate(report.report_date)} · ${report.reporter?.full_name ?? ''}`}
+              mono
+              trailing={<StatusBadge status={report.status} />}
+              chevron
+              onClick={() => setOpenId(report.id)}
+            />
+          ))}
+        </Section>
+      )}
+
+      {pickingProject && (
+        <PickSheet
+          title="Project"
+          options={projectOptions}
+          selected={projectFilter}
+          onPick={setProjectFilter}
+          onClose={() => setPickingProject(false)}
+        />
+      )}
+    </Page>
   )
 }
 

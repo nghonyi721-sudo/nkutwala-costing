@@ -2,9 +2,10 @@ import { useEffect, useState } from 'react'
 import { supabase, isSupabaseConfigured } from './lib/supabaseClient'
 import LoginPage from './pages/LoginPage'
 import HomePage from './pages/HomePage'
-import AppHeader from './components/AppHeader'
+import Logo from './components/Logo'
+import Notice from './components/Notice'
 import Skeleton from './components/Skeleton'
-import './App.css'
+import s from './App.module.css'
 
 function App() {
   // undefined = still checking, null = logged out, object = logged in
@@ -27,32 +28,30 @@ function App() {
 
   if (!isSupabaseConfigured) {
     return (
-      <>
-        <AppHeader />
-        <main className="app">
-          <p className="status warn">
-            Supabase: not configured yet - add your keys to the .env file
-          </p>
-        </main>
-      </>
+      <div className={s.stage}>
+        <div className={s.card}>
+          <Logo width={120} />
+        </div>
+        <Notice tone="error">Supabase: not configured yet - add your keys to the .env file</Notice>
+      </div>
     )
   }
 
   if (session === undefined) {
     return (
-      <>
-        <AppHeader />
-        <main className="app">
-          <Skeleton rows={2} />
-        </main>
-      </>
+      <div className={s.stage}>
+        <div className={s.card}>
+          <Logo width={120} />
+        </div>
+        <Skeleton rows={2} />
+      </div>
     )
   }
 
-  // Logged in: HomePage draws the full app shell (header, user bar, nav).
+  // Logged in: HomePage draws the app shell (top bar, tabs, screens).
   if (session) return <HomePage user={session.user} />
 
-  // Logged out: the login screen has its own brand panel.
+  // Logged out.
   return <LoginPage />
 }
 

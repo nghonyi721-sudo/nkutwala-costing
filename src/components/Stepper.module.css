@@ -1,0 +1,43 @@
+.stepper {
+  display: inline-flex;
+  align-items: center;
+  flex: none;
+  height: var(--tap);
+  background: var(--fill);
+  border-radius: var(--radius-control);
+}
+
+.button {
+  display: grid;
+  place-items: center;
+  width: var(--tap);
+  height: var(--tap);
+  padding: 0;
+  background: none;
+  border: 0;
+  border-radius: var(--radius-control);
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.button:active {
+  background: var(--fill-pressed);
+}
+
+.button:disabled {
+  color: var(--chevron);
+  cursor: not-allowed;
+}
+
+.button:focus-visible {
+  outline: 2px solid var(--blue);
+  outline-offset: -2px;
+}
+
+.value {
+  min-width: 56px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+  color: var(--ink);
+}

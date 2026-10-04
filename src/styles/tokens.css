@@ -1,52 +1,58 @@
-/* Nkutwala design tokens. The only place colours, fonts, sizes, spacing and
-   motion are defined. */
+/* Nkutwala design tokens - direction "C · Native".
+   The only place colours, type, shape, spacing and motion are defined.
+   Components use these through var(--name); nothing else hard-codes them. */
 :root {
-  /* Colour */
-  --blue: #1F4FBF;
-  --blue-dk: #153A91;
-  --blue-pale: #EAEFFA;
-  --red: #DD1F26;
-  --red-pale: #FBEAEB;
-  --red-dk: #A3161C;     /* red text on pale red (passes contrast), pressed red */
-  --black: #111214;
-  --black-2: #26282B;    /* pressed state on black */
-  --grey: #5C6166;
-  --grey-lt: #8A9096; /* borders and disabled only - too faint for text outdoors */
-  --line: #C9CDD2;
-  --line-lt: #E2E5E8;
-  --bg: #FFFFFF;
-  --bg-alt: #F4F5F6;
+  /* Brand (fixed) */
+  --blue: #1f4fbf;
+  --blue-dk: #173e98; /* pressed blue, blue text on tints */
+  --blue-tint: #e8eefa;
+  --red: #dd1f26;
+  --red-ink: #b3171d; /* red text on white or tints (passes contrast) */
+  --red-tint: #fcebec;
 
-  /* Type - IBM Plex is bundled with the app (see main.jsx); the system
-     fonts after it are only a fallback while it loads. */
-  --sans: "IBM Plex Sans", -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
-  --mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  /* Neutrals */
+  --canvas: #f2f3f5; /* page background */
+  --surface: #ffffff; /* groups, bars, sheets */
+  --ink: #0b0d10; /* main text */
+  --ink-2: #5f646c; /* secondary text: 5.9:1 on white, 5.4:1 on canvas */
+  --sep: #e1e4e8; /* thin lines between rows */
+  --fill: #e8eaee; /* grey buttons, steppers, segmented controls */
+  --fill-pressed: #d9dce2;
+  --edge: #8c929b; /* control outlines: 3.3:1, visible in sunlight */
+  --chevron: #a2a7af;
+  --scrim: rgb(11 13 16 / 0.42); /* dimmed background behind sheets */
 
-  --text-xs: 0.75rem;   /* 12 */
-  --text-sm: 0.875rem;  /* 14 */
-  --text-base: 1rem;    /* 16 */
-  --text-lg: 1.25rem;   /* 20 */
-  --text-xl: 1.75rem;   /* 28 */
-  --text-2xl: 2.25rem;  /* 36 */
+  /* Type - the phone's own font: instant, no download */
+  --font: system-ui, -apple-system, 'SF Pro Text', 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+  --text-caption: 13px;
+  --text-small: 15px;
+  --text-body: 17px;
+  --text-title: 26px;
+  --text-large: 32px;
 
-  --tracking-tight: -0.015em;
-  --tracking-caps: 0.08em;
+  /* Shape */
+  --radius-group: 14px;
+  --radius-button: 12px;
+  --radius-control: 10px;
+  --radius-sheet: 16px;
 
-  /* Spacing - strict 4/8 grid */
+  /* Spacing */
   --space-1: 4px;
   --space-2: 8px;
   --space-3: 12px;
   --space-4: 16px;
   --space-5: 24px;
   --space-6: 32px;
-  --space-7: 48px;
-  --space-8: 64px;
+  --gutter: 16px;
 
-  /* Tap targets */
-  --tap: 48px;
-  --tap-lg: 56px;
+  /* Sizes */
+  --tap: 48px; /* minimum tap target */
+  --row: 56px; /* list row height */
+  --topbar: 60px;
+  --tabbar: 64px;
+  --content: 720px; /* widest content column on big screens */
 
   /* Motion */
-  --fast: 120ms;
+  --fast: 150ms;
   --ease: cubic-bezier(0.2, 0, 0, 1);
 }

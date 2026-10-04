@@ -2,10 +2,14 @@ import { useEffect, useState } from 'react'
 import { supabase } from '../../lib/supabaseClient'
 import { EMPLOYEE_CATEGORY_LABELS } from '../../lib/labels'
 import Button from '../../components/Button'
-import StatusTag from '../../components/StatusTag'
-import ListRow from '../../components/ListRow'
-import PageHeader from '../../components/PageHeader'
+import EmptyState from '../../components/EmptyState'
+import { PlusIcon, UsersThreeIcon } from '../../components/icons'
+import Notice from '../../components/Notice'
+import Page from '../../components/Page'
+import { Row } from '../../components/Row'
+import Section from '../../components/Section'
 import Skeleton from '../../components/Skeleton'
+import StatusBadge from '../../components/StatusBadge'
 import EmployeeForm from './EmployeeForm'
 
 // Owner/admin: list of employees. Tap one to edit it and manage rates.
@@ -52,42 +56,47 @@ function EmployeesPage() {
   }
 
   return (
-    <div className="card">
-      <PageHeader
-        eyebrow="Setup"
-        title="Employees"
-        meta={employees ? `${employees.filter((e) => e.active).length} active of ${employees.length}` : null}
-      />
-
-      <Button onClick={() => setEditing('new')}>Add employee</Button>
-      <p className="label">Tap a person to edit them or manage their hourly rates.</p>
-
-      {error && (
-        <p className="error" role="alert">
-          {error}
-        </p>
-      )}
+    <Page
+      title="Employees"
+      subtitle={
+        employees
+          ? `${employees.filter((e) => e.active).length} active of ${employees.length}`
+          : undefined
+      }
+      action={
+        <Button variant="plain" inline icon={PlusIcon} onClick={() => setEditing('new')}>
+          Add
+        </Button>
+      }
+    >
+      {error && <Notice tone="error">{error}</Notice>}
 
       {!error && employees === undefined && <Skeleton />}
 
-      {employees?.length === 0 && <p className="label">No employees yet.</p>}
+      {employees?.length === 0 && (
+        <EmptyState
+          icon={UsersThreeIcon}
+          title="No employees yet"
+          text="Add the people who work on site, then give each one an hourly rate."
+          action={<Button onClick={() => setEditing('new')}>Add employee</Button>}
+        />
+      )}
 
       {employees?.length > 0 && (
-        <ul className="list">
+        <Section footer="Tap a person to edit them or manage their hourly rates.">
           {employees.map((employee) => (
-            <li key={employee.id}>
-              <ListRow
-                title={employee.full_name}
-                detail={EMPLOYEE_CATEGORY_LABELS[employee.category]}
-                muted={!employee.active}
-                tag={employee.active ? null : <StatusTag status="inactive" label="Inactive" />}
-                onClick={() => setEditing(employee)}
-              />
-            </li>
+            <Row
+              key={employee.id}
+              title={employee.full_name}
+              subtitle={EMPLOYEE_CATEGORY_LABELS[employee.category]}
+              trailing={employee.active ? null : <StatusBadge status="inactive" label="Inactive" />}
+              chevron
+              onClick={() => setEditing(employee)}
+            />
           ))}
-        </ul>
+        </Section>
       )}
-    </div>
+    </Page>
   )
 }
 

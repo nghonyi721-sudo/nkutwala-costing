@@ -1,56 +1,133 @@
+import { useMemo, useState } from 'react'
 import { ROLE_LABELS, isOwnerOrAdmin } from '../lib/labels'
-import AppHeader from './AppHeader'
+import {
+  BulldozerIcon,
+  ClipboardTextIcon,
+  MapPinIcon,
+  PlusCircleIcon,
+  SignOutIcon,
+  UserCircleIcon,
+  UsersThreeIcon,
+} from './icons'
+import Logo from './Logo'
+import { Row } from './Row'
+import Sheet, { SheetGroup } from './Sheet'
+import { ShellContext } from './shellContext'
+import s from './AppShell.module.css'
 
-const OWNER_NAV = [
-  ['reports', 'Reports'],
-  ['projects', 'Projects'],
-  ['employees', 'Employees'],
-  ['equipment', 'Equipment'],
+const OWNER_TABS = [
+  { key: 'reports', label: 'Reports', Icon: ClipboardTextIcon },
+  { key: 'projects', label: 'Projects', Icon: MapPinIcon },
+  { key: 'employees', label: 'Employees', Icon: UsersThreeIcon },
+  { key: 'equipment', label: 'Equipment', Icon: BulldozerIcon },
 ]
 
-const SITE_MANAGER_NAV = [
-  ['new-report', 'New report'],
-  ['my-reports', 'My reports'],
+const SITE_MANAGER_TABS = [
+  { key: 'my-reports', label: 'My reports', Icon: ClipboardTextIcon },
+  { key: 'new-report', label: 'New report', Icon: PlusCircleIcon },
 ]
 
-// The frame around every logged-in screen: blue header, black bar with the
-// user's name, role and Logout, then the nav for their role.
-// Hiding nav items is only tidiness - the database enforces who sees what.
+function initials(name = '') {
+  return name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((word) => word[0].toUpperCase())
+    .join('')
+}
+
+// The frame around every logged-in screen:
+// - white top bar: logo, (wide screens) the tabs, and an account button
+// - phones: a tab bar at the bottom, hidden while a form is open
+// - the Account sheet with name, role and Log out
+// Hiding tabs is only tidiness - the database decides who sees what.
 function AppShell({ profile, screen, onNavigate, onLogout, children }) {
-  let nav = []
-  if (profile && isOwnerOrAdmin(profile.role)) nav = OWNER_NAV
-  else if (profile?.role === 'site_manager') nav = SITE_MANAGER_NAV
+  const [pushedScreens, setPushedScreens] = useState(0)
+  const [accountOpen, setAccountOpen] = useState(false)
+  const shell = useMemo(
+    () => ({
+      push: () => setPushedScreens((count) => count + 1),
+      pop: () => setPushedScreens((count) => count - 1),
+    }),
+    [],
+  )
+
+  let tabs = []
+  if (profile && isOwnerOrAdmin(profile.role)) tabs = OWNER_TABS
+  else if (profile?.role === 'site_manager') tabs = SITE_MANAGER_TABS
+  const showTabBar = tabs.length > 0 && pushedScreens === 0
 
   return (
-    <>
-      <AppHeader />
+    <ShellContext.Provider value={shell}>
+      <header className={s.topBar}>
+        <div className={s.topInner}>
+          <Logo width={104} />
 
-      <div className="user-bar">
-        <span className="user-name">{profile?.full_name ?? ''}</span>
-        {profile && <span className="user-role">{ROLE_LABELS[profile.role] ?? profile.role}</span>}
-        <button type="button" className="btn-logout" onClick={onLogout}>
-          Logout
-        </button>
-      </div>
+          {tabs.length > 0 && (
+            <nav className={s.topNav} aria-label="Main">
+              {tabs.map(({ key, label }) => (
+                <button
+                  key={key}
+                  type="button"
+                  className={s.topTab}
+                  aria-current={screen === key ? 'page' : undefined}
+                  onClick={() => onNavigate(key)}
+                >
+                  {label}
+                </button>
+              ))}
+            </nav>
+          )}
 
-      {nav.length > 0 && (
-        <nav className="nav" aria-label="Main">
-          {nav.map(([key, label]) => (
-            <button
-              key={key}
-              type="button"
-              className="nav-tab"
-              aria-current={screen === key ? 'page' : undefined}
-              onClick={() => onNavigate(key)}
-            >
-              {label}
-            </button>
-          ))}
+          <button
+            type="button"
+            className={s.account}
+            aria-label="Account"
+            disabled={!profile}
+            onClick={() => setAccountOpen(true)}
+          >
+            {profile ? initials(profile.full_name) : ''}
+          </button>
+        </div>
+      </header>
+
+      <main className={showTabBar ? s.mainWithTabs : s.main}>{children}</main>
+
+      {showTabBar && (
+        <nav className={s.tabBar} aria-label="Main">
+          {tabs.map(({ key, label, Icon }) => {
+            const current = screen === key
+            return (
+              <button
+                key={key}
+                type="button"
+                className={s.tab}
+                aria-current={current ? 'page' : undefined}
+                onClick={() => onNavigate(key)}
+              >
+                <Icon size={26} weight={current ? 'fill' : 'regular'} aria-hidden="true" />
+                <span>{label}</span>
+              </button>
+            )
+          })}
         </nav>
       )}
 
-      <main className="app">{children}</main>
-    </>
+      {accountOpen && profile && (
+        <Sheet title="Account" onClose={() => setAccountOpen(false)}>
+          <SheetGroup>
+            <Row
+              icon={UserCircleIcon}
+              title={profile.full_name}
+              subtitle={ROLE_LABELS[profile.role] ?? profile.role}
+            />
+          </SheetGroup>
+          <SheetGroup>
+            <Row icon={SignOutIcon} title="Log out" tone="danger" onClick={onLogout} />
+          </SheetGroup>
+        </Sheet>
+      )}
+    </ShellContext.Provider>
   )
 }
 

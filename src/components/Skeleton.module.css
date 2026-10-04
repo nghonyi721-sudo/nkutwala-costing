@@ -1,0 +1,46 @@
+.group {
+  margin: var(--space-5) var(--gutter) 0;
+  overflow: hidden;
+  background: var(--surface);
+  border-radius: var(--radius-group);
+}
+
+.row {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 8px;
+  min-height: 64px;
+  padding: var(--space-3) var(--gutter);
+}
+
+.row + .row {
+  border-top: 1px solid var(--sep);
+}
+
+.title,
+.detail {
+  display: block;
+  height: 12px;
+  border-radius: 6px;
+  background: var(--fill);
+  animation: pulse 1.2s var(--ease) infinite alternate;
+}
+
+.title {
+  width: 55%;
+  height: 14px;
+}
+
+.detail {
+  width: 32%;
+}
+
+@keyframes pulse {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0.45;
+  }
+}

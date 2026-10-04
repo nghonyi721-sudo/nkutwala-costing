@@ -1,0 +1,39 @@
+.control {
+  display: flex;
+  gap: 3px;
+  padding: 3px;
+  background: var(--fill);
+  border-radius: var(--radius-control);
+}
+
+.option {
+  flex: 1;
+  min-height: 46px;
+  padding: 0 var(--space-2);
+  background: none;
+  border: 0;
+  border-radius: 8px;
+  color: var(--ink);
+  font-weight: 500;
+  cursor: pointer;
+  transition:
+    background var(--fast) var(--ease),
+    color var(--fast) var(--ease);
+}
+
+/* Selected = solid blue: unmistakable in bright sun */
+.option[aria-checked='true'] {
+  background: var(--blue);
+  color: #fff;
+  font-weight: 600;
+}
+
+.option:focus-visible {
+  outline: 2px solid var(--blue);
+  outline-offset: 1px;
+}
+
+.option:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
