@@ -6,6 +6,7 @@ import {
   ClipboardTextIcon,
   MapPinIcon,
   PlusCircleIcon,
+  ReceiptIcon,
   SignOutIcon,
   UserCircleIcon,
   UsersThreeIcon,
@@ -17,6 +18,7 @@ import s from './AppShell.module.css'
 
 const OWNER_TABS = [
   { key: 'reports', label: 'Reports', Icon: ClipboardTextIcon },
+  { key: 'receipts', label: 'Receipts', Icon: ReceiptIcon },
   { key: 'projects', label: 'Projects', Icon: MapPinIcon },
   { key: 'employees', label: 'Employees', Icon: UsersThreeIcon },
   { key: 'equipment', label: 'Equipment', Icon: BulldozerIcon },
@@ -25,6 +27,7 @@ const OWNER_TABS = [
 const SITE_MANAGER_TABS = [
   { key: 'my-reports', label: 'My reports', Icon: ClipboardTextIcon },
   { key: 'new-report', label: 'New report', Icon: PlusCircleIcon },
+  { key: 'receipts', label: 'Receipts', Icon: ReceiptIcon },
 ]
 
 // The frame around every logged-in screen. Each screen draws its own
@@ -32,8 +35,9 @@ const SITE_MANAGER_TABS = [
 // - the iOS tab bar at the bottom on phones (hidden while a pushed screen
 //   such as a form is open; wide screens show the tabs in the nav bar)
 // - the Account sheet, with a confirmed Log out
+//   badges: a red count on a tab, e.g. { receipts: 3 } receipts waiting
 // Hiding tabs is only tidiness - the database decides who sees what.
-function AppShell({ profile, screen, onNavigate, onLogout, children }) {
+function AppShell({ profile, screen, onNavigate, onLogout, badges = {}, children }) {
   const [pushedScreens, setPushedScreens] = useState(0)
   const pushedRef = useRef(0)
   const [accountOpen, setAccountOpen] = useState(false)
@@ -54,9 +58,10 @@ function AppShell({ profile, screen, onNavigate, onLogout, children }) {
     [],
   )
 
-  let tabs = []
-  if (profile && isOwnerOrAdmin(profile.role)) tabs = OWNER_TABS
-  else if (profile?.role === 'site_manager') tabs = SITE_MANAGER_TABS
+  let roleTabs = []
+  if (profile && isOwnerOrAdmin(profile.role)) roleTabs = OWNER_TABS
+  else if (profile?.role === 'site_manager') roleTabs = SITE_MANAGER_TABS
+  const tabs = roleTabs.map((tab) => ({ ...tab, badge: badges[tab.key] ?? 0 }))
   const showTabBar = tabs.length > 0 && pushedScreens === 0
 
   const shell = {
@@ -74,7 +79,7 @@ function AppShell({ profile, screen, onNavigate, onLogout, children }) {
 
       {showTabBar && (
         <nav className={s.tabBar} aria-label="Main">
-          {tabs.map(({ key, label, Icon }) => {
+          {tabs.map(({ key, label, Icon, badge }) => {
             const current = screen === key
             return (
               <button
@@ -82,9 +87,17 @@ function AppShell({ profile, screen, onNavigate, onLogout, children }) {
                 type="button"
                 className={s.tab}
                 aria-current={current ? 'page' : undefined}
+                aria-label={badge > 0 ? `${label}, ${badge} waiting` : undefined}
                 onClick={() => onNavigate(key)}
               >
-                <Icon size={27} weight={current ? 'fill' : 'regular'} aria-hidden="true" />
+                <span className={s.tabIcon}>
+                  <Icon size={27} weight={current ? 'fill' : 'regular'} aria-hidden="true" />
+                  {badge > 0 && (
+                    <span className={s.badge} aria-hidden="true">
+                      {badge > 99 ? '99+' : badge}
+                    </span>
+                  )}
+                </span>
                 <span>{label}</span>
               </button>
             )

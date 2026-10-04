@@ -6,7 +6,8 @@ import s from './DateTimeField.module.css'
 // wheel; on a computer it opens the browser's picker. Use it as the trailing
 // part of a <Row>.
 //   type: 'date' | 'time'
-function DateTimeField({ type = 'date', value, onChange, label, placeholder }) {
+//   max:  the latest date that can be picked (e.g. today)
+function DateTimeField({ type = 'date', value, onChange, label, placeholder, max }) {
   const shown = value ? (type === 'date' ? formatDate(value) : value.slice(0, 5)) : null
 
   return (
@@ -16,6 +17,7 @@ function DateTimeField({ type = 'date', value, onChange, label, placeholder }) {
         className={s.native}
         type={type}
         value={value}
+        max={max}
         aria-label={label}
         onChange={onChange}
         onClick={(event) => {

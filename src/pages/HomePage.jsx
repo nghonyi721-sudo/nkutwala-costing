@@ -8,7 +8,9 @@ import Skeleton from '../components/Skeleton'
 import ProjectsPage from './admin/ProjectsPage'
 import EmployeesPage from './admin/EmployeesPage'
 import EquipmentPage from './admin/EquipmentPage'
+import ReceiptsPage from './admin/ReceiptsPage'
 import ReportsPage from './admin/ReportsPage'
+import MyReceiptsPage from './receipts/MyReceiptsPage'
 import MyReportsPage from './reports/MyReportsPage'
 
 // The logged-in app: loads this user's own name and role (nothing else),
@@ -17,11 +19,14 @@ function HomePage({ user }) {
   // undefined = loading, null = no profile row, object = loaded
   const [profile, setProfile] = useState(undefined)
   const [error, setError] = useState('')
-  // 'home' | 'projects' | 'employees' | 'equipment' | 'reports'
+  // 'home' | 'projects' | 'employees' | 'equipment' | 'reports' | 'receipts'
   // | 'new-report' | 'my-reports'
   // 'home' = not chosen yet (the role's landing screen is shown)
   const [screen, setScreen] = useState('home')
   const [visit, setVisit] = useState(0)
+  // Owners/admins: receipts waiting for approval (the tab's badge).
+  const [pendingReceipts, setPendingReceipts] = useState(0)
+  const [receiptChanges, setReceiptChanges] = useState(0)
 
   useEffect(() => {
     let cancelled = false
@@ -50,6 +55,24 @@ function HomePage({ user }) {
   const isAdmin = Boolean(profile) && isOwnerOrAdmin(profile.role)
   const isSiteManager = profile?.role === 'site_manager'
 
+  // Counted again on every tab tap and after every approve/reject/reverse.
+  useEffect(() => {
+    if (!isAdmin) return undefined
+    let cancelled = false
+
+    supabase
+      .from('receipts')
+      .select('id', { count: 'exact', head: true })
+      .eq('status', 'submitted')
+      .then(({ count }) => {
+        if (!cancelled) setPendingReceipts(count ?? 0)
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [isAdmin, visit, receiptChanges])
+
   // Until a nav tab is tapped: owners land on Reports, site managers on My reports.
   let current = screen
   if (current === 'home') current = isAdmin ? 'reports' : isSiteManager ? 'my-reports' : 'home'
@@ -63,6 +86,16 @@ function HomePage({ user }) {
 
   let page = null
   if (isAdmin && current === 'reports') page = <ReportsPage key={pageKey} />
+  if (isAdmin && current === 'receipts') {
+    page = (
+      <ReceiptsPage
+        key={pageKey}
+        user={user}
+        role={profile.role}
+        onChanged={() => setReceiptChanges((count) => count + 1)}
+      />
+    )
+  }
   if (isAdmin && current === 'projects') page = <ProjectsPage key={pageKey} />
   if (isAdmin && current === 'employees') page = <EmployeesPage key={pageKey} />
   if (isAdmin && current === 'equipment') page = <EquipmentPage key={pageKey} />
@@ -76,6 +109,7 @@ function HomePage({ user }) {
       />
     )
   }
+  if (isSiteManager && current === 'receipts') page = <MyReceiptsPage key={pageKey} user={user} />
 
   return (
     <AppShell
@@ -83,6 +117,7 @@ function HomePage({ user }) {
       screen={current}
       onNavigate={navigate}
       onLogout={() => supabase.auth.signOut()}
+      badges={{ receipts: pendingReceipts }}
     >
       {error && (
         <Page title="Can't load your account">

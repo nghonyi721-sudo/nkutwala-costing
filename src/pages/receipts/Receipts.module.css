@@ -1,0 +1,164 @@
+/* The big "Add receipt" button at the top of My receipts */
+.addArea {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  margin: 20px var(--gutter) 0;
+}
+
+/* A second line under a receipt in the list (the project) */
+.line {
+  display: block;
+}
+
+/* A rejection reason under a receipt in the list */
+.reason {
+  display: block;
+  margin-top: 2px;
+  color: var(--destructive);
+}
+
+/* The photo at the top of the add/detail screens */
+.photoArea {
+  margin: 16px var(--gutter) 0;
+}
+
+.photoActions {
+  display: flex;
+  justify-content: center;
+  margin-top: 2px;
+}
+
+.preparing {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-height: 200px;
+  border-radius: var(--radius-card);
+  background: var(--fill);
+  color: var(--label-2);
+  font-size: var(--text-subhead);
+}
+
+/* Amount: big rounded numbers, "R" in front */
+.amount {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 68px;
+  padding: 0 var(--gutter);
+  background: var(--surface);
+  cursor: text;
+}
+
+.amount:focus-within {
+  box-shadow: inset 0 0 0 2px var(--tint);
+  border-radius: var(--radius-group);
+}
+
+.currency {
+  font-family: var(--font-rounded);
+  font-size: var(--text-title1);
+  font-weight: 600;
+  color: var(--label-2);
+}
+
+.amountInput {
+  flex: 1;
+  min-width: 0;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  outline: none;
+  color: var(--label);
+  font-family: var(--font-rounded);
+  font-size: var(--text-title1);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.amountInput::placeholder {
+  color: var(--label-3);
+  font-weight: 600;
+}
+
+/* Recently used vendors, one tap to fill in */
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 10px var(--gutter) 0;
+}
+
+.chip {
+  min-height: var(--tap);
+  padding: 0 16px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--fill);
+  color: var(--label);
+  font-size: var(--text-subhead);
+  cursor: pointer;
+}
+
+.chip:active {
+  background: var(--fill-pressed);
+}
+
+.chip[aria-pressed='true'] {
+  background: var(--tint-fill);
+  color: var(--tint);
+  font-weight: 600;
+}
+
+.chip:focus-visible {
+  outline: 2px solid var(--tint);
+  outline-offset: 2px;
+}
+
+/* Category: big buttons, two per row */
+.categories {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.category {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 60px;
+  padding: 0 14px;
+  border: 2px solid transparent;
+  border-radius: var(--radius-group);
+  background: var(--surface);
+  color: var(--label);
+  font-size: var(--text-body);
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+}
+
+.category svg {
+  flex: none;
+  color: var(--tint);
+}
+
+.category:active {
+  background: var(--fill);
+}
+
+.category[aria-checked='true'] {
+  border-color: var(--tint-solid);
+  background: var(--tint-fill);
+  color: var(--tint);
+  font-weight: 600;
+}
+
+.category:focus-visible {
+  outline: 2px solid var(--tint);
+  outline-offset: 2px;
+}

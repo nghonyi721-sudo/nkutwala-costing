@@ -30,9 +30,9 @@ function NavBar({ title, collapsed, onBack, backLabel, action }) {
           {onBack ? (
             <button type="button" className={s.back} onClick={onBack}>
               <CaretLeftIcon size={22} weight="bold" aria-hidden="true" />
-              {/* Like iOS: once the small title shows, a long back label
+              {/* Like iOS: once the small title shows, the back label
                   becomes plain "Back" so the title has room. */}
-              <span>{collapsed && title && backLabel.length > 8 ? 'Back' : backLabel}</span>
+              <span>{collapsed && title && backLabel.length > 4 ? 'Back' : backLabel}</span>
             </button>
           ) : (
             <Logo width={88} />
@@ -42,7 +42,7 @@ function NavBar({ title, collapsed, onBack, backLabel, action }) {
         <div className={s.center}>
           {tabs.length > 0 && (
             <nav className={s.tabs} aria-label="Main">
-              {tabs.map(({ key, label }) => (
+              {tabs.map(({ key, label, badge }) => (
                 <button
                   key={key}
                   type="button"
@@ -51,6 +51,13 @@ function NavBar({ title, collapsed, onBack, backLabel, action }) {
                   onClick={() => shell.onNavigate(key)}
                 >
                   {label}
+                  {badge > 0 && (
+                    <span className={s.badge}>
+                      <span className="visually-hidden">, </span>
+                      {badge > 99 ? '99+' : badge}
+                      <span className="visually-hidden"> waiting</span>
+                    </span>
+                  )}
                 </button>
               ))}
             </nav>

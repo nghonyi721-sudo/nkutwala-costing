@@ -1,0 +1,6 @@
+/* The reason given for a review, on its own line under who and when */
+.reason {
+  display: block;
+  margin-top: 2px;
+  color: var(--label);
+}

@@ -11,9 +11,9 @@ const TONES = {
 }
 
 // A coloured dot and a word, e.g. "● Submitted". label defaults to the
-// report status name.
-function StatusBadge({ status, label }) {
-  const tone = TONES[status] ?? 'grey'
+// report status name; tone ('blue' | 'red' | 'grey') overrides the colour.
+function StatusBadge({ status, label, tone: toneOverride }) {
+  const tone = toneOverride ?? TONES[status] ?? 'grey'
   return (
     <span className={`${s.badge} ${s[tone]}`}>
       {label ?? REPORT_STATUS_LABELS[status] ?? status}

@@ -9,7 +9,8 @@
 // Run with:  npm run test:rls
 //
 // Needs in .env: VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY,
-//   TEST_SITE_EMAIL, TEST_SITE_PASSWORD, TEST_OWNER_EMAIL, TEST_OWNER_PASSWORD
+//   TEST_SITE_EMAIL, TEST_SITE_PASSWORD, TEST_SITE2_EMAIL, TEST_SITE2_PASSWORD,
+//   TEST_OWNER_EMAIL, TEST_OWNER_PASSWORD, TEST_ADMIN_EMAIL, TEST_ADMIN_PASSWORD
 //
 // NEVER give this script a service_role / secret key: that key ignores all
 // security rules, so every attack would "succeed" and the test would be
@@ -17,9 +18,16 @@
 //
 // Test data: "ZZ RLS Test Employee" (inactive) and "ZZ RLS Test Project"
 // (complete) are created once and reused, because nothing can be deleted.
+// Each run adds a few "ZZ RLS Test Vendor" receipts and leaves every one of
+// them rejected, reversed or discarded, so none wait in the Pending queue.
 
+import { createHash, randomUUID } from 'node:crypto'
+import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { createClient } from '@supabase/supabase-js'
+// The app's own receipt-sending steps, so the test saves, uploads (to the
+// place the database gives) and submits exactly the way the app does.
+import { saveDraft, submitDraft, uploadPhoto } from '../src/lib/receiptSteps.js'
 
 process.loadEnvFile(fileURLToPath(new URL('../.env', import.meta.url)))
 
@@ -39,6 +47,12 @@ const TEST_RATES = [
 const TEST_REPORT_DATE = '2026-01-15'
 const FORGED_REPORT_DATE = '2026-01-16'
 
+// Receipts: a tiny real JPEG, and a vendor name that marks test receipts.
+const TEST_RECEIPT_PHOTO = readFileSync(
+  fileURLToPath(new URL('./fixtures/test-receipt.jpg', import.meta.url)),
+)
+const TEST_VENDOR_PREFIX = 'ZZ RLS Test Vendor'
+
 // Columns site managers are allowed to receive. Anything else in a response
 // (e.g. a budget or rate column added later) makes the test FAIL.
 const ALLOWED_COLUMNS = {
@@ -54,6 +68,13 @@ const ALLOWED_COLUMNS = {
   ],
   report_crew: ['id', 'report_id', 'employee_id', 'hours', 'created_at'],
   report_equipment: ['id', 'report_id', 'equipment_id', 'hours', 'created_at'],
+  // Every column EXCEPT amount. Asking for amount (or "*") must be refused.
+  receipts: [
+    'id', 'company_id', 'project_id', 'report_id', 'uploader_id', 'receipt_date',
+    'vendor', 'vendor_normalised', 'category', 'notes', 'image_path', 'image_hash',
+    'status', 'duplicate_checked', 'reviewed_by', 'reviewed_at', 'review_reason',
+    'created_at', 'updated_at',
+  ],
 }
 
 const results = []
@@ -93,6 +114,8 @@ for (const name of [
   'TEST_OWNER_PASSWORD',
   'TEST_SITE2_EMAIL',
   'TEST_SITE2_PASSWORD',
+  'TEST_ADMIN_EMAIL',
+  'TEST_ADMIN_PASSWORD',
 ]) {
   if (!process.env[name]) stop(`${name} is missing from .env`)
 }
@@ -662,8 +685,6 @@ await attackDelete('Site manager 1 deletes their report', site.client, 'daily_re
   }
 }
 
-await site2.client.auth.signOut()
-
 // --- Owner: may reopen, may NOT edit --------------------------------------------
 {
   const name = 'Owner changes the contents of a submitted report'
@@ -740,6 +761,677 @@ for (const table of [
     }
   }
 }
+
+// =============================================================================
+// Receipts (phase 4)
+// =============================================================================
+console.log('\nReceipt attacks…\n')
+
+const admin = await signIn(process.env.TEST_ADMIN_EMAIL, process.env.TEST_ADMIN_PASSWORD)
+{
+  const role = await readOwnRole(admin.client, admin.userId)
+  if (role !== 'system_admin') {
+    stop(
+      `the TEST_ADMIN_EMAIL user's role is "${role ?? 'unreadable'}", not system_admin. ` +
+        'Fix the role in the profiles table, then run again.',
+    )
+  }
+}
+
+let companyId
+{
+  const { data, error } = await site.client
+    .from('profiles')
+    .select('company_id')
+    .eq('id', site.userId)
+    .single()
+  if (error) stop(`site manager 1 could not read their own company: ${error.message}`)
+  companyId = data.company_id
+}
+
+// This run's own vendors, amounts and photos, so nothing can match a receipt
+// from an earlier run.
+const RUN_TAG = randomUUID().slice(0, 8)
+const runCents = parseInt(RUN_TAG.slice(0, 4), 16) // 0 - 65535
+const AMOUNT_1 = Number((1000 + runCents / 100).toFixed(2))
+const AMOUNT_2 = Number((AMOUNT_1 + 111.11).toFixed(2))
+const AMOUNT_5 = Number((AMOUNT_1 + 222.22).toFixed(2))
+const AMOUNT_ADMIN = Number((AMOUNT_1 + 333.33).toFixed(2))
+const VENDOR_1 = `${TEST_VENDOR_PREFIX} ${RUN_TAG} One`
+// The same vendor typed differently: other case, extra punctuation.
+const VENDOR_1_RETYPED = `${TEST_VENDOR_PREFIX} ${RUN_TAG.toUpperCase()}-one.`
+const VENDOR_2 = `${TEST_VENDOR_PREFIX} ${RUN_TAG} Two`
+const VENDOR_5 = `${TEST_VENDOR_PREFIX} ${RUN_TAG} Five`
+const VENDOR_ADMIN = `${TEST_VENDOR_PREFIX} ${RUN_TAG} Admin`
+
+// The same small picture with a different tail, so each is a "different photo".
+const testPhoto = (tag) => Buffer.concat([TEST_RECEIPT_PHOTO, Buffer.from(`${RUN_TAG}-${tag}`)])
+const PHOTO_A = testPhoto('A')
+const PHOTO_C = testPhoto('C')
+const PHOTO_ADMIN = testPhoto('admin')
+const PHOTO_REPLACEMENT = testPhoto('replacement')
+
+const sha256 = (bytes) => createHash('sha256').update(bytes).digest('hex')
+
+// Today in South Africa, as "YYYY-MM-DD", and days either side of it.
+const saToday = new Date().toLocaleDateString('en-CA', { timeZone: 'Africa/Johannesburg' })
+function shiftDate(isoDate, days) {
+  const date = new Date(`${isoDate}T12:00:00Z`)
+  date.setUTCDate(date.getUTCDate() + days)
+  return date.toISOString().slice(0, 10)
+}
+
+// The values the app sends for a new receipt (the phone picks the id).
+function receiptValues({ vendor, amount, photo, date = saToday }) {
+  return {
+    id: randomUUID(),
+    project_id: testProjectId,
+    receipt_date: date,
+    vendor,
+    category: 'other',
+    amount,
+    notes: `RLS attack test ${RUN_TAG}`,
+    image_hash: photo ? sha256(photo) : null,
+  }
+}
+
+// Saves a draft with the app's own step. The photo's place (path) comes from
+// the database, exactly as in the app - the test never builds it itself.
+async function createTestReceipt(who, label, details) {
+  const values = receiptValues(details)
+  try {
+    const saved = await saveDraft(who.client, values)
+    return { id: values.id, path: saved.image_path, photo: details.photo }
+  } catch (error) {
+    stop(`${label} could not save a draft receipt: ${error.message}`)
+  }
+}
+
+async function uploadTestPhoto(who, label, receipt) {
+  try {
+    await uploadPhoto(who.client, receipt.path, receipt.photo)
+  } catch (error) {
+    stop(`${label} could not upload a receipt photo: ${error.message}`)
+  }
+}
+
+function changeReceipt(who, receiptId, changes) {
+  return who.client.from('receipts').update(changes).eq('id', receiptId).select('id, status')
+}
+
+async function submitTestReceipt(who, label, receiptId) {
+  try {
+    await submitDraft(who.client, receiptId)
+  } catch (error) {
+    stop(`${label} could not submit a test receipt: ${error.message}`)
+  }
+}
+
+// What the owner sees - used to confirm an attack really changed nothing.
+async function readStatus(receiptId) {
+  const { data } = await owner.client.from('receipts').select('status').eq('id', receiptId).maybeSingle()
+  return data?.status ?? null
+}
+async function readVendor(receiptId) {
+  const { data } = await owner.client.from('receipts').select('vendor').eq('id', receiptId).maybeSingle()
+  return data?.vendor ?? null
+}
+async function readAmount(receiptId) {
+  const { data } = await owner.client
+    .from('receipt_amounts')
+    .select('amount')
+    .eq('receipt_id', receiptId)
+    .maybeSingle()
+  return data ? Number(data.amount) : null
+}
+async function storedPhotoHash(path) {
+  const { data, error } = await owner.client.storage.from('receipts').download(path)
+  if (error) return null
+  return sha256(Buffer.from(await data.arrayBuffer()))
+}
+
+// A receipt change that must NOT happen. "Refused" (with the expected error
+// code, if one is given) and "changed nothing" both pass - then the owner
+// re-reads the receipt to make sure it really didn't change.
+async function attackReceipt(name, who, receiptId, changes, { read, expectedCode }) {
+  const before = await read(receiptId)
+  const { data, error } = await who.client
+    .from('receipts')
+    .update(changes)
+    .eq('id', receiptId)
+    .select('id')
+  const after = await read(receiptId)
+
+  if (before === null) {
+    record(name, false, 'Inconclusive: the owner could not read the receipt first.')
+  } else if (before !== after) {
+    record(name, false, `BREACH: changed from "${before}" to "${after}".`)
+  } else if (error && expectedCode && error.code !== expectedCode) {
+    record(name, false, `Refused for the wrong reason (${error.code}): ${error.message}`)
+  } else if (error) {
+    record(name, true, `Server refused: ${error.message}`)
+  } else if (data.length === 0) {
+    record(name, true, 'Server changed nothing; owner confirms no change.')
+  } else {
+    record(name, false, 'Update reported success.')
+  }
+}
+
+// Test receipts left behind by an interrupted run are finished off first, so
+// nothing sits in the Pending queue. The same tidy-up runs at the end.
+async function finishLeftoverTestReceipts() {
+  for (const who of [site, site2, admin]) {
+    await who.client
+      .from('receipts')
+      .update({ status: 'discarded' })
+      .like('vendor', `${TEST_VENDOR_PREFIX}%`)
+      .eq('uploader_id', who.userId)
+      .eq('status', 'draft')
+  }
+  await owner.client
+    .from('receipts')
+    .update({ status: 'rejected', review_reason: 'RLS attack test: tidy-up' })
+    .like('vendor', `${TEST_VENDOR_PREFIX}%`)
+    .eq('status', 'submitted')
+  await admin.client
+    .from('receipts')
+    .update({ status: 'reversed', review_reason: 'RLS attack test: tidy-up' })
+    .like('vendor', `${TEST_VENDOR_PREFIX}%`)
+    .eq('status', 'approved')
+}
+
+await finishLeftoverTestReceipts()
+
+// --- Site manager 1: creating receipts ---------------------------------------
+await attackInsert(
+  'Site manager 1 adds a receipt as the owner (forged uploader_id)',
+  site.client,
+  'receipts',
+  { ...receiptValues({ vendor: `${TEST_VENDOR_PREFIX} ${RUN_TAG} forged`, amount: 1 }), uploader_id: owner.userId },
+)
+await attackInsert(
+  'Site manager 1 adds a receipt that is already approved',
+  site.client,
+  'receipts',
+  { ...receiptValues({ vendor: `${TEST_VENDOR_PREFIX} ${RUN_TAG} pre-approved`, amount: 1 }), status: 'approved' },
+)
+await attackInsert(
+  'Site manager 1 adds a receipt dated tomorrow',
+  site.client,
+  'receipts',
+  receiptValues({ vendor: `${TEST_VENDOR_PREFIX} ${RUN_TAG} future`, amount: 1, date: shiftDate(saToday, 1) }),
+  '23514',
+  'Refused: future dates are blocked (South African time).',
+)
+
+const receipt1 = await createTestReceipt(site, 'site manager 1', {
+  vendor: VENDOR_1,
+  amount: AMOUNT_1,
+  photo: PHOTO_A,
+})
+
+{
+  const name = "Site manager 1 uploads a photo into site manager 2's folder"
+  const { error } = await site.client.storage
+    .from('receipts')
+    .upload(`${companyId}/${site2.userId}/${receipt1.id}.jpg`, PHOTO_A, { contentType: 'image/jpeg' })
+  if (error) {
+    record(name, true, `Server refused: ${error.message}`)
+  } else {
+    record(name, false, "BREACH: a photo was stored in another person's folder.")
+  }
+}
+
+await uploadTestPhoto(site, 'site manager 1', receipt1)
+{
+  const ownFolder = `${companyId}/${site.userId}/`
+  record(
+    "Site manager 1 saves a draft and uploads its photo with the app's own steps",
+    receipt1.path === `${ownFolder}${receipt1.id}.jpg`,
+    `Uploaded to the place the database gave: ${receipt1.path} (their own folder).`,
+  )
+}
+
+await attackReceipt(
+  'Site manager 1 approves their own draft directly (draft → approved)',
+  site,
+  receipt1.id,
+  { status: 'approved' },
+  { read: readStatus, expectedCode: PERMISSION_DENIED },
+)
+
+{
+  const name = "Site manager 1 submits with the app's own step (save → upload → submit)"
+  let problem = null
+  try {
+    await submitDraft(site.client, receipt1.id)
+    if ((await readStatus(receipt1.id)) !== 'submitted') problem = 'the receipt is not marked submitted'
+  } catch (error) {
+    problem = error.message
+  }
+  if (problem) {
+    record(name, false, `Could not submit: ${problem}`)
+    stop('the remaining receipt checks need a submitted receipt.')
+  }
+  record(name, true, 'Submitted - the database found the uploaded photo before accepting it.')
+}
+
+// --- Site manager 1: after submitting -----------------------------------------
+await attackReceipt(
+  'Site manager 1 changes the amount after submitting',
+  site,
+  receipt1.id,
+  { amount: 1 },
+  { read: readAmount },
+)
+await attackReceipt(
+  'Site manager 1 approves their own submitted receipt',
+  site,
+  receipt1.id,
+  { status: 'approved' },
+  { read: readStatus },
+)
+await attackDelete('Site manager 1 deletes their receipt', site.client, 'receipts', receipt1.id)
+
+{
+  const name = "Site manager 1 replaces their submitted receipt's photo"
+  const { error } = await site.client.storage
+    .from('receipts')
+    .upload(receipt1.path, PHOTO_REPLACEMENT, { contentType: 'image/jpeg', upsert: true })
+  const stored = await storedPhotoHash(receipt1.path)
+  if (stored !== sha256(PHOTO_A)) {
+    record(name, false, 'BREACH: the stored photo changed (or the owner could not open it).')
+  } else if (error) {
+    record(name, true, 'Server refused; owner confirms the photo is unchanged.')
+  } else {
+    record(name, false, 'Upload reported success.')
+  }
+}
+
+{
+  const name = "Site manager 1 deletes their receipt's photo"
+  const { data, error } = await site.client.storage.from('receipts').remove([receipt1.path])
+  const stored = await storedPhotoHash(receipt1.path)
+  if (stored !== sha256(PHOTO_A)) {
+    record(name, false, 'BREACH: the photo is gone or changed.')
+  } else if (error || data.length === 0) {
+    record(name, true, 'Nothing was deleted; owner confirms the photo is still there.')
+  } else {
+    record(name, false, 'Delete reported success.')
+  }
+}
+
+// --- The Rate Wall on receipts --------------------------------------------------
+for (const { name, query } of [
+  {
+    name: 'Site manager 1 reads the amount of their own receipt',
+    query: () => site.client.from('receipts').select('id, amount').eq('id', receipt1.id),
+  },
+  {
+    name: 'Site manager 1 reads every column of their receipts (select *)',
+    query: () => site.client.from('receipts').select('*'),
+  },
+  {
+    name: 'Site manager 1 filters their receipts by amount',
+    query: () => site.client.from('receipts').select('id').gt('amount', 0),
+  },
+]) {
+  const { data, error } = await query()
+  if (error?.code === PERMISSION_DENIED) {
+    record(name, true, 'Server refused: the amount column is walled off.')
+  } else if (error) {
+    record(name, false, `Unexpected error: ${error.message}`)
+  } else {
+    record(name, false, `LEAK: the server answered with ${data.length} row(s).`)
+  }
+}
+
+await attackReadNothing('Site manager 1 reads receipt_amounts', site.client, 'receipt_amounts')
+await attackInsert('Site manager 1 writes to the receipt status log', site.client, 'receipt_status_log', {
+  receipt_id: receipt1.id,
+  from_status: 'submitted',
+  to_status: 'approved',
+})
+
+{
+  const name = 'Site manager 1 reads their own receipts (allowed, no amounts)'
+  const { data, error } = await site.client
+    .from('receipts')
+    .select(ALLOWED_COLUMNS.receipts.join(', '))
+  if (error) {
+    record(name, false, `Could not read: ${error.message}`)
+  } else if (!data.some((row) => row.id === receipt1.id)) {
+    record(name, false, 'Their own receipt was missing.')
+  } else if (data.some((row) => row.uploader_id !== site.userId)) {
+    record(name, false, "LEAK: other people's receipts came back.")
+  } else {
+    record(name, true, `${data.length} receipt(s), all their own, without amounts.`)
+  }
+}
+
+{
+  const name = "Site manager 1 reads their receipt's status log (allowed)"
+  const { data, error } = await site.client
+    .from('receipt_status_log')
+    .select('from_status, to_status, changed_by')
+    .eq('receipt_id', receipt1.id)
+  const steps = (data ?? []).map((row) => `${row.from_status ?? 'new'} → ${row.to_status}`)
+  if (error) {
+    record(name, false, `Could not read: ${error.message}`)
+  } else if (!steps.includes('new → draft') || !steps.includes('draft → submitted')) {
+    record(name, false, `The log is incomplete: ${steps.join(', ') || 'empty'}.`)
+  } else {
+    record(name, true, `Logged automatically: ${steps.join(', ')}.`)
+  }
+}
+
+// --- Duplicate detection ------------------------------------------------------
+const receipt2 = await createTestReceipt(site, 'site manager 1', {
+  vendor: VENDOR_2,
+  amount: AMOUNT_2,
+  photo: PHOTO_A, // the same photo as receipt 1
+})
+await uploadTestPhoto(site, 'site manager 1', receipt2)
+
+{
+  const name = 'Duplicate check: the same photo uploaded twice'
+  const { data, error } = await site.client.rpc('receipt_duplicates', { p_receipt_id: receipt2.id })
+  const match = data?.find((row) => row.receipt_id === receipt1.id)
+  if (error) {
+    record(name, false, `Error: ${error.message}`)
+  } else if (data.some((row) => 'amount' in row)) {
+    record(name, false, 'LEAK: the duplicate check sent amounts to a site manager.')
+  } else if (!match?.same_photo) {
+    record(name, false, 'The second receipt was NOT flagged.')
+  } else {
+    record(name, true, 'The second receipt is flagged as the same photo (no amounts in the answer).')
+  }
+}
+
+await submitTestReceipt(site, 'site manager 1', receipt2.id)
+
+const receipt3 = await createTestReceipt(site, 'site manager 1', {
+  vendor: VENDOR_1_RETYPED,
+  amount: AMOUNT_1,
+  photo: PHOTO_C,
+  date: shiftDate(saToday, -1),
+})
+
+{
+  const name = 'Duplicate check: same vendor (typed differently), amount and date (a day apart)'
+  const { data, error } = await site.client.rpc('receipt_duplicates', { p_receipt_id: receipt3.id })
+  const match = data?.find((row) => row.receipt_id === receipt1.id)
+  if (error) {
+    record(name, false, `Error: ${error.message}`)
+  } else if (!match?.same_details) {
+    record(name, false, 'It was NOT flagged.')
+  } else {
+    record(name, true, `Flagged: "${VENDOR_1_RETYPED}" matched "${VENDOR_1}".`)
+  }
+}
+
+// Receipt 3's photo was never uploaded, so the database must refuse it.
+await attackReceipt(
+  'Site manager 1 submits a receipt whose photo was never uploaded',
+  site,
+  receipt3.id,
+  { status: 'submitted' },
+  { read: readStatus, expectedCode: '23514' },
+)
+
+// --- Site manager 2 -------------------------------------------------------------
+{
+  const name = "Site manager 2 reads site manager 1's receipts"
+  const { data, error } = await site2.client
+    .from('receipts')
+    .select('id')
+    .in('id', [receipt1.id, receipt2.id, receipt3.id])
+  if (error && error.code !== PERMISSION_DENIED) {
+    record(name, false, `Unexpected error: ${error.message}`)
+  } else if ((data?.length ?? 0) > 0) {
+    record(name, false, `LEAK: ${data.length} of site manager 1's receipts came back.`)
+  } else {
+    record(name, true, 'Zero rows came back.')
+  }
+}
+
+{
+  const name = "Site manager 2 opens site manager 1's receipt photo"
+  const download = await site2.client.storage.from('receipts').download(receipt1.path)
+  const link = await site2.client.storage.from('receipts').createSignedUrl(receipt1.path, 60)
+  if (!download.error) {
+    record(name, false, 'LEAK: the photo was downloaded.')
+  } else if (!link.error) {
+    record(name, false, 'LEAK: a link to the photo was made.')
+  } else {
+    record(name, true, 'Download and photo link both refused.')
+  }
+}
+
+{
+  const name = "Site manager 2 reads the status log of site manager 1's receipt"
+  const { data, error } = await site2.client
+    .from('receipt_status_log')
+    .select('id')
+    .eq('receipt_id', receipt1.id)
+  if (error && error.code !== PERMISSION_DENIED) {
+    record(name, false, `Unexpected error: ${error.message}`)
+  } else if ((data?.length ?? 0) > 0) {
+    record(name, false, `LEAK: ${data.length} log row(s) came back.`)
+  } else {
+    record(name, true, 'Zero rows came back.')
+  }
+}
+
+{
+  const name = "Site manager 2 runs the duplicate check on site manager 1's receipt"
+  const { data, error } = await site2.client.rpc('receipt_duplicates', { p_receipt_id: receipt1.id })
+  if (error) {
+    record(name, false, `Unexpected error: ${error.message}`)
+  } else if (data.length > 0) {
+    record(name, false, `LEAK: ${data.length} match(es) came back.`)
+  } else {
+    record(name, true, 'Zero rows came back.')
+  }
+}
+
+await attackReceipt(
+  "Site manager 2 discards site manager 1's draft",
+  site2,
+  receipt3.id,
+  { status: 'discarded' },
+  { read: readStatus },
+)
+
+{
+  const receipt5 = await createTestReceipt(site2, 'site manager 2', {
+    vendor: VENDOR_5,
+    amount: AMOUNT_5,
+    photo: PHOTO_A, // the same photo site manager 1 used
+  })
+
+  const name = "Site manager 2's duplicate check never shows site manager 1's receipts"
+  const [theirs, owners] = await Promise.all([
+    site2.client.rpc('receipt_duplicates', { p_receipt_id: receipt5.id }),
+    owner.client.rpc('receipt_duplicates', { p_receipt_id: receipt5.id }),
+  ])
+  if (theirs.error || owners.error) {
+    record(name, false, `Error: ${(theirs.error ?? owners.error).message}`)
+  } else if (theirs.data.length > 0) {
+    record(name, false, `LEAK: ${theirs.data.length} match(es) from someone else came back.`)
+  } else if (!owners.data.some((row) => row.receipt_id === receipt1.id)) {
+    record(name, false, "Inconclusive: the owner's check didn't flag the same photo either.")
+  } else {
+    record(name, true, "Zero matches for site manager 2; the owner's check does flag the same photo.")
+  }
+
+  const { data, error } = await changeReceipt(site2, receipt5.id, { status: 'discarded' })
+  record(
+    'Site manager 2 discards their own draft',
+    !error && data.length === 1 && data[0].status === 'discarded',
+    error ? `Error: ${error.message}` : 'Discarded - kept for the record, never counted.',
+  )
+}
+
+// --- Owner ----------------------------------------------------------------------
+{
+  const name = 'Owner reads amounts through receipt_amounts (control)'
+  const amount = await readAmount(receipt1.id)
+  if (amount === AMOUNT_1) {
+    record(name, true, `Owner sees R ${amount.toFixed(2)}.`)
+  } else {
+    record(name, false, `Expected ${AMOUNT_1}, got ${amount ?? 'nothing'}.`)
+  }
+}
+
+await attackReceipt(
+  'Owner approves a possible duplicate without ticking "checked"',
+  owner,
+  receipt2.id,
+  { status: 'approved' },
+  { read: readStatus, expectedCode: '23514' },
+)
+await attackReceipt(
+  'Owner edits the vendor of a submitted receipt',
+  owner,
+  receipt2.id,
+  { vendor: 'OWNER EDIT' },
+  { read: readVendor, expectedCode: PERMISSION_DENIED },
+)
+await attackReceipt(
+  'Owner changes the amount of a submitted receipt',
+  owner,
+  receipt2.id,
+  { amount: 1 },
+  { read: readAmount, expectedCode: PERMISSION_DENIED },
+)
+
+{
+  const name = "Owner approves site manager 1's receipt"
+  const { error } = await changeReceipt(owner, receipt1.id, { status: 'approved', duplicate_checked: true })
+  const { data: receipt } = await owner.client
+    .from('receipts')
+    .select('status, reviewed_by')
+    .eq('id', receipt1.id)
+    .single()
+  const { data: log } = await owner.client
+    .from('receipt_status_log')
+    .select('changed_by')
+    .eq('receipt_id', receipt1.id)
+    .eq('to_status', 'approved')
+  if (error) {
+    record(name, false, `Error: ${error.message}`)
+  } else if (receipt?.status !== 'approved' || receipt.reviewed_by !== owner.userId) {
+    record(name, false, 'The receipt was not approved properly.')
+  } else if (!log?.some((row) => row.changed_by === owner.userId)) {
+    record(name, false, 'Approved, but no status log row was written.')
+  } else {
+    record(name, true, 'Approved after ticking "checked"; the status log recorded who and when.')
+  }
+}
+
+await attackReceipt(
+  'Owner reverses an approved receipt',
+  owner,
+  receipt1.id,
+  { status: 'reversed', review_reason: 'RLS attack test' },
+  { read: readStatus, expectedCode: PERMISSION_DENIED },
+)
+await attackReceipt(
+  'Owner rejects a receipt without a reason',
+  owner,
+  receipt2.id,
+  { status: 'rejected' },
+  { read: readStatus, expectedCode: '23514' },
+)
+
+{
+  const name = 'Owner rejects a receipt with a reason'
+  const { data, error } = await changeReceipt(owner, receipt2.id, {
+    status: 'rejected',
+    review_reason: 'RLS attack test: duplicate photo',
+  })
+  if (error || data.length !== 1 || data[0].status !== 'rejected') {
+    record(name, false, `Could not reject: ${error?.message ?? 'no row updated'}`)
+  } else {
+    record(name, true, 'Rejected; the reason is kept.')
+  }
+}
+
+await attackReceipt(
+  'Owner puts a rejected receipt back to submitted',
+  owner,
+  receipt2.id,
+  { status: 'submitted' },
+  { read: readStatus },
+)
+
+// --- System admin ---------------------------------------------------------------
+{
+  const adminReceipt = await createTestReceipt(admin, 'system admin', {
+    vendor: VENDOR_ADMIN,
+    amount: AMOUNT_ADMIN,
+    photo: PHOTO_ADMIN,
+  })
+  await uploadTestPhoto(admin, 'system admin', adminReceipt)
+  await submitTestReceipt(admin, 'system admin', adminReceipt.id)
+
+  await attackReceipt(
+    'System admin approves a receipt they took themselves',
+    admin,
+    adminReceipt.id,
+    { status: 'approved' },
+    { read: readStatus, expectedCode: PERMISSION_DENIED },
+  )
+
+  // Finish it: the owner rejects it, so it doesn't wait in Pending.
+  const { error } = await changeReceipt(owner, adminReceipt.id, {
+    status: 'rejected',
+    review_reason: 'RLS attack test: tidy-up',
+  })
+  if (error) console.log(`          (note: could not tidy up the admin's test receipt: ${error.message})`)
+}
+
+await attackReceipt(
+  'System admin reverses an approved receipt without a reason',
+  admin,
+  receipt1.id,
+  { status: 'reversed' },
+  { read: readStatus, expectedCode: '23514' },
+)
+
+{
+  const name = 'System admin reverses an approved receipt with a reason'
+  const { data, error } = await changeReceipt(admin, receipt1.id, {
+    status: 'reversed',
+    review_reason: 'RLS attack test: reversal check',
+  })
+  const { data: log } = await owner.client
+    .from('receipt_status_log')
+    .select('changed_by, reason')
+    .eq('receipt_id', receipt1.id)
+    .eq('to_status', 'reversed')
+  if (error || data.length !== 1 || data[0].status !== 'reversed') {
+    record(name, false, `Could not reverse: ${error?.message ?? 'no row updated'}`)
+  } else if (!log?.some((row) => row.changed_by === admin.userId && row.reason)) {
+    record(name, false, 'Reversed, but the status log has no row with who and why.')
+  } else {
+    record(name, true, 'Reversed; the status log recorded who, when and why.')
+  }
+}
+
+{
+  const { data, error } = await changeReceipt(site, receipt3.id, { status: 'discarded' })
+  record(
+    'Site manager 1 discards their own draft',
+    !error && data.length === 1 && data[0].status === 'discarded',
+    error ? `Error: ${error.message}` : 'Discarded - kept for the record, never counted.',
+  )
+}
+
+await finishLeftoverTestReceipts()
+await site2.client.auth.signOut()
+await admin.client.auth.signOut()
 
 await site.client.auth.signOut()
 

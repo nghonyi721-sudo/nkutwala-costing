@@ -1,0 +1,78 @@
+.frame {
+  position: relative;
+  display: block;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  border: 0;
+  border-radius: var(--radius-card);
+  background: var(--fill);
+  cursor: zoom-in;
+}
+
+.frame:focus-visible {
+  outline: 2px solid var(--tint);
+  outline-offset: 2px;
+}
+
+.image {
+  display: block;
+  width: 100%;
+}
+
+/* The main photo: whole slip visible, never taller than most of the screen */
+.large .image {
+  height: min(60svh, 460px);
+  object-fit: contain;
+}
+
+/* While typing in the details: the total stays readable, the fields stay
+   on screen */
+.medium .image {
+  height: min(34svh, 290px);
+  object-fit: contain;
+}
+
+/* Side-by-side comparisons: same-size tiles */
+.thumb {
+  border-radius: 10px;
+}
+
+.thumb .image {
+  aspect-ratio: 3 / 4;
+  object-fit: cover;
+}
+
+.zoom {
+  position: absolute;
+  right: 10px;
+  bottom: 10px;
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: rgb(0 0 0 / 0.55);
+  color: #fff;
+}
+
+.placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: var(--label-2);
+  font-size: var(--text-subhead);
+  cursor: default;
+}
+
+.placeholder.large {
+  height: min(40svh, 300px);
+}
+
+.placeholder.thumb {
+  aspect-ratio: 3 / 4;
+  font-size: var(--text-footnote);
+}

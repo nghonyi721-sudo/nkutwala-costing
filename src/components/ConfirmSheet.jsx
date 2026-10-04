@@ -9,8 +9,20 @@ import s from './ConfirmSheet.module.css'
 //   busy:        the action shows the activity indicator; nothing else
 //                can be tapped
 // onConfirm does the work; the parent closes the sheet when it's done.
-function ConfirmSheet({ title, message, actionLabel, destructive = false, busy = false, onConfirm, onCancel }) {
+//   actions: for more than one choice, [{ label, onClick, destructive, busy }]
+//            in place of actionLabel/onConfirm/destructive
+function ConfirmSheet({
+  title,
+  message,
+  actionLabel,
+  destructive = false,
+  busy = false,
+  onConfirm,
+  onCancel,
+  actions,
+}) {
   const { closing, close } = useOverlay(onCancel)
+  const choices = actions ?? [{ label: actionLabel, onClick: onConfirm, destructive, busy }]
 
   return createPortal(
     <div
@@ -25,16 +37,19 @@ function ConfirmSheet({ title, message, actionLabel, destructive = false, busy =
             <p className={s.title}>{title}</p>
             {message && <p className={s.message}>{message}</p>}
           </div>
-          <button
-            type="button"
-            className={destructive ? `${s.action} ${s.destructive}` : s.action}
-            disabled={busy}
-            aria-busy={busy || undefined}
-            onClick={onConfirm}
-          >
-            {busy && <Spinner size={18} />}
-            {actionLabel}
-          </button>
+          {choices.map((choice) => (
+            <button
+              key={choice.label}
+              type="button"
+              className={choice.destructive ? `${s.action} ${s.destructive}` : s.action}
+              disabled={busy}
+              aria-busy={choice.busy || undefined}
+              onClick={choice.onClick}
+            >
+              {choice.busy && <Spinner size={18} />}
+              {choice.label}
+            </button>
+          ))}
         </div>
         <button type="button" className={s.cancel} disabled={busy} onClick={close} autoFocus>
           Cancel

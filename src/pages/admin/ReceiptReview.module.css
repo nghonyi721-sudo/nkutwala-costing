@@ -1,0 +1,99 @@
+/* Receipts list: amount above the status, on the right of each row */
+.trail {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+}
+
+/* The project, on its own line under date and person */
+.line {
+  display: block;
+}
+
+/* Approver warnings: one panel, one line each */
+.warning {
+  display: block;
+}
+
+.warning + .warning {
+  margin-top: 6px;
+}
+
+.trailAmount {
+  color: var(--label);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Review: photo first on phones; photo beside the details on wider screens */
+.photoColumn {
+  margin: 20px var(--gutter) 0;
+}
+
+@media (min-width: 700px) {
+  .layout {
+    display: grid;
+    grid-template-columns: minmax(0, 5fr) minmax(0, 6fr);
+    align-items: start;
+  }
+
+  .photoColumn {
+    position: sticky;
+    top: calc(var(--nav) + env(safe-area-inset-top) + 12px);
+    margin-right: 0;
+  }
+}
+
+/* Possible duplicate: the two receipts side by side */
+.compare {
+  padding: 12px var(--gutter) 16px;
+}
+
+.compare + .compare {
+  border-top: 0.5px solid var(--separator);
+}
+
+.compareReason {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 10px;
+  color: var(--destructive);
+  font-size: var(--text-subhead);
+  font-weight: 600;
+}
+
+.compareGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.compareSide {
+  min-width: 0;
+  margin: 0;
+}
+
+.compareSide figcaption {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  margin-top: 8px;
+  font-size: var(--text-footnote);
+  color: var(--label-2);
+  overflow-wrap: anywhere;
+}
+
+.compareSide strong {
+  color: var(--label);
+  font-size: var(--text-subhead);
+  font-weight: 600;
+}
+
+.compareSide :global(.num) {
+  color: var(--label);
+  font-size: var(--text-subhead);
+  font-weight: 600;
+}

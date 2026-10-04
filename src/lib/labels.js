@@ -58,6 +58,49 @@ export const REPORT_STATUS_LABELS = {
   submitted: 'Submitted',
 }
 
+export const RECEIPT_CATEGORY_LABELS = {
+  fuel: 'Fuel',
+  materials: 'Materials',
+  plant_hire: 'Plant hire',
+  consumables: 'Consumables',
+  food: 'Food',
+  other: 'Other',
+}
+
+// A draft is a receipt that never reached the office (e.g. the signal
+// dropped), so it's called "Not sent" and shown in red.
+export const RECEIPT_STATUS_LABELS = {
+  draft: 'Not sent',
+  submitted: 'Pending',
+  approved: 'Approved',
+  rejected: 'Rejected',
+  reversed: 'Reversed',
+  discarded: 'Discarded',
+}
+
+export const RECEIPT_STATUS_TONES = {
+  draft: 'red',
+  submitted: 'grey',
+  approved: 'blue',
+  rejected: 'red',
+  reversed: 'red',
+  discarded: 'grey',
+}
+
+// Whole days from one "YYYY-MM-DD" date to another.
+export function daysBetween(fromDate, toDate) {
+  const toDay = (isoDate) => {
+    const [year, month, day] = isoDate.split('-').map(Number)
+    return Date.UTC(year, month - 1, day) / 86400000
+  }
+  return toDay(toDate) - toDay(fromDate)
+}
+
+// A database timestamp as this device's "YYYY-MM-DD" calendar date.
+export function localDateOf(timestamp) {
+  return new Date(timestamp).toLocaleDateString('en-CA')
+}
+
 // "07:30:00" -> "07:30"
 export function formatTime(time) {
   return time ? time.slice(0, 5) : '-'
