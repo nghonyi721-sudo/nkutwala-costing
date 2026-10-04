@@ -1,0 +1,772 @@
+/* TEMPORARY - Direction B · Field Kit.
+   A rugged tool for gloved thumbs: Barlow (road-signage heritage), chunky
+   12px-rounded controls, bold line icons, a progress strip, sections that
+   fold into one-line summaries, actions always at the bottom. */
+
+.root {
+  --canvas: #eceef2;
+  --surface: #fff;
+  --ink: #0f1216;
+  --ink-2: #444b55; /* 8.9:1 on white */
+  --line: #d3d8df; /* card edges (decorative) */
+  --edge: #8a919c; /* control borders: 3.3:1, visible in sunlight */
+  --fill: #e7eaef; /* stepper buttons, chips */
+  --blue: #1f4fbf;
+  --blue-dk: #173c93;
+  --blue-tint: #e5ebf8;
+  --red: #dd1f26;
+  --red-ink: #b0181e;
+  --display: 'Barlow Condensed', 'Arial Narrow', sans-serif;
+  --body: 'Barlow', -apple-system, 'Segoe UI', sans-serif;
+  --r: 12px;
+
+  min-height: 100svh;
+  background: var(--canvas);
+  color: var(--ink);
+  font-family: var(--body);
+  font-size: 17px;
+  line-height: 1.4;
+}
+
+.num {
+  font-variant-numeric: tabular-nums;
+}
+
+/* ------------------------------------------------- top bar + progress */
+
+.topBar {
+  position: sticky;
+  top: 0;
+  z-index: 6;
+  background: #fff;
+  border-bottom: 1px solid var(--line);
+}
+
+.topRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 60px;
+  padding: 0 16px;
+}
+
+.logo {
+  display: block;
+  width: 112px;
+  height: auto;
+}
+
+.progressCount {
+  font-family: var(--display);
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ink-2);
+}
+
+.progressCount strong {
+  color: var(--blue);
+  font-weight: 700;
+}
+
+.progress {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 4px;
+  padding: 0 16px 12px;
+}
+
+.progress span {
+  height: 6px;
+  border-radius: 3px;
+  background: #d9dde4;
+}
+
+.progress .stepDone {
+  background: var(--blue);
+}
+
+/* --------------------------------------------------------------- hero */
+
+.hero {
+  padding: 22px 16px 6px;
+}
+
+.kicker {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+  font-family: var(--display);
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--blue);
+}
+
+.chip {
+  padding: 2px 10px;
+  border-radius: 999px;
+  background: #dfe3e9;
+  color: var(--ink);
+  font-size: 14px;
+  letter-spacing: 0.06em;
+}
+
+.chipBlue {
+  composes: chip;
+  background: var(--blue);
+  color: #fff;
+}
+
+.heroTitle {
+  margin: 6px 0 2px;
+  font-family: var(--display);
+  font-size: 36px;
+  font-weight: 700;
+  line-height: 1.02;
+  letter-spacing: 0.01em;
+  text-transform: uppercase;
+}
+
+.heroMeta {
+  margin: 0;
+  color: var(--ink-2);
+}
+
+.lockedBanner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 14px 0 0;
+  padding: 12px 14px;
+  border-radius: var(--r);
+  background: var(--blue-tint);
+  color: var(--blue-dk);
+  font-weight: 600;
+}
+
+.figures {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  padding: 16px 12px 4px;
+}
+
+.figure {
+  padding: 12px 14px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+}
+
+.figureLabel {
+  display: block;
+  font-family: var(--display);
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-2);
+}
+
+.figureValue {
+  font-family: var(--display);
+  font-size: 46px;
+  font-weight: 700;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.figureUnit {
+  margin-left: 4px;
+  font-family: var(--display);
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--ink-2);
+}
+
+/* ------------------------------------------------------ section cards */
+
+.sections {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 10px 12px 24px;
+}
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+}
+
+.cardOpen {
+  composes: card;
+  border-color: var(--edge);
+}
+
+.cardHead {
+  display: grid;
+  grid-template-columns: 44px 1fr auto;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 76px;
+  padding: 12px 14px;
+  background: none;
+  border: 0;
+  border-radius: var(--r);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.iconTile {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 10px;
+  background: var(--blue-tint);
+  color: var(--blue);
+}
+
+.cardText {
+  min-width: 0;
+}
+
+.cardTitle {
+  display: block;
+  font-family: var(--display);
+  font-size: 21px;
+  font-weight: 700;
+  line-height: 1.1;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.cardSummary {
+  display: block;
+  overflow: hidden;
+  font-size: 15px;
+  color: var(--ink-2);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.stateDone {
+  color: var(--blue);
+}
+
+.stateTodo {
+  color: #9aa1ab;
+}
+
+.cardBody {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px 14px 16px;
+  border-top: 1px solid var(--line);
+}
+
+.fieldset {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+/* -------------------------------------------------------------- controls */
+
+.label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--display);
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-2);
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.input,
+.textarea {
+  width: 100%;
+  min-height: 58px;
+  padding: 0 14px;
+  background: #fff;
+  border: 2px solid var(--edge);
+  border-radius: 10px;
+  color: var(--ink);
+  font: inherit;
+  font-size: 19px;
+  font-weight: 500;
+}
+
+.textarea {
+  min-height: 140px;
+  padding: 12px 14px;
+  font-size: 17px;
+  font-weight: 400;
+  resize: vertical;
+}
+
+.input:hover,
+.textarea:hover {
+  border-color: var(--ink-2);
+}
+
+.input:focus,
+.textarea:focus {
+  outline: 3px solid #a9bdeb;
+  outline-offset: 0;
+  border-color: var(--blue);
+}
+
+.twoUp {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  min-height: 64px;
+  padding: 8px 16px;
+  background: #fff;
+  border: 2px solid var(--line);
+  border-radius: 10px;
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.option[aria-pressed='true'] {
+  background: var(--blue);
+  border-color: var(--blue);
+  color: #fff;
+}
+
+.optionName {
+  display: block;
+  font-weight: 600;
+}
+
+.optionCode {
+  display: block;
+  font-size: 14px;
+  opacity: 0.85;
+  font-variant-numeric: tabular-nums;
+}
+
+.stepper {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.stepControls {
+  display: grid;
+  grid-template-columns: 64px 1fr 64px;
+  align-items: center;
+  gap: 8px;
+}
+
+.stepBtn {
+  display: grid;
+  place-items: center;
+  height: 60px;
+  padding: 0;
+  background: var(--fill);
+  border: 0;
+  border-radius: 10px;
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.stepBtn:active {
+  background: #d6dbe3;
+}
+
+.stepBtn:disabled {
+  color: #a9afb8;
+  cursor: not-allowed;
+}
+
+.stepValue {
+  font-family: var(--display);
+  font-size: 34px;
+  font-weight: 700;
+  line-height: 1;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.stepUnit {
+  margin-left: 3px;
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--ink-2);
+}
+
+/* Person / machine row */
+.person {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--line);
+}
+
+.personHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.personName {
+  display: block;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.personRole {
+  display: block;
+  font-size: 14px;
+  color: var(--ink-2);
+}
+
+.iconBtn {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 48px;
+  height: 48px;
+  padding: 0;
+  background: none;
+  border: 0;
+  border-radius: 10px;
+  color: var(--ink-2);
+  cursor: pointer;
+}
+
+.iconBtn:active {
+  background: var(--fill);
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-height: 58px;
+  padding: 0 18px;
+  border: 2px solid transparent;
+  border-radius: var(--r);
+  font-family: var(--display);
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.btnPrimary {
+  composes: btn;
+  background: var(--blue);
+  border-color: var(--blue);
+  color: #fff;
+}
+
+.btnPrimary:active {
+  background: var(--blue-dk);
+  border-color: var(--blue-dk);
+}
+
+.btnOutline {
+  composes: btn;
+  background: #fff;
+  border-color: var(--ink);
+  color: var(--ink);
+}
+
+.btnOutline:active {
+  background: var(--fill);
+}
+
+.btnAdd {
+  composes: btn;
+  width: 100%;
+  background: #fff;
+  border-color: var(--blue);
+  color: var(--blue);
+}
+
+.picker {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  border-radius: var(--r);
+  background: var(--canvas);
+}
+
+.pickTile {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 60px;
+  padding: 8px 14px;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.pickTile svg {
+  flex: none;
+  color: var(--blue);
+}
+
+.toggles {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.toggle {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 104px;
+  padding: 12px 14px;
+  background: #fff;
+  border: 2px solid var(--line);
+  border-radius: var(--r);
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.toggleTop {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+.toggleState {
+  font-family: var(--display);
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+}
+
+.toggleLabel {
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.toggle[aria-pressed='true'] {
+  background: var(--blue);
+  border-color: var(--blue);
+  color: #fff;
+}
+
+/* A "yes" that is a warning (near miss) shows in red */
+.toggleAlert[aria-pressed='true'] {
+  background: var(--red);
+  border-color: var(--red);
+}
+
+/* Locked (submitted) report: controls fade so they don't look tappable */
+.fieldset:disabled button,
+.fieldset:disabled input,
+.fieldset:disabled textarea {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.cardHead:focus-visible,
+.option:focus-visible,
+.stepBtn:focus-visible,
+.iconBtn:focus-visible,
+.btn:focus-visible,
+.pickTile:focus-visible,
+.toggle:focus-visible,
+.eyeBtn:focus-visible {
+  outline: 3px solid #a9bdeb;
+  outline-offset: 2px;
+}
+
+/* ---------------------------------------------------------- action bar */
+
+.actionBar {
+  position: sticky;
+  bottom: 0;
+  z-index: 6;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 12px calc(12px + env(safe-area-inset-bottom));
+  background: #fff;
+  border-top: 1px solid var(--line);
+}
+
+.message {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-weight: 600;
+  color: var(--blue-dk);
+}
+
+.warning {
+  composes: message;
+  color: var(--red-ink);
+}
+
+.confirmText {
+  margin: 0;
+}
+
+.actions {
+  display: grid;
+  grid-template-columns: 1fr 1.6fr;
+  gap: 10px;
+}
+
+/* --------------------------------------------------------------- login */
+
+.loginRoot {
+  display: flex;
+  flex-direction: column;
+  background: #fff;
+}
+
+.loginTop {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 40px 20px 28px;
+  text-align: center;
+}
+
+.loginLogo {
+  composes: logo;
+  width: 120px;
+  margin-bottom: 14px;
+}
+
+.loginKicker {
+  margin: 0;
+  font-family: var(--display);
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--blue);
+}
+
+.loginTitle {
+  margin: 0;
+  font-family: var(--display);
+  font-size: 44px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.loginLead {
+  margin: 0;
+  max-width: 300px;
+  color: var(--ink-2);
+}
+
+.loginFields {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 0 16px 24px;
+}
+
+.iconField {
+  position: relative;
+}
+
+.iconField .input {
+  padding-left: 50px;
+}
+
+.fieldIcon {
+  position: absolute;
+  left: 16px;
+  bottom: 17px;
+  color: var(--ink-2);
+  pointer-events: none;
+}
+
+.eyeBtn {
+  composes: iconBtn;
+  position: absolute;
+  right: 5px;
+  bottom: 5px;
+}
+
+.passwordInput {
+  padding-right: 56px;
+}
+
+.loginBottom {
+  position: sticky;
+  bottom: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 16px calc(16px + env(safe-area-inset-bottom));
+  background: #fff;
+}
+
+.loginButton {
+  composes: btnPrimary;
+  width: 100%;
+  min-height: 64px;
+  font-size: 22px;
+}
+
+.loginNote {
+  margin: 0;
+  font-size: 15px;
+  color: var(--ink-2);
+  text-align: center;
+}
