@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { supabase, isSupabaseConfigured } from './lib/supabaseClient'
 import LoginPage from './pages/LoginPage'
 import HomePage from './pages/HomePage'
+import BrandBackdrop from './components/BrandBackdrop'
 import Logo from './components/Logo'
 import Notice from './components/Notice'
 import Skeleton from './components/Skeleton'
@@ -29,6 +30,7 @@ function App() {
   if (!isSupabaseConfigured) {
     return (
       <div className={s.stage}>
+        <BrandBackdrop />
         <div className={s.card}>
           <Logo width={120} />
         </div>
@@ -40,6 +42,7 @@ function App() {
   if (session === undefined) {
     return (
       <div className={s.stage}>
+        <BrandBackdrop />
         <div className={s.card}>
           <Logo width={120} />
         </div>

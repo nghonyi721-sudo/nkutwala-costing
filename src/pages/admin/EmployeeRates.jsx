@@ -3,6 +3,7 @@ import { supabase } from '../../lib/supabaseClient'
 import { formatDate, formatRand, todayLocal } from '../../lib/labels'
 import Button from '../../components/Button'
 import { CalendarBlankIcon, CoinsIcon } from '../../components/icons'
+import HeroCard from '../../components/HeroCard'
 import Notice from '../../components/Notice'
 import { FieldRow, Row } from '../../components/Row'
 import Section from '../../components/Section'
@@ -134,24 +135,28 @@ function EmployeeRates({ employeeId }) {
 
   return (
     <>
-      <Section title="Hourly rate">
-        {currentRate ? (
-          <Row
-            icon={CoinsIcon}
-            title="Current rate"
-            subtitle={`Since ${formatDate(currentRate.effective_from)}`}
-            mono
-            trailing={
-              <span className={s.bigRate}>
-                {formatRand(currentRate.hourly_rate)}
-                <span className={s.perHour}> /h</span>
-              </span>
-            }
-          />
-        ) : (
-          rates && <Row icon={CoinsIcon} title="No current rate" subtitle="Add one below." />
-        )}
-      </Section>
+      {/* Money is shown on black - the logo's black. Owners only. */}
+      {currentRate ? (
+        <HeroCard
+          tone="black"
+          eyebrow="Hourly rate"
+          figures={[
+            {
+              label: 'Current',
+              value: formatRand(currentRate.hourly_rate),
+              unit: '/h',
+              main: true,
+            },
+            { label: 'Since', value: formatDate(currentRate.effective_from) },
+          ]}
+        />
+      ) : (
+        rates && (
+          <Section title="Hourly rate">
+            <Row icon={CoinsIcon} title="No current rate" subtitle="Add one below." />
+          </Section>
+        )
+      )}
 
       <form onSubmit={handleAdd}>
         <Section
@@ -182,7 +187,7 @@ function EmployeeRates({ employeeId }) {
         </Section>
         {addError && <Notice tone="error">{addError}</Notice>}
         <Section plain>
-          <Button type="submit" disabled={adding}>
+          <Button type="submit" busy={adding}>
             {adding ? 'Adding…' : 'Add rate'}
           </Button>
         </Section>
@@ -225,7 +230,7 @@ function EmployeeRates({ employeeId }) {
           doneLabel="Cancel"
           onClose={() => setVoidingId(null)}
           footer={
-            <Button variant="danger" disabled={voiding} onClick={() => handleVoid(voidingRate.id)}>
+            <Button variant="danger" busy={voiding} onClick={() => handleVoid(voidingRate.id)}>
               {voiding ? 'Voiding…' : 'Void rate'}
             </Button>
           }

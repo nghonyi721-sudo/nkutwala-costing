@@ -18,6 +18,7 @@ import {
   PlusIcon,
   WarningIcon,
 } from '../../components/icons'
+import HeroCard from '../../components/HeroCard'
 import Notice from '../../components/Notice'
 import Page from '../../components/Page'
 import ReportSummary from '../../components/ReportSummary'
@@ -363,13 +364,13 @@ function ReportForm({ user, reportId, onDone }) {
           <Button variant="secondary" onClick={() => setConfirming(false)}>
             Go back
           </Button>
-          <Button disabled={busy} onClick={submit}>
+          <Button busy={busy} onClick={submit}>
             {busy ? 'Submitting…' : 'Yes, submit'}
           </Button>
         </>
       ) : (
         <>
-          <Button variant="secondary" disabled={busy} onClick={save}>
+          <Button variant="secondary" busy={busy} onClick={save}>
             {busy ? 'Saving…' : 'Save draft'}
           </Button>
           <Button
@@ -394,6 +395,18 @@ function ReportForm({ user, reportId, onDone }) {
       backLabel="My reports"
       footer={footer}
     >
+      {/* Today at a glance - updates live as hours change */}
+      <HeroCard
+        eyebrow={dateText}
+        badge={id ? 'Draft' : 'New'}
+        title={projectName ?? 'Choose a project'}
+        figures={[
+          { label: 'Total man-hours', value: totalHours(crew).toFixed(1), unit: 'h', main: true },
+          { label: 'Crew', value: crew.length },
+          { label: 'Plant hours', value: totalHours(equipmentLines).toFixed(1), unit: 'h' },
+        ]}
+      />
+
       <Section title="Project">
         {projectChoices.length === 0 ? (
           <Row icon={MapPinIcon} title="No active projects" subtitle="Ask the owner to add one." />

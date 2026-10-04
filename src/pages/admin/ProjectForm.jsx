@@ -56,7 +56,7 @@ function ProjectForm({ project, onDone }) {
           <Button variant="secondary" onClick={() => onDone(false)}>
             Cancel
           </Button>
-          <Button type="submit" disabled={busy}>
+          <Button type="submit" busy={busy}>
             {busy ? 'Saving…' : 'Save'}
           </Button>
         </ActionBar>

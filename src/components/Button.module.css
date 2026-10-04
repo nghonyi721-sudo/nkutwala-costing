@@ -24,7 +24,23 @@
 
 .button:disabled {
   opacity: 0.5;
-  cursor: wait;
+  cursor: not-allowed;
+}
+
+/* Busy: keep full colour, show the turning cog */
+.button[aria-busy='true'] {
+  opacity: 1;
+  cursor: progress;
+}
+
+.spin {
+  animation: spin 1.1s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .primary {
@@ -51,7 +67,7 @@
 }
 
 .danger:active {
-  background: var(--red-ink);
+  background: var(--red-dk);
 }
 
 /* Text-only button, e.g. "Add" at the top of a list */

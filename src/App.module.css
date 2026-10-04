@@ -1,19 +1,26 @@
-/* Shown before login is known (loading) or when Supabase isn't set up. */
+/* Shown before login is known (loading) or when Supabase isn't set up:
+   the logo on a white card over the brand backdrop. */
 .stage {
+  position: relative;
   display: flex;
   flex-direction: column;
   justify-content: center;
   gap: var(--space-5);
-  max-width: 560px;
   min-height: 100svh;
-  margin: 0 auto;
   padding: var(--space-6) 0;
+}
+
+.stage > :not(:first-child) {
+  position: relative;
+  width: calc(100% - 2 * var(--gutter));
+  max-width: 528px;
+  margin-right: auto;
+  margin-left: auto;
 }
 
 .card {
   display: grid;
   place-items: center;
-  margin: 0 var(--gutter);
   padding: var(--space-6) var(--space-5);
   background: var(--surface);
   border-radius: 20px;

@@ -9,6 +9,7 @@ import {
   UserCircleIcon,
   UsersThreeIcon,
 } from './icons'
+import BrandMark from './BrandMark'
 import Logo from './Logo'
 import { Row } from './Row'
 import Sheet, { SheetGroup } from './Sheet'
@@ -74,6 +75,7 @@ function AppShell({ profile, screen, onNavigate, onLogout, children }) {
                   onClick={() => onNavigate(key)}
                 >
                   {label}
+                  {screen === key && <BrandMark size="sm" className={s.topTabMark} />}
                 </button>
               ))}
             </nav>
@@ -86,7 +88,8 @@ function AppShell({ profile, screen, onNavigate, onLogout, children }) {
             disabled={!profile}
             onClick={() => setAccountOpen(true)}
           >
-            {profile ? initials(profile.full_name) : ''}
+            {/* A black dot inside a blue ring - the dot in the logo's cog */}
+            <span className={s.accountDot}>{profile ? initials(profile.full_name) : ''}</span>
           </button>
         </div>
       </header>
@@ -105,6 +108,7 @@ function AppShell({ profile, screen, onNavigate, onLogout, children }) {
                 aria-current={current ? 'page' : undefined}
                 onClick={() => onNavigate(key)}
               >
+                {current && <BrandMark size="sm" className={s.tabMark} />}
                 <Icon size={26} weight={current ? 'fill' : 'regular'} aria-hidden="true" />
                 <span>{label}</span>
               </button>

@@ -1,14 +1,24 @@
 /* Nkutwala design tokens - direction "C · Native".
    The only place colours, type, shape, spacing and motion are defined.
-   Components use these through var(--name); nothing else hard-codes them. */
+   Components use these through var(--name); nothing else hard-codes them.
+
+   Brand colours are the logo's own (measured from public/logo.jpeg):
+     blue  #001AFF  - act, selected, live/done        (white on it: 8.1:1)
+     red   #C20116  - needs attention, and the brand
+                      diagonal only - keep it rare     (on white: 6.4:1)
+     black #000000  - brand surfaces and money         (white on it: 21:1)
+   Grey is everything neutral. */
 :root {
-  /* Brand (fixed) */
-  --blue: #1f4fbf;
-  --blue-dk: #173e98; /* pressed blue, blue text on tints */
-  --blue-tint: #e8eefa;
-  --red: #dd1f26;
-  --red-ink: #b3171d; /* red text on white or tints (passes contrast) */
-  --red-tint: #fcebec;
+  /* Brand - the logo's colours */
+  --blue: #001aff;
+  --blue-dk: #0013b8; /* pressed blue, blue text on tints */
+  --blue-tint: #e8ebff; /* logo blue on it: 6.8:1 */
+  --red: #c20116;
+  --red-dk: #9a0011; /* pressed red */
+  --red-ink: #c20116; /* red text on white (6.4:1) or tints (5.5:1) */
+  --red-tint: #fbe8ea;
+  --black: #000000;
+  --on-brand-2: rgb(255 255 255 / 0.8); /* secondary text on blue/black: 5.2:1+ */
 
   /* Neutrals */
   --canvas: #f2f3f5; /* page background */

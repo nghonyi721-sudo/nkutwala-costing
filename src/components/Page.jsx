@@ -1,3 +1,4 @@
+import BrandMark from './BrandMark'
 import { CaretLeftIcon } from './icons'
 import { usePushedScreen } from './shellContext'
 import s from './Page.module.css'
@@ -23,6 +24,7 @@ function Page({ title, subtitle, onBack, backLabel = 'Back', action, footer, onS
         )}
         <header className={onBack ? `${s.header} ${s.headerAfterBack}` : s.header}>
           <div className={s.titles}>
+            <BrandMark className={s.mark} />
             <h1 className={s.title}>{title}</h1>
             {subtitle && <p className={s.subtitle}>{subtitle}</p>}
           </div>

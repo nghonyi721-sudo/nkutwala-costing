@@ -1,0 +1,24 @@
+.backdrop {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  background: var(--blue);
+  pointer-events: none;
+}
+
+/* The N's red stroke, top-left to bottom-right */
+.stroke {
+  position: absolute;
+  inset: 0;
+  background: var(--red);
+  clip-path: polygon(10% 0, 27% 0, 92% 100%, 75% 100%);
+}
+
+/* The logo's cog, faint */
+.cog {
+  position: absolute;
+  bottom: 22%;
+  left: -110px;
+  color: #fff;
+  opacity: 0.09;
+}

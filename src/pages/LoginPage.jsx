@@ -1,5 +1,7 @@
 import { useState } from 'react'
 import { supabase } from '../lib/supabaseClient'
+import BrandBackdrop from '../components/BrandBackdrop'
+import BrandMark from '../components/BrandMark'
 import Button from '../components/Button'
 import Logo from '../components/Logo'
 import s from './LoginPage.module.css'
@@ -35,10 +37,13 @@ function LoginPage() {
 
   return (
     <form className={s.screen} onSubmit={handleSubmit}>
+      <BrandBackdrop />
+
       {/* The logo needs white, so it sits on a white card. */}
       <div className={s.stage}>
         <div className={s.card}>
           <Logo width={120} />
+          <BrandMark className={s.cardMark} />
           <p className={s.product}>Site Costing</p>
           <p className={s.tagline}>Daily activity reports and job costing</p>
         </div>
@@ -85,7 +90,7 @@ function LoginPage() {
           </p>
         )}
 
-        <Button type="submit" disabled={busy}>
+        <Button type="submit" busy={busy}>
           {busy ? 'Logging in…' : 'Log in'}
         </Button>
         <p className={s.note}>Forgot your password? Ask the office.</p>

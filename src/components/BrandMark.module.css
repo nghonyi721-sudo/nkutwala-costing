@@ -1,0 +1,31 @@
+.mark {
+  display: inline-flex;
+  flex: none;
+}
+
+.md {
+  --skew: 6px;
+  width: 38px;
+  height: 6px;
+}
+
+.sm {
+  --skew: 4px;
+  width: 28px;
+  height: 4px;
+}
+
+/* Blue part with a slanted right edge */
+.blue {
+  flex: 0 0 62%;
+  background: var(--blue);
+  clip-path: polygon(0 0, 100% 0, calc(100% - var(--skew)) 100%, 0 100%);
+}
+
+/* Red part tucked along the same slant, with a hairline gap like the logo */
+.red {
+  flex: 1;
+  margin-left: calc(2px - var(--skew));
+  background: var(--red);
+  clip-path: polygon(var(--skew) 0, 100% 0, 100% 100%, 0 100%);
+}

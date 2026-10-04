@@ -47,6 +47,12 @@
   min-width: 0;
 }
 
+/* The N-split mark above every page title */
+.mark {
+  display: flex;
+  margin-bottom: 10px;
+}
+
 .title {
   font-size: var(--text-large);
   font-weight: 700;

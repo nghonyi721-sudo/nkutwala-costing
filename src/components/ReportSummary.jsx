@@ -1,5 +1,6 @@
-import { formatDate, formatDateTime, formatTime, hoursBetween } from '../lib/labels'
+import { REPORT_STATUS_LABELS, formatDate, formatDateTime, formatTime, hoursBetween } from '../lib/labels'
 import { totalHours } from '../lib/reports'
+import HeroCard from './HeroCard'
 import {
   CalendarBlankIcon,
   CheckCircleIcon,
@@ -38,6 +39,18 @@ function ReportSummary({ report }) {
 
   return (
     <>
+      <HeroCard
+        eyebrow={formatDate(report.report_date)}
+        badge={REPORT_STATUS_LABELS[report.status]}
+        figures={[
+          { label: 'Total man-hours', value: totalHours(crew).toFixed(1), unit: 'h', main: true },
+          { label: 'Crew', value: crew.length },
+          { label: 'Plant hours', value: totalHours(equipment).toFixed(1), unit: 'h' },
+          { label: 'Fuel', value: Number(report.fuel_litres).toFixed(0), unit: 'L' },
+          { label: 'Rain', value: report.rain_percent, unit: '%' },
+        ]}
+      />
+
       {report.reopened_at && (
         <Notice tone="info">
           Reopened {formatDateTime(report.reopened_at)}

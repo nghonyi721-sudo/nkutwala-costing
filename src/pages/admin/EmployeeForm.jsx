@@ -64,7 +64,7 @@ function EmployeeForm({ employee, onDone }) {
           </Button>
           {/* Linked to the details form below by its id, so the rates
               section can have its own separate form. */}
-          <Button type="submit" form="employee-details" disabled={busy}>
+          <Button type="submit" form="employee-details" busy={busy}>
             {busy ? 'Saving…' : employee ? 'Save details' : 'Save'}
           </Button>
         </ActionBar>

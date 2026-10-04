@@ -111,7 +111,7 @@ function ReportView({ reportId, onBack }) {
           doneLabel="Cancel"
           onClose={() => setReopening(false)}
           footer={
-            <Button variant="danger" disabled={busy} onClick={reopen}>
+            <Button variant="danger" busy={busy} onClick={reopen}>
               {busy ? 'Reopening…' : 'Reopen report'}
             </Button>
           }

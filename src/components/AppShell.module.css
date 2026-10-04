@@ -28,6 +28,7 @@
 }
 
 .topTab {
+  position: relative;
   min-height: var(--tap);
   padding: 0 14px;
   background: none;
@@ -44,11 +45,19 @@
 }
 
 .topTab[aria-current='page'] {
-  background: var(--blue-tint);
-  color: var(--blue-dk);
+  color: var(--ink);
 }
 
-/* Round account button with the user's initials */
+/* The N-split mark under the current tab */
+.topTabMark {
+  position: absolute;
+  bottom: 4px;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+/* Account button: a black dot inside a blue ring, like the dot in the
+   logo's cog, with the user's initials */
 .account {
   display: grid;
   place-items: center;
@@ -56,18 +65,28 @@
   width: var(--tap);
   height: var(--tap);
   padding: 0;
-  background: var(--fill);
+  background: var(--blue);
   border: 0;
   border-radius: 50%;
-  color: var(--ink);
-  font-size: var(--text-small);
-  font-weight: 600;
-  letter-spacing: 0.02em;
   cursor: pointer;
 }
 
+.accountDot {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border: 2px solid var(--surface);
+  border-radius: 50%;
+  background: var(--black);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+}
+
 .account:active {
-  background: var(--fill-pressed);
+  background: var(--blue-dk);
 }
 
 .topTab:focus-visible,
@@ -115,8 +134,20 @@
   cursor: pointer;
 }
 
+.tab {
+  position: relative;
+}
+
 .tab[aria-current='page'] {
   color: var(--blue);
+}
+
+/* The N-split mark along the top of the current tab */
+.tabMark {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
 }
 
 @media (min-width: 768px) {
