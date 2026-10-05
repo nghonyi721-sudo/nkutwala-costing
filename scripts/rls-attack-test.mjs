@@ -49,6 +49,7 @@ import {
 // The app's own export code (the same Excel files the app saves).
 import { buildProjectCost, fetchProjectCost } from '../src/lib/exports/projectCost.js'
 import { buildPayrollHours, fetchPayrollHours } from '../src/lib/exports/payrollHours.js'
+import { ALLOCATION_TITLE, PAY_ONLY_UNFILTERED, PAY_TITLE, exportLogFilters } from '../src/lib/exports/workbook.js'
 
 process.loadEnvFile(fileURLToPath(new URL('../.env', import.meta.url)))
 
@@ -2351,9 +2352,10 @@ function personValue(workbook, sheetName, personName, header) {
   })
   return value
 }
+const costProjectName = `${COST_PREFIX} ${RUN_TAG}`
 const exportMeta = {
   company: 'RLS test company',
-  projectName: `${COST_PREFIX} ${RUN_TAG}`,
+  projects: [{ id: costProjectId, name: costProjectName }],
   from: dashFrom,
   to: dashTo,
   generatedBy: 'RLS test',
@@ -2365,7 +2367,7 @@ const unratedName = `ZZ Costing Unrated ${RUN_TAG}`
 {
   const name = "Export 1 (the app's own file): Summary total exactly R2,600 = the dashboard's Spent; overtime columns"
   try {
-    const data = await fetchProjectCost(owner.client, { projectId: costProjectId, from: dashFrom, to: dashTo })
+    const data = await fetchProjectCost(owner.client, { projects: exportMeta.projects, from: dashFrom, to: dashTo })
     const { workbook, filename } = buildProjectCost(data, exportMeta)
     const summary = sheetTotal(workbook, 'Summary', 'Spent in period')
     const labour = sheetTotal(workbook, 'Labour', 'Cost (provisional)')
@@ -2373,7 +2375,7 @@ const unratedName = `ZZ Costing Unrated ${RUN_TAG}`
     const rate = personValue(workbook, 'Labour', ratedName, 'Rate (R/h)')
     const rateFrom = personValue(workbook, 'Labour', ratedName, 'Rate from')
     const dashSpent = Number(dashSummaryRows[0]?.spent)
-    const expectedName = `nkutwala_project-cost_${exportMeta.projectName.toLowerCase().replace(/[^a-z0-9]+/g, '-')}_${dashFrom}_${dashTo}.xlsx`
+    const expectedName = `nkutwala_project-cost_${costProjectName.toLowerCase().replace(/[^a-z0-9]+/g, '-')}_${dashFrom}_${dashTo}.xlsx`
     const problems = [
       summary.value === 2600 && summary.value === dashSpent ? null : `Summary total ${summary.value}, dashboard ${dashSpent}`,
       summary.formula?.startsWith('SUM(') && summary.numFmt === '"R" #,##0.00' ? null : `Total cell: ${JSON.stringify(summary)}`,
@@ -2404,12 +2406,12 @@ const unratedName = `ZZ Costing Unrated ${RUN_TAG}`
 {
   const name = "Export 2 (the app's own file): payroll lists the rated person at R1,100 gross incl. overtime; unpriced hours shown"
   try {
-    const data = await fetchPayrollHours(owner.client, { from: COST_DAY_1, to: COST_DAY_3 })
-    const { workbook } = buildPayrollHours(data, { ...exportMeta, from: COST_DAY_1, to: COST_DAY_3 })
+    const data = await fetchPayrollHours(owner.client, { projects: null, from: COST_DAY_1, to: COST_DAY_3 })
+    const { workbook } = buildPayrollHours(data, { ...exportMeta, projects: null, from: COST_DAY_1, to: COST_DAY_3 })
     const rated = data.people.find((person) => person.employee_id === ratedEmployeeId)
     const unrated = data.people.find((person) => person.employee_id === unratedEmployeeId)
     const sheets = workbook.worksheets.map((sheet) => sheet.name).join(', ')
-    const warning = workbook.getWorksheet('Payroll hours').getRow(7).getCell(1).value
+    const warning = workbook.getWorksheet('Payroll hours').getRow(1).getCell(1).value
     const problems = [
       rated?.included && Number(rated.hours) === 10 && Number(rated.gross) === 1100 && Number(rated.ot_pay) === 300
         ? null
@@ -2419,7 +2421,7 @@ const unratedName = `ZZ Costing Unrated ${RUN_TAG}`
       personValue(workbook, 'Payroll hours', ratedName, 'Overtime hours') === 2 ? null : 'Rated overtime hours not on the sheet',
       personValue(workbook, 'Payroll hours', unratedName, 'Unpriced hours (no rate on the day)') === 2 ? null : 'Unpriced hours not on the sheet',
       sheets === 'Payroll hours, Daily grid, Excluded' ? null : `Sheets: ${sheets}`,
-      String(warning).includes('NOT A PAYSLIP') && !String(warning).includes('OVERTIME') ? null : `Title: ${warning}`,
+      warning === PAY_TITLE && !String(warning).includes('OVERTIME') ? null : `Title: ${warning}`,
     ].filter(Boolean)
     record(name, problems.length === 0, problems.length ? problems.join('; ') : 'Rated: 10 h (2 h overtime), R1,100 gross. Unrated: 2 h unpriced, R0. Three sheets; "NOT A PAYSLIP" in the title, no "overtime not applied".')
   } catch (error) {
@@ -2461,15 +2463,25 @@ await attackInsert('Site manager logs an export as someone else', site.client, '
   covers('export_log')
 }
 
-// Site manager: every dashboard function, on data that includes THEIR OWN
-// reports and receipts - nothing at all may come back.
+// Site manager: every dashboard and export function, on data that includes
+// THEIR OWN reports and receipts - nothing at all may come back.
+const exportArgs = { p_project_ids: [costProjectId], p_from: dashFrom, p_to: dashTo }
+const allExportArgs = { p_project_ids: null, p_from: dashFrom, p_to: dashTo }
 for (const [fn, args, note] of [
-  ['export_cost_summary', drillArgs, ''],
-  ['export_cost_summary', { p_project_id: null, p_from: dashFrom, p_to: dashTo }, ' for all projects'],
-  ['export_labour', drillArgs, ''],
-  ['export_payroll', { p_from: dashFrom, p_to: dashTo }, ''],
-  ['export_daily_hours', drillArgs, ''],
-  ['export_daily_hours', { p_project_id: null, p_from: dashFrom, p_to: dashTo }, ' for all projects'],
+  ['export_cost_summary', exportArgs, ''],
+  ['export_cost_summary', allExportArgs, ' for all projects'],
+  ['export_labour', exportArgs, ''],
+  ['export_labour', allExportArgs, ' for all projects'],
+  ['export_payroll', exportArgs, ''],
+  ['export_payroll', allExportArgs, ' for all projects'],
+  ['export_daily_hours', exportArgs, ''],
+  ['export_daily_hours', allExportArgs, ' for all projects'],
+  ['export_receipts', exportArgs, ''],
+  ['export_receipts', allExportArgs, ' for all projects'],
+  ['export_weekly', exportArgs, ''],
+  ['export_weekly', allExportArgs, ' for all projects'],
+  ['export_period', { p_preset: 'project_to_date', p_project_ids: [costProjectId] }, ''],
+  ['export_period', { p_preset: 'this_month', p_project_ids: null }, ' for all projects'],
   ['drill_hours', { ...drillArgs, p_category: 'labour' }, ''],
   ['drill_hours', { ...drillArgs, p_category: 'owned_plant' }, ' for owned plant'],
   ['drill_hours', { p_project_id: null, p_from: dashFrom, p_to: dashTo, p_category: 'labour' }, ' for all projects'],
@@ -3015,8 +3027,8 @@ if (!pendingReportId) stop('the pending-hours checks need site manager 1\'s repo
 {
   const name = 'Export 2 before approval: the pending person is only on the Excluded sheet, with their 4 h'
   try {
-    const data = await fetchPayrollHours(owner.client, { from: PENDING_DAY, to: PENDING_DAY })
-    const { workbook } = buildPayrollHours(data, { ...exportMeta, from: PENDING_DAY, to: PENDING_DAY })
+    const data = await fetchPayrollHours(owner.client, { projects: null, from: PENDING_DAY, to: PENDING_DAY })
+    const { workbook } = buildPayrollHours(data, { ...exportMeta, projects: null, from: PENDING_DAY, to: PENDING_DAY })
     const row = data.people.find((person) => person.employee_id === pendingPerson.id)
     const onPayroll = personValue(workbook, 'Payroll hours', pendingName, 'Hours')
     const onExcluded = personValue(workbook, 'Excluded', pendingName, 'Hours')
@@ -3407,6 +3419,364 @@ await otReport(otProjectA, SUNDAY_2099, [{ employee_id: premiumPerson, hours: 5 
     record(name, false, `Error: ${error.message}`)
   }
   covers('pay_rules', 'public_holidays', 'labour_days')
+}
+
+// =============================================================================
+// Exports: the project filter
+// =============================================================================
+// 8A's split person worked 6 h on project A + 4 h on project B on OT_MON at
+// R100/h: R1,100 for the day (8 h + 2 h overtime). Filtered to projects,
+// the pay exports give only those projects' share - a PROJECT LABOUR COST
+// ALLOCATION: A R660, B R440. The 8-hour person is on A only (R800).
+console.log('\nExport project filter…\n')
+
+const otA = { id: otProjectA, name: `${OT_PREFIX} A ${RUN_TAG}` }
+const otB = { id: otProjectB, name: `${OT_PREFIX} B ${RUN_TAG}` }
+const splitName = `ZZ OT Split ${RUN_TAG}`
+const fileSlug = (text) => text.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')
+const otDayArgs = (projects) => ({ p_project_ids: projects ? projects.map((p) => p.id) : null, p_from: OT_MON, p_to: OT_MON })
+
+// The owner's payroll rows for OT_MON (projects null = all projects).
+async function payrollRows(projects) {
+  const { data, error } = await owner.client.rpc('export_payroll', otDayArgs(projects))
+  if (error) throw error
+  return data
+}
+const splitRowOf = (rows) => rows.find((row) => row.employee_id === splitPerson)
+
+// A cell on a built sheet: the row whose first cell is `label` (and whose
+// Project column is `project`, if given), under `header` on the sheet's
+// header row. Returns { value, formula }.
+function cellAt(workbook, sheetName, label, header, project) {
+  const sheet = workbook.getWorksheet(sheetName)
+  if (!sheet) return { value: null, formula: null }
+  const headerRow = sheet.getRow(sheet.views[0].ySplit)
+  const columnOfHeader = (text) => {
+    let found = null
+    headerRow.eachCell((cell, column) => {
+      if (!found && cell.value === text) found = column
+    })
+    return found
+  }
+  const column = columnOfHeader(header)
+  const projectColumn = project ? columnOfHeader('Project') : null
+  let cell = null
+  sheet.eachRow((row, number) => {
+    if (number <= headerRow.number || row.getCell(1).value !== label) return
+    if (project && row.getCell(projectColumn).value !== project) return
+    cell = row.getCell(column)
+  })
+  const value = cell?.value
+  return {
+    value: value === null || value === undefined ? null : Number(value.result ?? value),
+    formula: value?.formula ?? null,
+  }
+}
+// Every line of text in a sheet's first column.
+const firstColumn = (workbook, sheetName) => {
+  const lines = []
+  workbook.getWorksheet(sheetName)?.eachRow((row) => lines.push(row.getCell(1).value))
+  return lines
+}
+
+let filteredA = []
+let filteredB = []
+{
+  const name = 'Export filter: payroll filtered to A = R660, to B = R440, all projects = R1,100; A + B = all projects'
+  try {
+    let unfiltered
+    ;[filteredA, filteredB, unfiltered] = await Promise.all([payrollRows([otA]), payrollRows([otB]), payrollRows(null)])
+    const a = splitRowOf(filteredA)
+    const b = splitRowOf(filteredB)
+    const all = splitRowOf(unfiltered)
+    const ok =
+      Number(a?.gross) === 660 &&
+      Number(a.ordinary_pay) === 480 &&
+      Number(a.ot_hours) === 1.2 &&
+      Number(a.ot_pay) === 180 &&
+      a.project_id === otProjectA &&
+      Number(b?.gross) === 440 &&
+      Number(b.ot_hours) === 0.8 &&
+      Number(b.ot_pay) === 120 &&
+      b.project_id === otProjectB &&
+      Number(all?.gross) === 1100 &&
+      Number(all.ot_pay) === 300 &&
+      all.project_id === null &&
+      all.project_name === `${otA.name}, ${otB.name}` &&
+      Number(a.gross) + Number(b.gross) === Number(all.gross) &&
+      filteredA.every((row) => row.project_id === otProjectA) &&
+      filteredB.every((row) => row.project_id === otProjectB)
+    record(
+      name,
+      ok,
+      ok
+        ? 'A: R660 (4.8 h R480 + 1.2 h overtime R180). B: R440 (0.8 h overtime R120). All projects: R1,100 on one row, both projects named. R660 + R440 = R1,100.'
+        : `A: ${JSON.stringify(a)}; B: ${JSON.stringify(b)}; all: ${JSON.stringify(all)}`,
+    )
+  } catch (error) {
+    record(name, false, `Error: ${error.message}`)
+  }
+  covers('export_payroll', 'export_labour')
+}
+
+{
+  const name = 'Export filter: each figure equals the dashboard drill-down for the same filter'
+  try {
+    const drill = async (projectId) => {
+      const { data, error } = await owner.client.rpc('drill_hours', {
+        p_project_id: projectId,
+        p_from: OT_MON,
+        p_to: OT_MON,
+        p_category: 'labour',
+      })
+      if (error) throw error
+      return data.find((row) => row.who_id === splitPerson)
+    }
+    const labour = async (projects) => {
+      const { data, error } = await owner.client.rpc('export_labour', otDayArgs(projects))
+      if (error) throw error
+      return splitRowOf(data)
+    }
+    const pairs = await Promise.all(
+      [[otA], [otB], null].map(async (projects) => [await labour(projects), await drill(projects?.[0].id ?? null)]),
+    )
+    const ok = pairs.every(
+      ([exported, drilled]) =>
+        exported &&
+        drilled &&
+        Number(exported.cost) === Number(drilled.cost) &&
+        Number(exported.ot_pay) === Number(drilled.ot_pay) &&
+        Number(exported.hours) === Number(drilled.hours),
+    )
+    record(
+      name,
+      ok,
+      ok
+        ? 'A R660, B R440, all projects R1,100 - the export and the drill-down agree (cost, overtime and hours).'
+        : `Got: ${JSON.stringify(pairs.map(([e, d]) => [e?.cost, d?.cost]))}`,
+    )
+  } catch (error) {
+    record(name, false, `Error: ${error.message}`)
+  }
+  covers('export_labour', 'drill_hours')
+}
+
+{
+  const name = "Export filter (the app's own file): A + B = PROJECT LABOUR COST ALLOCATION, a subtotal per project, then the grand total"
+  try {
+    const projects = [otA, otB]
+    const data = await fetchPayrollHours(owner.client, { projects, from: OT_MON, to: OT_MON })
+    const { workbook, filename } = buildPayrollHours(data, { ...exportMeta, projects, from: OT_MON, to: OT_MON })
+    const SHEET = 'Labour allocation'
+    const MONEY_COLUMN = 'Allocated labour cost'
+    const lines = firstColumn(workbook, SHEET)
+    const subA = cellAt(workbook, SHEET, `Subtotal: ${otA.name}`, MONEY_COLUMN)
+    const subB = cellAt(workbook, SHEET, `Subtotal: ${otB.name}`, MONEY_COLUMN)
+    const total = cellAt(workbook, SHEET, 'Total', MONEY_COLUMN)
+    const dbTotal = Number(data.people[0]?.total_gross)
+    const aOnlyTotal = Number(filteredA[0]?.total_gross)
+    const bOnlyTotal = Number(filteredB[0]?.total_gross)
+    const expectedName = `nkutwala_labour-allocation_${fileSlug(otA.name)}+${fileSlug(otB.name)}_${OT_MON}_${OT_MON}.xlsx`
+    const problems = [
+      lines[0] === ALLOCATION_TITLE ? null : `Top line: ${lines[0]}`,
+      lines.includes(PAY_ONLY_UNFILTERED) ? null : 'No "pay only from the unfiltered pay run" note',
+      workbook.worksheets.map((sheet) => sheet.name).join(', ') === 'Labour allocation, Daily grid, Excluded' ? null : 'Sheets',
+      cellAt(workbook, SHEET, splitName, MONEY_COLUMN, otA.name).value === 660 ? null : 'Split person on A is not R660',
+      cellAt(workbook, SHEET, splitName, MONEY_COLUMN, otB.name).value === 440 ? null : 'Split person on B is not R440',
+      cellAt(workbook, SHEET, splitName, 'Overtime pay', otA.name).value === 180 ? null : 'A overtime is not R180',
+      subA.value === 1460 && subA.formula?.startsWith('SUM(') ? null : `Subtotal A: ${JSON.stringify(subA)}`,
+      subB.value === 440 && subB.formula?.startsWith('SUM(') ? null : `Subtotal B: ${JSON.stringify(subB)}`,
+      total.value === 1900 && total.formula?.includes('+') ? null : `Total: ${JSON.stringify(total)}`,
+      dbTotal === 1900 && dbTotal === aOnlyTotal + bOnlyTotal ? null : `Database totals: A+B ${dbTotal}, A ${aOnlyTotal}, B ${bOnlyTotal}`,
+      cellAt(workbook, 'Daily grid', `Subtotal: ${otA.name}`, 'Total hours').value === 14 ? null : 'Daily grid subtotal A is not 14 h',
+      filename === expectedName ? null : `File name ${filename}`,
+    ].filter(Boolean)
+    record(
+      name,
+      problems.length === 0,
+      problems.length
+        ? problems.join('; ')
+        : 'Allocation title and "pay only from the unfiltered pay run"; split person A R660 / B R440; subtotals A R1,460, B R440; total R1,900 = the database = A alone + B alone.',
+    )
+  } catch (error) {
+    record(name, false, `Could not build it: ${error.message}`)
+  }
+  covers('export_payroll', 'export_daily_hours')
+}
+
+{
+  const name = "Export filter (the app's own file): all projects = GROSS BEFORE DEDUCTIONS — NOT A PAYSLIP, the split person on one row at R1,100"
+  try {
+    const data = await fetchPayrollHours(owner.client, { projects: null, from: OT_MON, to: OT_MON })
+    const { workbook, filename } = buildPayrollHours(data, { ...exportMeta, projects: null, from: OT_MON, to: OT_MON })
+    const lines = firstColumn(workbook, 'Payroll hours')
+    const projectsWorked = (() => {
+      const sheet = workbook.getWorksheet('Payroll hours')
+      let found = null
+      sheet.eachRow((row) => {
+        if (row.getCell(1).value === splitName) found = row.getCell(2).value
+      })
+      return found
+    })()
+    const problems = [
+      lines[0] === PAY_TITLE ? null : `Top line: ${lines[0]}`,
+      lines.includes(PAY_ONLY_UNFILTERED) ? null : 'No "pay only from the unfiltered pay run" note',
+      lines.filter((line) => line === splitName).length === 1 ? null : 'The split person is not on exactly one row',
+      cellAt(workbook, 'Payroll hours', splitName, 'Gross (provisional)').value === 1100 ? null : 'Split person gross is not R1,100',
+      projectsWorked === `${otA.name}, ${otB.name}` ? null : `Projects worked: ${projectsWorked}`,
+      filename === `nkutwala_payroll-hours_all-projects_${OT_MON}_${OT_MON}.xlsx` ? null : `File name ${filename}`,
+    ].filter(Boolean)
+    record(name, problems.length === 0, problems.length ? problems.join('; ') : 'Full-pay title, the payment note; R1,100 on one row with both projects listed; all-projects file name.')
+  } catch (error) {
+    record(name, false, `Could not build it: ${error.message}`)
+  }
+  covers('export_payroll', 'export_daily_hours')
+}
+
+{
+  const name = "Export filter (the app's own file): cost report for A + B - a subtotal per project, each equal to that project's dashboard"
+  try {
+    const projects = [otA, otB]
+    const data = await fetchProjectCost(owner.client, { projects, from: OT_MON, to: OT_MON })
+    const { workbook, filename } = buildProjectCost(data, { ...exportMeta, projects, from: OT_MON, to: OT_MON })
+    const dashboard = async (projectId) => {
+      const { data: rows, error } = await owner.client.rpc('dashboard_summary', { p_project_id: projectId, p_from: OT_MON, p_to: OT_MON })
+      if (error) throw error
+      return Number(rows[0]?.spent)
+    }
+    const [dashA, dashB] = await Promise.all([dashboard(otProjectA), dashboard(otProjectB)])
+    const problems = [
+      cellAt(workbook, 'Labour', `Subtotal: ${otA.name}`, 'Cost (provisional)').value === 1460 ? null : 'Labour subtotal A is not R1,460',
+      cellAt(workbook, 'Labour', `Subtotal: ${otB.name}`, 'Cost (provisional)').value === 440 ? null : 'Labour subtotal B is not R440',
+      cellAt(workbook, 'Labour', 'Total', 'Cost (provisional)').value === 1900 ? null : 'Labour total is not R1,900',
+      cellAt(workbook, 'Labour', splitName, 'Cost (provisional)', otA.name).value === 660 ? null : 'Split person on A is not R660',
+      cellAt(workbook, 'Summary', `Subtotal: ${otA.name}`, 'Spent in period').value === dashA && dashA === 1460
+        ? null
+        : `Summary A vs dashboard ${dashA}`,
+      cellAt(workbook, 'Summary', `Subtotal: ${otB.name}`, 'Spent in period').value === dashB && dashB === 440
+        ? null
+        : `Summary B vs dashboard ${dashB}`,
+      cellAt(workbook, 'Summary', 'Total', 'Spent in period').value === 1900 ? null : 'Summary total is not R1,900',
+      cellAt(workbook, 'By week', 'Total', 'Total').value === 1900 ? null : 'By week total is not R1,900',
+      filename === `nkutwala_project-cost_${fileSlug(otA.name)}+${fileSlug(otB.name)}_${OT_MON}_${OT_MON}.xlsx` ? null : `File name ${filename}`,
+    ].filter(Boolean)
+    record(
+      name,
+      problems.length === 0,
+      problems.length ? problems.join('; ') : 'Labour: A R1,460, B R440, total R1,900. Summary subtotals = each project\'s dashboard. By week total R1,900.',
+    )
+  } catch (error) {
+    record(name, false, `Could not build it: ${error.message}`)
+  }
+  covers('export_cost_summary', 'export_labour', 'export_receipts', 'export_weekly', 'dashboard_categories', 'dashboard_weekly_mix')
+}
+
+{
+  const name = 'Owner: "To date" for chosen projects starts at their first cost'
+  const { data, error } = await owner.client.rpc('export_period', { p_preset: 'project_to_date', p_project_ids: [otProjectA, otProjectB] })
+  if (error) record(name, false, `Error: ${error.message}`)
+  else record(name, data?.[0]?.from_date === OT_MON, `Got: ${JSON.stringify(data)}`)
+  covers('export_period', 'dashboard_period')
+}
+
+{
+  const name = 'Export log records the projects chosen (ids and names) and that it was an allocation'
+  const marker = `rls-filter-${RUN_TAG}`
+  const filters = { ...exportLogFilters({ projects: [otA, otB], from: OT_MON, to: OT_MON, allocation: true }), marker }
+  const { error } = await owner.client.from('export_log').insert({ report_type: 'payroll_hours', filters })
+  const { data } = await owner.client.from('export_log').select('user_id, filters').eq('filters->>marker', marker)
+  const got = data?.[0]?.filters
+  const all = exportLogFilters({ projects: null, from: OT_MON, to: OT_MON })
+  const ok =
+    !error &&
+    data?.length === 1 &&
+    data[0].user_id === owner.userId &&
+    JSON.stringify(got.project_ids) === JSON.stringify([otProjectA, otProjectB]) &&
+    JSON.stringify(got.project_names) === JSON.stringify([otA.name, otB.name]) &&
+    got.projects === `${otA.name}, ${otB.name}` &&
+    got.allocation === true &&
+    all.project_ids === null &&
+    all.projects === 'All projects'
+  record(name, ok, ok ? 'Logged: both project ids and names, "allocation"; all projects logged as "All projects".' : `Error: ${error?.message}; got ${JSON.stringify(data)}`)
+  covers('export_log')
+}
+
+// --- Site managers: their own reports' projects only, quantities only ------------
+{
+  const name = 'Site manager 2 asks for a labour return on a project they have no reports on: nothing comes back'
+  const [labourReturn, theirProjects] = await Promise.all([
+    site2.client.rpc('my_labour_return', otDayArgs([otA])),
+    site2.client.rpc('my_report_projects'),
+  ])
+  const error = labourReturn.error ?? theirProjects.error
+  const ok =
+    !error &&
+    labourReturn.data.length === 0 &&
+    !theirProjects.data.some((row) => row.project_id === otProjectA || row.project_id === otProjectB)
+  record(
+    name,
+    ok,
+    error ? `Error: ${error.message}` : ok ? 'Nothing returned; project A is not in their project list.' : `LEAK: ${JSON.stringify(labourReturn.data).slice(0, 200)}`,
+  )
+  covers('my_labour_return', 'my_report_projects')
+}
+{
+  const name = 'Owner asks my_labour_return for project A: nothing (only the caller\'s OWN reports, even for an owner)'
+  const { data, error } = await owner.client.rpc('my_labour_return', otDayArgs([otA]))
+  record(name, !error && data.length === 0, error ? `Error: ${error.message}` : `${data.length} rows.`)
+  covers('my_labour_return')
+}
+{
+  const name = 'Site manager 1: their labour return for project A - their hours, and not one money column'
+  const ALLOWED = [
+    'project_id',
+    'project_name',
+    'report_id',
+    'report_date',
+    'employee_id',
+    'full_name',
+    'category',
+    'hours',
+    'project_total_hours',
+    'total_hours',
+  ]
+  const [labourReturn, theirProjects] = await Promise.all([
+    site.client.rpc('my_labour_return', otDayArgs([otA])),
+    site.client.rpc('my_report_projects'),
+  ])
+  const error = labourReturn.error ?? theirProjects.error
+  const rows = labourReturn.data ?? []
+  const split = rows.find((row) => row.employee_id === splitPerson)
+  const extraKeys = [...new Set(rows.flatMap((row) => Object.keys(row)))].filter((key) => !ALLOWED.includes(key))
+  const ok =
+    !error &&
+    rows.length === 2 &&
+    rows.every((row) => row.project_id === otProjectA) &&
+    Number(split?.hours) === 6 &&
+    Number(rows[0].total_hours) === 14 &&
+    extraKeys.length === 0 &&
+    theirProjects.data.some((row) => row.project_id === otProjectA)
+  record(
+    name,
+    ok,
+    error
+      ? `Error: ${error.message}`
+      : ok
+        ? 'Split 6 h, 8-hour person 8 h, total 14 h - names and hours only. Project A is in their list.'
+        : `Rows: ${JSON.stringify(rows).slice(0, 300)}; extra columns: ${extraKeys.join(', ')}`,
+  )
+  covers('my_labour_return', 'my_report_projects')
+}
+// Site manager 1 asks the OWNER's export functions about projects A and B
+// (their own reports): nothing.
+for (const fn of ['export_payroll', 'export_labour', 'export_cost_summary', 'export_daily_hours', 'export_receipts', 'export_weekly']) {
+  const name = `Site manager calls ${fn}() for projects A + B (their own reports)`
+  const { data, error } = await site.client.rpc(fn, otDayArgs([otA, otB]))
+  if (error?.code === PERMISSION_DENIED) record(name, true, 'Server refused (permission denied).')
+  else if (error) record(name, false, `Unexpected error: ${error.message}`)
+  else if (data.length > 0) record(name, false, `LEAK: ${JSON.stringify(data).slice(0, 200)}`)
+  else record(name, true, 'Nothing came back.')
+  covers(fn)
 }
 
 // --- Finish off this run's overtime test data (nothing can be deleted) ---------
@@ -3815,6 +4185,7 @@ for (const [phase, file] of [
   ['7a (exports)', '20261008090000_phase7a_exports.sql'],
   ['8A-1 (overtime)', '20261009090000_phase8a1_overtime.sql'],
   ['8B-1 (pay runs)', '20261010090000_phase8b1_pay_runs.sql'],
+  ['export filter', '20261011090000_export_project_filter.sql'],
 ]) {
   const sql = readFileSync(fileURLToPath(new URL(`../supabase/migrations/${file}`, import.meta.url)), 'utf8')
   const created = [...sql.matchAll(/create\s+(?:or\s+replace\s+)?(table|view|function)\s+public\.(\w+)/gi)].map(

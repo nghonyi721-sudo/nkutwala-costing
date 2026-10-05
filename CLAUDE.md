@@ -110,6 +110,25 @@ If you are about to send a rand value to a site_manager, STOP and flag it.
   the database); no log row, no file. Owner/admin read the log.
 - Receipt photos are never put in files as expiring links: link into the
   app instead (owner login needed).
+- PROJECT FILTER on every export (p_project_ids uuid[], null = all
+  projects), combined with the dates / pay period. Filtering happens in
+  the database functions, never in JS. All projects: line items as before
+  (labour one row per person, "Projects worked" listed). Chosen projects:
+  a Project column, rows per person per project; two or more: a subtotal
+  per project (the database's project_total_...) and a grand total.
+  Projects shown in the title rows; filename
+  nkutwala_{report}_{all-projects | name | a+b+c | n-projects}_{from}_{to}.xlsx
+  export_log filters record projects, project_ids, project_names.
+- PAY FILES (payroll hours sheet, pay run export, annual earnings):
+  All projects = full pay, top line "GROSS BEFORE DEDUCTIONS — NOT A
+  PAYSLIP". Filtered = labour cost allocated to those projects (overtime
+  as allocated by labour_lines), top line "PROJECT LABOUR COST ALLOCATION
+  — NOT THE AMOUNT TO PAY EMPLOYEES", filename labour-allocation, logged
+  with allocation: true. Every pay file says: pay only from the
+  unfiltered (All projects) pay run.
+- Site manager exports (7c): only the projects they have their own
+  reports on (my_report_projects), own submitted reports, quantities only
+  (my_labour_return - never a rand value).
 
 ## Out of scope for v1 — do NOT build these
 Payroll deductions (PAYE/UIF), offline sync, receipt OCR, multi-tenancy,

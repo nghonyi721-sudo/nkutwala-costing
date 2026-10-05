@@ -16,7 +16,8 @@ function ExportButton({ projectId, projectName, period, onError }) {
     setBusy(true)
     onError('')
     try {
-      await exportProjectCost({ projectId, projectName, from: period.from, to: period.to })
+      const projects = projectId ? [{ id: projectId, name: projectName }] : null
+      await exportProjectCost({ projects, from: period.from, to: period.to })
     } catch {
       onError('Could not export. Check your signal and try again.')
     }

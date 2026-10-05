@@ -7,22 +7,29 @@ import {
   call,
   createWorkbook,
   exportFilename,
+  isGrouped,
+  projectGroups,
 } from './workbook.js'
 
 // Export 1: the project cost report (owners/admins only - the database
 // returns nothing to anyone else). Four sheets: Summary, Labour, Receipts,
-// By week. Every figure and total comes from the database.
+// By week. Every figure, subtotal and total comes from the database.
+// With two or more projects chosen, every sheet goes project by project,
+// each with its subtotal, then the grand total.
 
 export const PROJECT_COST = { type: 'project_cost', slug: 'project-cost', name: 'Project cost report' }
 
-//   projectId: a project, or null for all projects; from/to: "YYYY-MM-DD"
-export async function fetchProjectCost(client, { projectId, from, to }) {
-  const args = { p_project_id: projectId, p_from: from, p_to: to }
+// The database's project list: null = all projects.
+export const projectIdsOf = (projects) => (projects?.length ? projects.map((project) => project.id) : null)
+
+//   projects: null (all projects) or [{ id, name }]; from/to: "YYYY-MM-DD"
+export async function fetchProjectCost(client, { projects, from, to }) {
+  const args = { p_project_ids: projectIdsOf(projects), p_from: from, p_to: to }
   const [summary, labour, receipts, weeks] = await Promise.all([
     call(client, 'export_cost_summary', args),
     call(client, 'export_labour', args),
-    call(client, 'drill_receipts', { ...args, p_category: null, p_vendor: null }),
-    call(client, 'dashboard_weekly_mix', args),
+    call(client, 'export_receipts', args),
+    call(client, 'export_weekly', args),
   ])
   return { summary, labour, receipts, weeks }
 }
@@ -61,16 +68,21 @@ export function paySplitColumns(people) {
 }
 
 // The database's totals for those columns (its rows all carry them).
-export function splitTotals(totals) {
+//   prefix: 'total' (the grand totals) or 'project_total' (a project's subtotals)
+export function splitTotals(totals, prefix = 'total') {
   return {
-    ordinary_hours: totals.total_ordinary_hours ?? 0,
-    ot_hours: totals.total_ot_hours ?? 0,
-    premium_hours: totals.total_premium_hours ?? 0,
-    ordinary_pay: totals.total_ordinary_pay ?? 0,
-    ot_pay: totals.total_ot_pay ?? 0,
-    premium_pay: totals.total_premium_pay ?? 0,
+    ordinary_hours: totals[`${prefix}_ordinary_hours`] ?? 0,
+    ot_hours: totals[`${prefix}_ot_hours`] ?? 0,
+    premium_hours: totals[`${prefix}_premium_hours`] ?? 0,
+    ordinary_pay: totals[`${prefix}_ordinary_pay`] ?? 0,
+    ot_pay: totals[`${prefix}_ot_pay`] ?? 0,
+    premium_pay: totals[`${prefix}_premium_pay`] ?? 0,
   }
 }
+
+// The Project column of a line-item sheet: the row's project, or (all
+// projects, one row per person) the projects they worked on.
+export const projectColumn = (header = 'Project') => ({ header, key: 'project_name', type: 'text', width: 24 })
 
 export function rateValues(person) {
   return Object.fromEntries(
@@ -81,11 +93,15 @@ export function rateValues(person) {
   )
 }
 
-//   meta: { company, projectName, from, to, generatedBy, generatedAt }
+//   meta: { company, projects, from, to, generatedBy, generatedAt }
+//         projects: null (all projects) or [{ id, name }]
 export function buildProjectCost(data, meta) {
   const workbook = createWorkbook()
   const sheetMeta = { ...meta, report: PROJECT_COST.name }
   const first = (rows) => rows[0] ?? {}
+  // Summary and By week are per project only with two or more projects;
+  // the line-item sheets (Labour, Receipts) always have a Project column.
+  const perProject = isGrouped(meta.projects) ? [projectColumn()] : []
 
   // --- Summary ------------------------------------------------------------------
   const summaryTotals = first(data.summary)
@@ -95,6 +111,7 @@ export function buildProjectCost(data, meta) {
     notes: [CONFIDENTIAL, VAT_NOTE, PROVISIONAL_NOTE],
     columns: [
       { header: 'Category', key: 'label', type: 'text', width: 18 },
+      ...perProject,
       { header: 'Budget', key: 'budget', type: 'money', width: 16 },
       { header: 'Spent in period', key: 'spent_in_period', type: 'money', width: 17 },
       { header: 'Spent to date', key: 'spent_to_date', type: 'money', width: 16 },
@@ -108,6 +125,12 @@ export function buildProjectCost(data, meta) {
       spent_to_date: summaryTotals.total_spent_to_date ?? 0,
       unpriced_hours: summaryTotals.total_unpriced_hours ?? 0,
     },
+    groups: projectGroups(meta.projects, (row) => ({
+      budget: row.project_total_budget ?? null,
+      spent_in_period: row.project_total_spent_in_period ?? 0,
+      spent_to_date: row.project_total_spent_to_date ?? 0,
+      unpriced_hours: row.project_total_unpriced_hours ?? 0,
+    })),
   })
 
   // --- Labour -------------------------------------------------------------------
@@ -118,6 +141,7 @@ export function buildProjectCost(data, meta) {
     notes: [CONFIDENTIAL, PROVISIONAL_NOTE],
     columns: [
       { header: 'Employee', key: 'full_name', type: 'text', width: 24 },
+      projectColumn(meta.projects?.length ? 'Project' : 'Projects worked'),
       { header: 'Category', key: 'category_label', type: 'text', width: 16 },
       { header: 'Status', key: 'status_label', type: 'text', width: 11 },
       { header: 'Days worked', key: 'days', type: 'whole', width: 11 },
@@ -140,6 +164,12 @@ export function buildProjectCost(data, meta) {
       unpriced_hours: labourTotals.total_unpriced_hours ?? 0,
       cost: labourTotals.total_cost ?? 0,
     },
+    groups: projectGroups(meta.projects, (row) => ({
+      hours: row.project_total_hours ?? 0,
+      ...splitTotals(row, 'project_total'),
+      unpriced_hours: row.project_total_unpriced_hours ?? 0,
+      cost: row.project_total_cost ?? 0,
+    })),
   })
 
   // --- Receipts (approved only) ---------------------------------------------------
@@ -152,25 +182,26 @@ export function buildProjectCost(data, meta) {
       { header: 'Date', key: 'receipt_date', type: 'date', width: 13 },
       { header: 'Vendor', key: 'vendor', type: 'text', width: 26 },
       { header: 'Category', key: 'category_label', type: 'text', width: 14 },
-      { header: 'Project', key: 'project_name', type: 'text', width: 24 },
+      projectColumn(),
       { header: 'Uploaded by', key: 'uploader_name', type: 'text', width: 20 },
       { header: 'Total paid (VAT inclusive)', key: 'amount', type: 'money', width: 18 },
       { header: 'Notes', key: 'notes', type: 'text', width: 30 },
     ],
     rows: data.receipts,
     totals: { amount: receiptTotals.total_amount ?? 0 },
+    groups: projectGroups(meta.projects, (row) => ({ amount: row.project_total_amount ?? 0 })),
   })
 
   // --- By week ------------------------------------------------------------------
-  // The weeks' totals are the database's own figures for the same period:
-  // labour and owned plant from the Summary, receipts from the Receipts sheet.
-  const spentOn = (category) => data.summary.find((row) => row.category === category)?.spent_in_period ?? 0
+  // The dashboard's weekly figures; their totals equal the Summary's.
+  const weekTotals = first(data.weeks)
   addTableSheet(workbook, {
     name: 'By week',
     meta: sheetMeta,
     notes: [CONFIDENTIAL, VAT_NOTE],
     columns: [
       { header: 'Week starting (Monday)', key: 'week_start', type: 'date', width: 16 },
+      ...perProject,
       { header: 'Labour', key: 'labour', type: 'money', width: 15 },
       { header: 'Owned plant', key: 'owned_plant', type: 'money', width: 15 },
       { header: 'Receipts (VAT inclusive)', key: 'receipts', type: 'money', width: 18 },
@@ -178,15 +209,21 @@ export function buildProjectCost(data, meta) {
     ],
     rows: data.weeks,
     totals: {
-      labour: spentOn('labour'),
-      owned_plant: spentOn('owned_plant'),
-      receipts: receiptTotals.total_amount ?? 0,
-      total: summaryTotals.total_spent_in_period ?? 0,
+      labour: weekTotals.total_labour ?? 0,
+      owned_plant: weekTotals.total_owned_plant ?? 0,
+      receipts: weekTotals.total_receipts ?? 0,
+      total: weekTotals.total_all ?? 0,
     },
+    groups: projectGroups(meta.projects, (row) => ({
+      labour: row.project_total_labour ?? 0,
+      owned_plant: row.project_total_owned_plant ?? 0,
+      receipts: row.project_total_receipts ?? 0,
+      total: row.project_total_all ?? 0,
+    })),
   })
 
   return {
     workbook,
-    filename: exportFilename(PROJECT_COST.slug, meta.projectName, meta.from, meta.to),
+    filename: exportFilename(PROJECT_COST.slug, meta.projects, meta.from, meta.to),
   }
 }

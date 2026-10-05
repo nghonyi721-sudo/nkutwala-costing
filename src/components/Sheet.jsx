@@ -61,6 +61,7 @@ export function SheetGroup({ children }) {
 
 function PickList({ options, selected, mode, emptyText, onPick }) {
   const close = useContext(SheetContext)
+  const isSelected = (value) => (mode === 'multi' ? selected.includes(value) : mode === 'select' && value === selected)
   return (
     <SheetGroup>
       {options.length === 0 && <Row title={emptyText ?? 'Nothing to choose.'} />}
@@ -72,7 +73,7 @@ function PickList({ options, selected, mode, emptyText, onPick }) {
           title={option.title}
           subtitle={option.subtitle}
           trailing={
-            mode === 'select' && option.value === selected ? (
+            isSelected(option.value) ? (
               <CheckIcon className={s.check} size={20} weight="bold" aria-label="Selected" />
             ) : undefined
           }
@@ -89,6 +90,8 @@ function PickList({ options, selected, mode, emptyText, onPick }) {
 // A sheet listing options.
 //   mode 'select': tap one to choose it (a check marks the current one); closes.
 //   mode 'add':    tap to add; stays open so several can be added.
+//   mode 'multi':  tap to tick / untick; stays open (Done closes).
+//                  selected: the ticked values (an array)
 // options: [{ value, title, subtitle }]
 export function PickSheet({ title, hint, options, selected, mode = 'select', emptyText, onPick, onClose }) {
   return (
