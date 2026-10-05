@@ -35,6 +35,11 @@
   padding-bottom: var(--space-6);
 }
 
+/* The dashboard: room for two columns on a laptop */
+.wide {
+  max-width: 1100px;
+}
+
 .header {
   padding: 2px var(--gutter) 0;
 }

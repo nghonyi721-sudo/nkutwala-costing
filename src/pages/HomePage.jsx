@@ -1,10 +1,11 @@
-import { useEffect, useState } from 'react'
+import { lazy, Suspense, useEffect, useState } from 'react'
 import { supabase } from '../lib/supabaseClient'
 import { isOwnerOrAdmin } from '../lib/labels'
 import AppShell from '../components/AppShell'
 import Notice from '../components/Notice'
 import Page from '../components/Page'
 import Skeleton from '../components/Skeleton'
+import MorePage from './admin/MorePage'
 import ProjectsPage from './admin/ProjectsPage'
 import EmployeesPage from './admin/EmployeesPage'
 import EquipmentPage from './admin/EquipmentPage'
@@ -13,16 +14,23 @@ import ReportsPage from './admin/ReportsPage'
 import MyReceiptsPage from './receipts/MyReceiptsPage'
 import MyReportsPage from './reports/MyReportsPage'
 
+// The dashboard (and its chart library) is only ever downloaded for owners
+// and admins - site managers never load its code.
+const DashboardPage = lazy(() => import('./admin/DashboardPage'))
+
+const DASHBOARD_PATH = '/dashboard'
+
 // The logged-in app: loads this user's own name and role (nothing else),
 // then shows the app shell with the nav and screens for their role.
 function HomePage({ user }) {
   // undefined = loading, null = no profile row, object = loaded
   const [profile, setProfile] = useState(undefined)
   const [error, setError] = useState('')
-  // 'home' | 'projects' | 'employees' | 'equipment' | 'reports' | 'receipts'
-  // | 'new-report' | 'my-reports'
-  // 'home' = not chosen yet (the role's landing screen is shown)
-  const [screen, setScreen] = useState('home')
+  // 'home' | 'dashboard' | 'projects' | 'employees' | 'equipment' | 'more'
+  // | 'reports' | 'receipts' | 'new-report' | 'my-reports'
+  // 'home' = not chosen yet (the role's landing screen is shown).
+  // Opening the app at /dashboard asks for the dashboard straight away.
+  const [screen, setScreen] = useState(() => (window.location.pathname === DASHBOARD_PATH ? 'dashboard' : 'home'))
   const [visit, setVisit] = useState(0)
   // Owners/admins: receipts waiting for approval (the tab's badge).
   const [pendingReceipts, setPendingReceipts] = useState(0)
@@ -73,9 +81,17 @@ function HomePage({ user }) {
     }
   }, [isAdmin, visit, receiptChanges])
 
-  // Until a nav tab is tapped: owners land on Reports, site managers on My reports.
+  // Until a nav tab is tapped: owners land on the Dashboard, site managers on
+  // My reports.
   let current = screen
-  if (current === 'home') current = isAdmin ? 'reports' : isSiteManager ? 'my-reports' : 'home'
+  if (current === 'home') current = isAdmin ? 'dashboard' : isSiteManager ? 'my-reports' : 'home'
+
+  // The address bar shows /dashboard while on the dashboard, / otherwise.
+  useEffect(() => {
+    if (!profile) return
+    const path = current === 'dashboard' ? DASHBOARD_PATH : '/'
+    if (window.location.pathname !== path) window.history.replaceState(null, '', path)
+  }, [current, profile])
 
   // Tapping a tab always starts that section fresh at its main list.
   function navigate(next) {
@@ -85,6 +101,28 @@ function HomePage({ user }) {
   const pageKey = `${current}-${visit}`
 
   let page = null
+  if (isAdmin && current === 'dashboard') {
+    page = (
+      <Suspense
+        fallback={
+          <Page title="Dashboard">
+            <Skeleton rows={4} />
+          </Page>
+        }
+      >
+        <DashboardPage key={pageKey} onNavigate={navigate} />
+      </Suspense>
+    )
+  }
+  // Anyone else who opens /dashboard: a plain page, and no money requests.
+  if (profile && !isAdmin && current === 'dashboard') {
+    page = (
+      <Page title="Not available">
+        <Notice tone="locked">The dashboard is for owners only.</Notice>
+      </Page>
+    )
+  }
+  if (isAdmin && current === 'more') page = <MorePage key={pageKey} onNavigate={navigate} />
   if (isAdmin && current === 'reports') page = <ReportsPage key={pageKey} />
   if (isAdmin && current === 'receipts') {
     page = (

@@ -21,7 +21,7 @@ function initials(name = '') {
 // Solid colour (no blur); a hairline appears once content scrolls under it.
 function NavBar({ title, collapsed, onBack, backLabel, action }) {
   const shell = useShell()
-  const tabs = shell?.tabs ?? []
+  const tabs = shell?.desktopTabs ?? shell?.tabs ?? []
 
   return (
     <header className={collapsed ? `${s.bar} ${s.collapsed}` : s.bar}>

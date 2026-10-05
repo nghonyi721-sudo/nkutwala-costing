@@ -10,7 +10,8 @@ import s from './Page.module.css'
 //             bar hides, and it slides in from the right
 //   action:   the screen's action in the bar (e.g. an Add button)
 //   onSubmit: the whole screen is a form, so a submit button saves it
-function Page({ title, subtitle, onBack, backLabel = 'Back', action, footer, onSubmit, children }) {
+//   wide:     a wider content column on big screens (e.g. the dashboard grid)
+function Page({ title, subtitle, onBack, backLabel = 'Back', action, footer, onSubmit, wide = false, children }) {
   const shell = useShell()
   const pushed = Boolean(onBack)
   usePushedScreen(pushed)
@@ -37,7 +38,7 @@ function Page({ title, subtitle, onBack, backLabel = 'Back', action, footer, onS
   return (
     <Root className={arrival ? `${s.page} ${s[arrival]}` : s.page} onSubmit={onSubmit}>
       <NavBar title={title} collapsed={collapsed} onBack={onBack} backLabel={backLabel} action={action} />
-      <div className={s.content}>
+      <div className={wide ? `${s.content} ${s.wide}` : s.content}>
         {title && (
           <header className={s.header}>
             <h1 className={s.largeTitle}>{title}</h1>

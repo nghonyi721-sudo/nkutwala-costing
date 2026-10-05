@@ -18,7 +18,7 @@ const hoursText = (hours) => `${Number(hours).toFixed(1)} h`
 // Owner/admin: one project's money - budget vs spent for every category,
 // hours that have no rate (never silently zero), and every budget change.
 // It all comes from owner-only tables and views; site managers get nothing.
-function ProjectBudget({ project, onBack }) {
+function ProjectBudget({ project, onBack, backLabel = 'Project' }) {
   // undefined = loading, array = loaded (one row per category)
   const [rows, setRows] = useState(undefined)
   const [changes, setChanges] = useState([])
@@ -171,7 +171,7 @@ function ProjectBudget({ project, onBack }) {
   }
 
   return (
-    <Page title={project.name} subtitle="Budget and costs" onBack={onBack} backLabel="Project">
+    <Page title={project.name} subtitle="Budget and costs" onBack={onBack} backLabel={backLabel}>
       {loadError && <Notice tone="error">{loadError}</Notice>}
       {!loadError && rows === undefined && <Skeleton rows={4} />}
 

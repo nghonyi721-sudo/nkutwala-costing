@@ -2,27 +2,41 @@ import { useMemo, useRef, useState } from 'react'
 import { ROLE_LABELS, isOwnerOrAdmin } from '../lib/labels'
 import ConfirmSheet from './ConfirmSheet'
 import {
-  BulldozerIcon,
+  ChartBarIcon,
   ClipboardTextIcon,
+  DotsThreeOutlineIcon,
   MapPinIcon,
   PlusCircleIcon,
   ReceiptIcon,
   SignOutIcon,
   UserCircleIcon,
-  UsersThreeIcon,
 } from './icons'
 import { Row } from './Row'
 import Sheet, { SheetGroup } from './Sheet'
 import { ShellContext } from './shellContext'
 import s from './AppShell.module.css'
 
+// Phones: five tabs at most (like iOS); Employees and Equipment sit under More.
 const OWNER_TABS = [
+  { key: 'dashboard', label: 'Dashboard', Icon: ChartBarIcon },
   { key: 'reports', label: 'Reports', Icon: ClipboardTextIcon },
   { key: 'receipts', label: 'Receipts', Icon: ReceiptIcon },
   { key: 'projects', label: 'Projects', Icon: MapPinIcon },
-  { key: 'employees', label: 'Employees', Icon: UsersThreeIcon },
-  { key: 'equipment', label: 'Equipment', Icon: BulldozerIcon },
+  { key: 'more', label: 'More', Icon: DotsThreeOutlineIcon },
 ]
+
+// Wide screens have room for every section in the top bar.
+const OWNER_DESKTOP_TABS = [
+  { key: 'dashboard', label: 'Dashboard' },
+  { key: 'reports', label: 'Reports' },
+  { key: 'receipts', label: 'Receipts' },
+  { key: 'projects', label: 'Projects' },
+  { key: 'employees', label: 'Employees' },
+  { key: 'equipment', label: 'Equipment' },
+]
+
+// Screens reached through More keep the More tab lit.
+const TAB_OF_SCREEN = { employees: 'more', equipment: 'more' }
 
 const SITE_MANAGER_TABS = [
   { key: 'my-reports', label: 'My reports', Icon: ClipboardTextIcon },
@@ -59,14 +73,24 @@ function AppShell({ profile, screen, onNavigate, onLogout, badges = {}, children
   )
 
   let roleTabs = []
-  if (profile && isOwnerOrAdmin(profile.role)) roleTabs = OWNER_TABS
-  else if (profile?.role === 'site_manager') roleTabs = SITE_MANAGER_TABS
-  const tabs = roleTabs.map((tab) => ({ ...tab, badge: badges[tab.key] ?? 0 }))
+  let roleDesktopTabs = []
+  if (profile && isOwnerOrAdmin(profile.role)) {
+    roleTabs = OWNER_TABS
+    roleDesktopTabs = OWNER_DESKTOP_TABS
+  } else if (profile?.role === 'site_manager') {
+    roleTabs = SITE_MANAGER_TABS
+    roleDesktopTabs = SITE_MANAGER_TABS
+  }
+  const withBadges = (list) => list.map((tab) => ({ ...tab, badge: badges[tab.key] ?? 0 }))
+  const tabs = withBadges(roleTabs)
+  const desktopTabs = withBadges(roleDesktopTabs)
+  const currentTab = TAB_OF_SCREEN[screen] ?? screen
   const showTabBar = tabs.length > 0 && pushedScreens === 0
 
   const shell = {
     ...pushApi,
     tabs,
+    desktopTabs,
     screen,
     onNavigate,
     profile,
@@ -80,7 +104,7 @@ function AppShell({ profile, screen, onNavigate, onLogout, badges = {}, children
       {showTabBar && (
         <nav className={s.tabBar} aria-label="Main">
           {tabs.map(({ key, label, Icon, badge }) => {
-            const current = screen === key
+            const current = currentTab === key
             return (
               <button
                 key={key}

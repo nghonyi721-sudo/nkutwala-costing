@@ -48,6 +48,13 @@
   --scrim: rgb(0 0 0 / 0.4); /* dims the screen behind sheets */
   --shadow-control: 0 3px 8px rgb(0 0 0 / 0.12), 0 3px 1px rgb(0 0 0 / 0.04);
 
+  /* --- Charts: three shades of the logo blue (strong -> light). Used for
+         labour / owned plant / receipts, and for calendar shading. -------- */
+  --chart-1: #001aff;
+  --chart-2: #6b7bff;
+  --chart-3: #bcc4ff;
+  --on-chart-1: #ffffff;
+
   /* --- Type: Apple's text styles. 1rem = Body (17pt), and on iPhone it
          follows Settings > Display > Text Size (Dynamic Type). ---------- */
   --font: system-ui, -apple-system, 'SF Pro Text', 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
@@ -119,6 +126,11 @@
     --chevron: #5a5a5e;
     --scrim: rgb(0 0 0 / 0.6);
     --shadow-control: 0 3px 8px rgb(0 0 0 / 0.3);
+
+    --chart-1: #8a95ff;
+    --chart-2: #4f5df0;
+    --chart-3: #2c3592;
+    --on-chart-1: #000000;
   }
 }
 

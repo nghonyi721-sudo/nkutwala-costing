@@ -15,7 +15,7 @@ import Skeleton from '../../components/Skeleton'
 // Owner/admin: one report, read-only. A submitted report can be reopened
 // (with a reason) so the site manager can correct it. The database keeps
 // the submitted version in the audit log.
-function ReportView({ reportId, onBack }) {
+function ReportView({ reportId, onBack, backLabel = 'Reports' }) {
   // undefined = loading, null = not found, object = loaded
   const [report, setReport] = useState(undefined)
   const [loadError, setLoadError] = useState('')
@@ -76,7 +76,7 @@ function ReportView({ reportId, onBack }) {
         report ? `${formatDate(report.report_date)} · ${report.reporter?.full_name ?? ''}` : undefined
       }
       onBack={onBack}
-      backLabel="Reports"
+      backLabel={backLabel}
       footer={
         report?.status === 'submitted' ? (
           <ActionBar>

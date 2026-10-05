@@ -2,13 +2,14 @@ import s from './SegmentedControl.module.css'
 
 // iOS segmented control: a grey track with a white "thumb" that slides to
 // the chosen option. options is an object of { value: label }.
-function SegmentedControl({ label, options, value, onChange, disabled }) {
+//   compact: smaller text that never wraps, for four or more options
+function SegmentedControl({ label, options, value, onChange, disabled, compact = false }) {
   const entries = Object.entries(options)
   const index = entries.findIndex(([optionValue]) => optionValue === value)
 
   return (
     <div
-      className={s.control}
+      className={compact ? `${s.control} ${s.compact}` : s.control}
       role="radiogroup"
       aria-label={label}
       style={{ '--count': entries.length, '--index': Math.max(index, 0) }}

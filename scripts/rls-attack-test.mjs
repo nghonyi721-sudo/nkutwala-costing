@@ -1799,6 +1799,353 @@ let budgetId
   covers('project_cost_vs_budget', 'project_budgets')
 }
 
+// --- Phase 6: the owner dashboard, on the same known data ---------------------
+// Every number the dashboard shows comes from these functions, so checking
+// them checks the screen's numbers.
+const mondayOf = (isoDate) => {
+  const date = new Date(`${isoDate}T12:00:00Z`)
+  date.setUTCDate(date.getUTCDate() - ((date.getUTCDay() + 6) % 7))
+  return date.toISOString().slice(0, 10)
+}
+
+let dashFrom
+let dashTo
+{
+  const name = 'Dashboard: "Project to date" runs from the first cost to today'
+  const { data, error } = await owner.client.rpc('dashboard_period', {
+    p_preset: 'project_to_date',
+    p_project_id: costProjectId,
+  })
+  dashFrom = data?.[0]?.from_date
+  dashTo = data?.[0]?.to_date
+  if (error) record(name, false, `Error: ${error.message}`)
+  else if (dashFrom !== COST_DAY_1 || dashTo !== saToday) record(name, false, `Got ${dashFrom} to ${dashTo}.`)
+  else record(name, true, `${COST_DAY_1} to ${saToday} (today in South Africa).`)
+  covers('dashboard_period')
+  if (!dashFrom) stop('the dashboard checks need the period.')
+}
+
+{
+  const name = 'Dashboard: headline "spent" is exactly R2,500'
+  const { data, error } = await owner.client.rpc('dashboard_summary', {
+    p_project_id: costProjectId,
+    p_from: dashFrom,
+    p_to: dashTo,
+  })
+  const s = data?.[0]
+  if (error || !s) {
+    record(name, false, `Error: ${error?.message ?? 'no row'}`)
+  } else if (
+    Number(s.spent) !== 2500 ||
+    Number(s.spent_to_date) !== 2500 ||
+    Number(s.budget) !== 3500 ||
+    Number(s.remaining) !== 1000 ||
+    Number(s.percent_used) !== 71.4 ||
+    Number(s.unpriced_hours) !== 2 ||
+    Number(s.missing_rate_items) !== 1
+  ) {
+    record(name, false, `Got: ${JSON.stringify(s)}`)
+  } else {
+    record(name, true, 'Spent R2,500; budget R3,500, remaining R1,000, 71.4% used; 2 h unpriced (1 person).')
+  }
+  covers('dashboard_summary')
+}
+
+{
+  const name = 'Dashboard: a date range only counts costs dated inside it'
+  const { data, error } = await owner.client.rpc('dashboard_summary', {
+    p_project_id: costProjectId,
+    p_from: '2026-03-01',
+    p_to: '2026-03-31',
+  })
+  const s = data?.[0]
+  if (error || !s) record(name, false, `Error: ${error?.message ?? 'no row'}`)
+  else if (Number(s.spent) !== 2000 || Number(s.spent_to_date) !== 2500) record(name, false, `Got: ${JSON.stringify(s)}`)
+  else record(name, true, 'March: R2,000 (the reports); the fuel receipt is dated later. Spent to date still R2,500.')
+  covers('dashboard_summary')
+}
+
+{
+  const name = 'Dashboard: budget vs actual by category'
+  const { data, error } = await owner.client.rpc('dashboard_categories', {
+    p_project_id: costProjectId,
+    p_from: dashFrom,
+    p_to: dashTo,
+  })
+  const by = Object.fromEntries((data ?? []).map((row) => [row.category, row]))
+  if (error) {
+    record(name, false, `Error: ${error.message}`)
+  } else if (
+    data.length !== 8 ||
+    Number(by.labour.budget) !== 3500 ||
+    Number(by.labour.spent_to_date) !== 1000 ||
+    Number(by.labour.percent_used) !== 28.6 ||
+    by.labour.warning !== false ||
+    by.owned_plant.budget !== null ||
+    Number(by.owned_plant.spent_to_date) !== 1000 ||
+    Number(by.fuel.spent_to_date) !== 500
+  ) {
+    record(name, false, `Got: ${JSON.stringify(data)}`)
+  } else {
+    record(name, true, 'All 8 categories; labour R1,000 of R3,500 (28.6%), owned plant R1,000 (no budget), fuel R500.')
+  }
+  covers('dashboard_categories')
+}
+
+{
+  const name = 'Dashboard: a category over 90% of its budget is flagged red'
+  const { error: budgetError } = await owner.client
+    .from('project_budgets')
+    .insert({ project_id: costProjectId, category: 'fuel', amount: 520 })
+  const { data, error } = await owner.client.rpc('dashboard_categories', {
+    p_project_id: costProjectId,
+    p_from: dashFrom,
+    p_to: dashTo,
+  })
+  const fuel = data?.find((row) => row.category === 'fuel')
+  const labour = data?.find((row) => row.category === 'labour')
+  if (budgetError || error) record(name, false, `Error: ${(budgetError ?? error).message}`)
+  else if (fuel?.warning !== true || Number(fuel.percent_used) !== 96.2 || labour?.warning !== false) {
+    record(name, false, `Got: fuel ${JSON.stringify(fuel)}, labour ${JSON.stringify(labour)}`)
+  } else {
+    record(name, true, 'Fuel R500 of R520 (96.2%) flagged; labour at 28.6% not flagged.')
+  }
+  covers('dashboard_categories')
+}
+
+{
+  const name = 'Dashboard: spend per week, every week listed'
+  const { data, error } = await owner.client.rpc('dashboard_weekly', {
+    p_project_id: costProjectId,
+    p_from: dashFrom,
+    p_to: dashTo,
+  })
+  const receiptWeek = mondayOf(saToday)
+  const rows = data ?? []
+  const contiguous = rows.every(
+    (row, i) => i === 0 || (Date.parse(row.week_start) - Date.parse(rows[i - 1].week_start)) / 86400000 === 7,
+  )
+  const amountFor = (week) => Number(rows.find((row) => row.week_start === week)?.spent ?? NaN)
+  const others = rows.filter((row) => row.week_start !== COST_DAY_1 && row.week_start !== receiptWeek)
+  if (error) {
+    record(name, false, `Error: ${error.message}`)
+  } else if (
+    rows[0]?.week_start !== COST_DAY_1 ||
+    rows.at(-1)?.week_start !== receiptWeek ||
+    !contiguous ||
+    amountFor(COST_DAY_1) !== 2000 ||
+    amountFor(receiptWeek) !== 500 ||
+    others.some((row) => Number(row.spent) !== 0)
+  ) {
+    record(name, false, `Got ${rows.length} week(s): ${JSON.stringify(rows.filter((row) => Number(row.spent) !== 0))}`)
+  } else {
+    record(name, true, `${rows.length} weeks: R2,000 in the week of ${COST_DAY_1}, R500 in the week of ${receiptWeek}, R0 in between.`)
+  }
+  covers('dashboard_weekly')
+}
+
+{
+  const name = 'Dashboard: top vendors (approved receipts only)'
+  const { data, error } = await owner.client.rpc('dashboard_top_vendors', {
+    p_project_id: costProjectId,
+    p_from: dashFrom,
+    p_to: dashTo,
+  })
+  if (error) record(name, false, `Error: ${error.message}`)
+  else if (data.length !== 1 || Number(data[0].amount) !== 500 || Number(data[0].receipts) !== 1) {
+    record(name, false, `Got: ${JSON.stringify(data)}`)
+  } else {
+    record(name, true, `${data[0].vendor}: R500. The submitted R300 and rejected R200 receipts are left out.`)
+  }
+  covers('dashboard_top_vendors')
+}
+
+{
+  const name = 'Dashboard: action items'
+  const { data, error } = await owner.client.rpc('dashboard_action_items')
+  const items = data?.[0]
+  if (error || !items) record(name, false, `Error: ${error?.message ?? 'no row'}`)
+  else if (Number(items.pending_receipts) < 1 || Number(items.missing_rate_items) < 1 || Number(items.unpriced_hours) < 2) {
+    record(name, false, `Got: ${JSON.stringify(items)}`)
+  } else {
+    record(
+      name,
+      true,
+      `${items.pending_receipts} pending receipt(s) (incl. the R300 test one), ${items.missing_rate_items} missing rate(s), ` +
+        `${Number(items.unpriced_hours)} h unpriced (all projects).`,
+    )
+  }
+  covers('dashboard_action_items')
+}
+
+{
+  const name = 'Dashboard: employee hours calendar (submitted reports only)'
+  const { data, error } = await owner.client.rpc('employee_hours_by_day', {
+    p_employee_id: ratedEmployeeId,
+    p_month: '2026-03-01',
+    p_project_id: costProjectId,
+  })
+  const day = data?.[0]
+  if (error) {
+    record(name, false, `Error: ${error.message}`)
+  } else if (
+    data.length !== 1 ||
+    day.day !== COST_DAY_1 ||
+    Number(day.hours) !== 10 ||
+    day.reports.length !== 1 ||
+    day.reports[0].report_id !== reportA
+  ) {
+    record(name, false, `Got: ${JSON.stringify(data)}`)
+  } else {
+    record(name, true, `${COST_DAY_1}: 10 h on one report. The draft report's 3 h on ${COST_DAY_2} are left out.`)
+  }
+  covers('employee_hours_by_day')
+}
+
+{
+  const name = 'Dashboard: employee month totals, cost labelled PROVISIONAL'
+  const [rated, unrated] = await Promise.all(
+    [ratedEmployeeId, unratedEmployeeId].map((id) =>
+      owner.client.rpc('employee_month_summary', { p_employee_id: id, p_month: '2026-03-01', p_project_id: costProjectId }),
+    ),
+  )
+  const r = rated.data?.[0]
+  const u = unrated.data?.[0]
+  if (rated.error || unrated.error || !r || !u) {
+    record(name, false, `Error: ${(rated.error ?? unrated.error)?.message ?? 'no row'}`)
+  } else if (
+    Number(r.total_hours) !== 10 ||
+    Number(r.provisional_cost) !== 1000 ||
+    !r.basis.startsWith('PROVISIONAL') ||
+    Number(u.total_hours) !== 2 ||
+    Number(u.provisional_cost) !== 0 ||
+    Number(u.unpriced_hours) !== 2
+  ) {
+    record(name, false, `Got: ${JSON.stringify({ rated: r, unrated: u })}`)
+  } else {
+    record(name, true, 'Rated: 10 h, R1,000 (PROVISIONAL). Unrated: 2 h, R0, 2 h unpriced.')
+  }
+  covers('employee_month_summary')
+}
+
+// --- Dashboard insights (project health, spend vs budget, money mix) ----------
+// Budgets on the test project by now: labour R3,500 + fuel R520 = R4,020.
+{
+  const name = 'Dashboard: project health board'
+  const { data, error } = await owner.client.rpc('dashboard_projects', { p_from: dashFrom, p_to: dashTo })
+  const row = data?.find((r) => r.project_id === costProjectId)
+  if (error || !row) {
+    record(name, false, `Error: ${error?.message ?? 'the test project is missing'}`)
+  } else if (
+    Number(row.budget) !== 4020 ||
+    Number(row.spent_to_date) !== 2500 ||
+    Number(row.remaining) !== 1520 ||
+    Number(row.percent_used) !== 62.2 ||
+    Number(row.unpriced_hours) !== 2 ||
+    row.health !== 'on_track'
+  ) {
+    record(name, false, `Got: ${JSON.stringify(row)}`)
+  } else {
+    record(name, true, 'R2,500 of R4,020 (62.2%), 2 h unpriced, On track.')
+  }
+  covers('dashboard_projects')
+}
+
+{
+  const name = 'Dashboard: spend vs budget over time (running total)'
+  const { data, error } = await owner.client.rpc('dashboard_cumulative', { p_project_id: costProjectId })
+  const rows = data ?? []
+  const first = rows[0]
+  const last = rows.at(-1)
+  const contiguous = rows.every(
+    (row, i) => i === 0 || (Date.parse(row.week_start) - Date.parse(rows[i - 1].week_start)) / 86400000 === 7,
+  )
+  if (error) {
+    record(name, false, `Error: ${error.message}`)
+  } else if (
+    first?.week_start !== COST_DAY_1 ||
+    Number(first.cumulative_spent) !== 2000 ||
+    last?.week_start !== mondayOf(saToday) ||
+    Number(last.cumulative_spent) !== 2500 ||
+    Number(last.budget) !== 4020 ||
+    !contiguous
+  ) {
+    record(name, false, `Got ${rows.length} week(s); first ${JSON.stringify(first)}, last ${JSON.stringify(last)}`)
+  } else {
+    record(name, true, `${rows.length} weeks: R2,000 by the week of ${COST_DAY_1}, R2,500 by this week; budget line R4,020.`)
+  }
+  covers('dashboard_cumulative')
+}
+
+{
+  const name = 'Dashboard: weekly spend split into labour, owned plant and receipts'
+  const { data, error } = await owner.client.rpc('dashboard_weekly_mix', {
+    p_project_id: costProjectId,
+    p_from: dashFrom,
+    p_to: dashTo,
+  })
+  const week = (start) => data?.find((row) => row.week_start === start)
+  const reports = week(COST_DAY_1)
+  const receiptWeek = week(mondayOf(saToday))
+  if (error) {
+    record(name, false, `Error: ${error.message}`)
+  } else if (
+    Number(reports?.labour) !== 1000 ||
+    Number(reports?.owned_plant) !== 1000 ||
+    Number(reports?.receipts) !== 0 ||
+    Number(reports?.total) !== 2000 ||
+    Number(receiptWeek?.receipts) !== 500 ||
+    Number(receiptWeek?.total) !== 500
+  ) {
+    record(name, false, `Got: ${JSON.stringify({ reports, receiptWeek })}`)
+  } else {
+    record(name, true, `Week of ${COST_DAY_1}: labour R1,000 + owned plant R1,000; receipt week: R500.`)
+  }
+  covers('dashboard_weekly_mix')
+}
+
+{
+  const name = 'Dashboard: where the money goes (amounts and %)'
+  const { data, error } = await owner.client.rpc('dashboard_mix', {
+    p_project_id: costProjectId,
+    p_from: dashFrom,
+    p_to: dashTo,
+  })
+  const got = (data ?? []).map((row) => `${row.source} ${Number(row.amount)} ${Number(row.percent)}%`).join(', ')
+  const expected = 'labour 1000 40%, owned_plant 1000 40%, receipts 500 20%'
+  if (error) record(name, false, `Error: ${error.message}`)
+  else record(name, got === expected, got === expected ? 'Labour R1,000 (40%), owned plant R1,000 (40%), receipts R500 (20%).' : `Got: ${got}`)
+  covers('dashboard_mix')
+}
+
+// Site manager: every dashboard function, on data that includes THEIR OWN
+// reports and receipts - nothing at all may come back.
+for (const [fn, args, note] of [
+  ['dashboard_period', { p_preset: 'project_to_date', p_project_id: costProjectId }, ''],
+  ['dashboard_summary', { p_project_id: costProjectId, p_from: dashFrom, p_to: dashTo }, ''],
+  ['dashboard_summary', { p_project_id: null, p_from: dashFrom, p_to: dashTo }, ' for all projects'],
+  ['dashboard_categories', { p_project_id: costProjectId, p_from: dashFrom, p_to: dashTo }, ''],
+  ['dashboard_weekly', { p_project_id: costProjectId, p_from: dashFrom, p_to: dashTo }, ''],
+  ['dashboard_top_vendors', { p_project_id: costProjectId, p_from: dashFrom, p_to: dashTo }, ''],
+  ['dashboard_action_items', {}, ''],
+  ['employee_hours_by_day', { p_employee_id: ratedEmployeeId, p_month: '2026-03-01', p_project_id: null }, ''],
+  ['employee_month_summary', { p_employee_id: ratedEmployeeId, p_month: '2026-03-01', p_project_id: null }, ''],
+  ['dashboard_projects', { p_from: dashFrom, p_to: dashTo }, ''],
+  ['dashboard_cumulative', { p_project_id: costProjectId }, ''],
+  ['dashboard_cumulative', { p_project_id: null }, ' for all projects'],
+  ['dashboard_weekly_mix', { p_project_id: costProjectId, p_from: dashFrom, p_to: dashTo }, ''],
+  ['dashboard_mix', { p_project_id: costProjectId, p_from: dashFrom, p_to: dashTo }, ''],
+]) {
+  const name = `Site manager calls ${fn}()${note}`
+  const { data, error } = await site.client.rpc(fn, args)
+  const empty = Array.isArray(data) ? data.length === 0 : data === null
+  if (error?.code === PERMISSION_DENIED) record(name, true, 'Server refused (permission denied).')
+  else if (error) record(name, false, `Unexpected error: ${error.message}`)
+  else if (!empty) record(name, false, `LEAK: ${JSON.stringify(data).slice(0, 200)}`)
+  else record(name, true, 'Nothing came back (it includes their own reports and receipts).')
+  covers(fn)
+}
+
 await attackUpdate(
   "Owner moves a budget to another category",
   owner,
@@ -1951,16 +2298,17 @@ for (const fn of ['log_budget_change', 'equipment_rates_before_insert', 'equipme
   if (failed) console.log(`          (note: tidy-up incomplete: ${failed.error.message})`)
 }
 
-// --- Every object created this phase must have been attacked -------------------
-{
-  const sql = readFileSync(
-    fileURLToPath(new URL('../supabase/migrations/20261005120000_budgets_and_costing.sql', import.meta.url)),
-    'utf8',
-  )
+// --- Every object created in phases 5 and 6 must have been attacked -----------
+for (const [phase, file] of [
+  [5, '20261005120000_budgets_and_costing.sql'],
+  [6, '20261006090000_dashboard.sql'],
+  ['6 (insights)', '20261006120000_dashboard_insights.sql'],
+]) {
+  const sql = readFileSync(fileURLToPath(new URL(`../supabase/migrations/${file}`, import.meta.url)), 'utf8')
   const created = [...sql.matchAll(/create\s+(?:or\s+replace\s+)?(table|view|function)\s+public\.(\w+)/gi)].map(
     ([, kind, name]) => ({ kind: kind.toLowerCase(), name }),
   )
-  console.log('\n          Everything phase 5 creates, and the checks that attack it:')
+  console.log(`\n          Everything phase ${phase} creates, and the checks that attack it:`)
   const notAttacked = []
   for (const { kind, name } of created) {
     const checks = [...new Set(coverage.get(name) ?? [])]
@@ -1973,7 +2321,7 @@ for (const fn of ['log_budget_change', 'equipment_rates_before_insert', 'equipme
   }
   console.log('')
   record(
-    'Every table, view and function created in phase 5 has an attack',
+    `Every table, view and function created in phase ${phase} has an attack`,
     created.length > 0 && notAttacked.length === 0,
     notAttacked.length ? `Not attacked: ${notAttacked.join(', ')}` : `${created.length} objects, all attacked.`,
   )

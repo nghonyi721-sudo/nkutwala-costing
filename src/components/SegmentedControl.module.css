@@ -34,6 +34,13 @@
   cursor: pointer;
 }
 
+/* Four or more options: a little smaller, each on one line */
+.compact .option {
+  padding: 0 4px;
+  font-size: var(--text-footnote);
+  white-space: nowrap;
+}
+
 .option[aria-checked='true'] {
   font-weight: 600;
 }
