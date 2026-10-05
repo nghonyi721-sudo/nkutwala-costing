@@ -22,6 +22,9 @@
 // them rejected, reversed or discarded, so none wait in the Pending queue.
 // For costing, each run creates its own "ZZ Costing Test <run>" project and
 // inactive "ZZ Costing" people and machines, and marks the project complete.
+// For new employees and project teams, each run creates its own "ZZ Pending
+// Test <run>" project and "ZZ Pending" people (added by site manager 1 the
+// app's way); at the end the people are inactive and the project complete.
 
 import { createHash, randomUUID } from 'node:crypto'
 import { readFileSync } from 'node:fs'
@@ -32,6 +35,17 @@ import { createClient } from '@supabase/supabase-js'
 import { saveDraft, submitDraft, uploadPhoto } from '../src/lib/receiptSteps.js'
 // The app's one category list, checked against the database's.
 import { COST_CATEGORY_LABELS } from '../src/lib/labels.js'
+// The app's own steps for adding people, project teams and approval.
+import {
+  addEmployee,
+  approveEmployee,
+  assignToProject,
+  fetchTeam,
+  findDuplicates,
+  rejectEmployee,
+  removeFromProject,
+  updateEmployeeDetails,
+} from '../src/lib/employeeSteps.js'
 
 process.loadEnvFile(fileURLToPath(new URL('../.env', import.meta.url)))
 
@@ -61,7 +75,11 @@ const TEST_VENDOR_PREFIX = 'ZZ RLS Test Vendor'
 // (e.g. a budget or rate column added later) makes the test FAIL.
 const ALLOWED_COLUMNS = {
   projects: ['id', 'company_id', 'name', 'contract_number', 'status', 'created_at'],
-  employees: ['id', 'company_id', 'full_name', 'category', 'active', 'created_at'],
+  employees: [
+    'id', 'company_id', 'full_name', 'category', 'active', 'created_at', 'phone', 'status',
+    'created_by', 'approved_at', 'approved_by', 'rejected_at', 'rejected_by', 'reject_reason',
+  ],
+  project_employees: ['id', 'company_id', 'project_id', 'employee_id', 'assigned_by', 'assigned_at', 'active'],
   equipment: ['id', 'company_id', 'name', 'ownership', 'active', 'created_at'],
   daily_reports: [
     'id', 'company_id', 'project_id', 'report_date', 'reporter_id',
@@ -178,6 +196,33 @@ async function findOrCreate(client, table, nameColumn, values) {
   return created.id
 }
 
+// A new test person, added the app's way (everyone starts as Pending). Then
+// the owner either approves them with a rate ({ rate }) or rejects them
+// ({ reject: true }); either way they end up inactive, so they never show in
+// anyone's pick lists. Returns their id.
+async function createTestPerson(name, { rate, reject = false }) {
+  try {
+    const person = await addEmployee(owner.client, { fullName: name, category: 'general_worker' })
+    if (reject) {
+      await rejectEmployee(owner.client, person.id, 'RLS test person')
+      return person.id
+    }
+    await approveEmployee(owner.client, person.id, rate.hourly_rate, rate.effective_from)
+    const { error } = await owner.client.from('employees').update({ status: 'inactive' }).eq('id', person.id)
+    if (error) throw error
+    return person.id
+  } catch (error) {
+    stop(`owner setup: could not create test person ${name}: ${error.message}`)
+  }
+}
+
+// The reused test people: found by name, or created once.
+async function findOrCreatePerson(name, how) {
+  const { data, error } = await owner.client.from('employees').select('id').eq('full_name', name).limit(1)
+  if (error) stop(`owner setup: could not read employees: ${error.message}`)
+  return data.length > 0 ? data[0].id : createTestPerson(name, how)
+}
+
 // Live (not voided) rates of the test employee, as seen by the owner.
 async function liveTestRates(client, employeeId) {
   const { data, error } = await client
@@ -269,20 +314,12 @@ if (ownerRole !== 'owner') {
   )
 }
 
-const testEmployeeId = await findOrCreate(owner.client, 'employees', 'full_name', {
-  full_name: TEST_EMPLOYEE_NAME,
-  category: 'general_worker',
-  active: false,
-})
+const testEmployeeId = await findOrCreatePerson(TEST_EMPLOYEE_NAME, { rate: TEST_RATES[0] })
 const testProjectId = await findOrCreate(owner.client, 'projects', 'name', {
   name: TEST_PROJECT_NAME,
   status: 'complete',
 })
-const testEmployee2Id = await findOrCreate(owner.client, 'employees', 'full_name', {
-  full_name: TEST_EMPLOYEE_2_NAME,
-  category: 'general_worker',
-  active: false,
-})
+const testEmployee2Id = await findOrCreatePerson(TEST_EMPLOYEE_2_NAME, { reject: true })
 const testEquipmentId = await findOrCreate(owner.client, 'equipment', 'name', {
   name: TEST_EQUIPMENT_NAME,
   ownership: 'own',
@@ -442,9 +479,17 @@ await attackUpdate(
   { name: 'HACKED' },
   'name',
 )
-await attackInsert('Site manager adds an employee', site.client, 'employees', {
+// Site managers may add people, but only as Pending: the app can't send a
+// status (or who added them) at all.
+await attackInsert('Site manager adds an employee as Approved', site.client, 'employees', {
   full_name: 'ZZ attack employee',
   category: 'general_worker',
+  status: 'approved',
+})
+await attackInsert('Site manager adds an employee, claiming someone else added them', site.client, 'employees', {
+  full_name: 'ZZ attack employee',
+  category: 'general_worker',
+  created_by: owner.userId,
 })
 await attackUpdate(
   'Site manager renames an employee',
@@ -1478,16 +1523,15 @@ async function ownerInsert(table, values, label) {
 }
 
 const costProjectId = await ownerInsert('projects', { name: `${COST_PREFIX} ${RUN_TAG}`, status: 'active' }, 'the costing test project')
-const ratedEmployeeId = await ownerInsert(
-  'employees',
-  { full_name: `ZZ Costing Rated ${RUN_TAG}`, category: 'general_worker', active: false },
-  'the rated test employee',
-)
-const unratedEmployeeId = await ownerInsert(
-  'employees',
-  { full_name: `ZZ Costing Unrated ${RUN_TAG}`, category: 'general_worker', active: false },
-  'the unrated test employee',
-)
+// Approved at R100 from 1 Jan 2026, then made inactive.
+const ratedEmployeeId = await createTestPerson(`ZZ Costing Rated ${RUN_TAG}`, {
+  rate: { hourly_rate: 100, effective_from: '2026-01-01' },
+})
+// Approved too (nobody is approved without a rate), but their rate only
+// starts long after the test days - so those days have NO rate.
+const unratedEmployeeId = await createTestPerson(`ZZ Costing Unrated ${RUN_TAG}`, {
+  rate: { hourly_rate: 100, effective_from: '2099-01-01' },
+})
 const ownedPlantId = await ownerInsert(
   'equipment',
   { name: `ZZ Costing Owned Plant ${RUN_TAG}`, ownership: 'own', active: false },
@@ -1498,7 +1542,6 @@ const rentedPlantId = await ownerInsert(
   { name: `ZZ Costing Rented Plant ${RUN_TAG}`, ownership: 'rented', active: false },
   'the rented test plant',
 )
-await ownerInsert('employee_rates', { employee_id: ratedEmployeeId, hourly_rate: 100, effective_from: '2026-01-01' }, 'the R100 rate')
 
 {
   const { error } = await owner.client
@@ -1557,6 +1600,12 @@ await submitCostReport(reportA)
 await saveCostReport(COST_DAY_2, [{ employee_id: ratedEmployeeId, hours: 3 }], [])
 // Report C: 2 hours for the person with NO rate. Saved now, submitted later.
 const reportC = await saveCostReport(COST_DAY_3, [{ employee_id: unratedEmployeeId, hours: 2 }], [])
+record(
+  'Site manager saves daily reports with save_report_draft (report, crew, equipment)',
+  Boolean(reportA && reportC),
+  'Three reports saved, each in one all-or-nothing step.',
+)
+covers('save_report_draft')
 
 // Receipts, with the app's own steps: R500 fuel (approved), R300 materials
 // (submitted, NOT approved), R200 food (rejected).
@@ -2298,11 +2347,462 @@ for (const fn of ['log_budget_change', 'equipment_rates_before_insert', 'equipme
   if (failed) console.log(`          (note: tidy-up incomplete: ${failed.error.message})`)
 }
 
-// --- Every object created in phases 5 and 6 must have been attacked -----------
+// =============================================================================
+// New employees and project teams (rework B)
+// =============================================================================
+// Site managers may add people - only as Pending - and put people on a
+// project's team. Only owners/admins approve, never without a rate, and a
+// pending person's hours stay unpriced until then. This uses its own
+// project, so the costing totals above stay exact.
+console.log('\nNew employee and project team attacks…\n')
+
+const PENDING_PREFIX = 'ZZ Pending Test'
+const PENDING_DAY = '2026-04-06' // a Monday
+
+// Finish off what an interrupted run left behind: its project, and any test
+// people still waiting for approval.
+{
+  const [projects, people] = await Promise.all([
+    owner.client
+      .from('projects')
+      .update({ status: 'complete' })
+      .like('name', `${PENDING_PREFIX}%`)
+      .eq('status', 'active'),
+    owner.client
+      .from('employees')
+      .update({ status: 'inactive', reject_reason: 'RLS test: tidy-up' })
+      .like('full_name', 'ZZ Pending%')
+      .eq('status', 'pending'),
+  ])
+  const failed = projects.error ?? people.error
+  if (failed) stop(`owner could not tidy up old pending test data: ${failed.message}`)
+}
+
+const pendingProjectId = await ownerInsert(
+  'projects',
+  { name: `${PENDING_PREFIX} ${RUN_TAG}`, status: 'active' },
+  'the pending test project',
+)
+
+// The owner's view of a person: status and the database's stamps.
+async function readPerson(employeeId) {
+  const { data } = await owner.client
+    .from('employees')
+    .select('full_name, category, phone, status, created_by, approved_at, approved_by, rejected_at, reject_reason')
+    .eq('id', employeeId)
+    .single()
+  return data
+}
+
+// The owner's view of the pending test project's costs.
+async function pendingProjectCosts() {
+  const { data, error } = await owner.client
+    .from('project_cost_vs_budget')
+    .select('spent, unpriced_hours')
+    .eq('project_id', pendingProjectId)
+  if (error) return { error }
+  return {
+    spent: data.reduce((sum, row) => sum + Number(row.spent), 0),
+    unpriced: data.reduce((sum, row) => sum + Number(row.unpriced_hours), 0),
+  }
+}
+
+// --- Site manager 1 adds a person, the app's way --------------------------------
+const pendingName = `ZZ Pending Person ${RUN_TAG}`
+let pendingPerson = null
+{
+  const name = "Site manager adds a new person (the app's way): Pending, added by them"
+  try {
+    pendingPerson = await addEmployee(site.client, {
+      fullName: pendingName,
+      category: 'general_worker',
+      phone: '082 000 0000',
+    })
+    const ok =
+      pendingPerson.status === 'pending' &&
+      pendingPerson.created_by === site.userId &&
+      pendingPerson.approved_at === null
+    record(name, ok, ok ? 'Saved as Pending; the database recorded who added them.' : `Got: ${JSON.stringify(pendingPerson)}`)
+  } catch (error) {
+    record(name, false, `Could not add them: ${error.message}`)
+  }
+  covers('employees_before_write')
+}
+if (!pendingPerson) stop('the new-employee checks need the person site manager 1 adds')
+
+{
+  const name = 'Site manager fixes the details of the pending person they added'
+  try {
+    const updated = await updateEmployeeDetails(site.client, pendingPerson.id, {
+      fullName: pendingName,
+      category: 'semi_skilled',
+      phone: '',
+    })
+    const ok = updated.category === 'semi_skilled' && updated.phone === null && updated.status === 'pending'
+    record(name, ok, ok ? 'Category and phone changed; still Pending.' : `Got: ${JSON.stringify(updated)}`)
+  } catch (error) {
+    record(name, false, `Could not change them: ${error.message}`)
+  }
+  covers('employees_before_write')
+}
+
+for (const [label, changes] of [
+  ['approves the person they added', { status: 'approved' }],
+  ['rejects the person they added', { status: 'inactive', reject_reason: 'attack' }],
+]) {
+  const name = `Site manager ${label}`
+  const { data, error } = await site.client.from('employees').update(changes).eq('id', pendingPerson.id).select('id')
+  const after = await readPerson(pendingPerson.id)
+  if (after?.status !== 'pending') record(name, false, `BREACH: the status is now ${after?.status}.`)
+  else if (error) record(name, true, `Refused: ${error.message}`)
+  else record(name, data.length === 0, data.length === 0 ? 'Changed nothing.' : 'Update reported success.')
+  covers('employees_before_write')
+}
+
+{
+  const name = 'Site manager approves the person they added with approve_employee()'
+  const { error } = await site.client.rpc('approve_employee', {
+    p_employee_id: pendingPerson.id,
+    p_hourly_rate: 1,
+    p_effective_from: PENDING_DAY,
+  })
+  const after = await readPerson(pendingPerson.id)
+  const { data: rates } = await owner.client.from('employee_rates').select('id').eq('employee_id', pendingPerson.id)
+  if (after?.status !== 'pending' || (rates ?? []).length > 0) {
+    record(name, false, `BREACH: status ${after?.status}, ${rates?.length} rate(s).`)
+  } else {
+    record(name, error?.code === PERMISSION_DENIED, error ? `Refused: ${error.message}` : 'No error came back.')
+  }
+  covers('approve_employee')
+}
+
+await attackInsert('Site manager adds a rate for the person they added', site.client, 'employee_rates', {
+  employee_id: pendingPerson.id,
+  hourly_rate: 1,
+  effective_from: '2030-01-01',
+})
+
+await attackUpdate(
+  'Site manager 2 renames the pending person site manager 1 added',
+  site2,
+  owner,
+  'employees',
+  pendingPerson.id,
+  { full_name: 'HACKED' },
+  'full_name',
+)
+covers('employees_before_write')
+
+{
+  const name = 'Same-name check finds the person, whatever the capitals and spaces'
+  try {
+    const matches = await findDuplicates(site.client, `  zz   pending person ${RUN_TAG.toUpperCase()} `)
+    const allowed = ['id', 'full_name', 'category', 'status']
+    const extra = [...new Set(matches.flatMap((match) => Object.keys(match)))].filter((key) => !allowed.includes(key))
+    if (!matches.some((match) => match.id === pendingPerson.id)) {
+      record(name, false, `Not found: ${JSON.stringify(matches)}`)
+    } else {
+      record(name, extra.length === 0, extra.length ? `Unexpected columns: ${extra.join(', ')}` : 'Found; only name, category and status came back.')
+    }
+  } catch (error) {
+    record(name, false, `Error: ${error.message}`)
+  }
+  covers('employee_duplicates')
+}
+
+for (const fn of ['employees_before_write', 'project_employees_before_write']) {
+  const name = `Site manager calls the trigger function ${fn}() directly`
+  const { error } = await site.client.rpc(fn, {})
+  record(name, Boolean(error), error ? `Refused: ${error.message}` : 'BREACH: it ran.')
+  covers(fn)
+}
+
+await attackReadNothing('Site manager reads pending_employees', site.client, 'pending_employees')
+covers('pending_employees')
+
+// --- Project teams ---------------------------------------------------------------
+let teamRowId = null
+{
+  const name = "Site manager puts the new person on the project's team (the app's way)"
+  try {
+    await assignToProject(site.client, pendingProjectId, pendingPerson.id)
+    const team = await fetchTeam(site.client, pendingProjectId)
+    const { data: row } = await site.client
+      .from('project_employees')
+      .select('id, assigned_by, active')
+      .eq('project_id', pendingProjectId)
+      .eq('employee_id', pendingPerson.id)
+      .single()
+    teamRowId = row?.id ?? null
+    const ok = team.some((person) => person.id === pendingPerson.id) && row?.assigned_by === site.userId && row.active
+    record(name, ok, ok ? 'On the team; the database recorded who assigned them.' : `Team: ${JSON.stringify(team)}; row: ${JSON.stringify(row)}`)
+  } catch (error) {
+    record(name, false, `Error: ${error.message}`)
+  }
+  covers('project_employees', 'assign_to_project', 'project_employees_before_write')
+}
+
+{
+  const name = 'Site manager reads project_employees (allowed, no money fields)'
+  const { data, error } = await site.client.from('project_employees').select('*')
+  if (error) {
+    record(name, false, `Could not read project_employees: ${error.message}`)
+  } else if (data.length === 0) {
+    record(name, false, 'Inconclusive: zero rows came back, so the columns couldn\'t be checked.')
+  } else {
+    const unexpected = [...new Set(data.flatMap((row) => Object.keys(row)))].filter(
+      (column) => !ALLOWED_COLUMNS.project_employees.includes(column),
+    )
+    record(
+      name,
+      unexpected.length === 0,
+      unexpected.length ? `Unapproved column(s) sent to a site manager: ${unexpected.join(', ')}.` : `${data.length} row(s), only approved columns.`,
+    )
+  }
+  covers('project_employees')
+}
+
+{
+  const name = 'Site manager takes the person off the team, then puts them back'
+  try {
+    await removeFromProject(site.client, pendingProjectId, pendingPerson.id)
+    const off = await fetchTeam(site.client, pendingProjectId)
+    await assignToProject(site.client, pendingProjectId, pendingPerson.id)
+    const back = await fetchTeam(site.client, pendingProjectId)
+    const ok = !off.some((person) => person.id === pendingPerson.id) && back.some((person) => person.id === pendingPerson.id)
+    record(name, ok, ok ? 'Off, then on again (the row is kept - never deleted).' : 'The team did not change as expected.')
+  } catch (error) {
+    record(name, false, `Error: ${error.message}`)
+  }
+  covers('project_employees', 'assign_to_project', 'project_employees_before_write')
+}
+
+{
+  const name = 'Site manager puts an inactive person on a team'
+  const { error } = await site.client.rpc('assign_to_project', {
+    p_project_id: pendingProjectId,
+    p_employee_id: ratedEmployeeId,
+  })
+  record(name, error?.code === PERMISSION_DENIED, error ? `Refused: ${error.message}` : 'BREACH: they were added.')
+  covers('assign_to_project')
+}
+
+if (teamRowId) {
+  await attackUpdate(
+    'Site manager moves a team row to another project',
+    site,
+    owner,
+    'project_employees',
+    teamRowId,
+    { project_id: costProjectId },
+    'project_id',
+  )
+  covers('project_employees')
+}
+
+// --- Hours for a pending person, and an Absent line ------------------------------
+let pendingReportId = null
+{
+  const name = 'Site manager logs 4 h for the pending person and marks someone Absent (0 h)'
+  const { data, error } = await site.client.rpc('save_report_draft', {
+    p_report: { project_id: pendingProjectId, report_date: PENDING_DAY, activities: `RLS pending test ${RUN_TAG}` },
+    p_crew: [
+      { employee_id: pendingPerson.id, hours: 4 },
+      // No rate on this day: if Absent counted, it would show as unpriced.
+      { employee_id: unratedEmployeeId, hours: 0 },
+    ],
+    p_equipment: [],
+  })
+  pendingReportId = data ?? null
+  record(name, !error && Boolean(data), error ? `Could not save: ${error.message}` : 'Saved; the absent person stays on the report with 0 h.')
+  covers('save_report_draft')
+}
+if (!pendingReportId) stop('the pending-hours checks need site manager 1\'s report')
+
+{
+  const name = 'Site manager saves a crew line with negative hours'
+  const { error } = await site.client.rpc('save_report_draft', {
+    p_report: { id: pendingReportId, project_id: pendingProjectId, report_date: PENDING_DAY },
+    p_crew: [{ employee_id: pendingPerson.id, hours: -1 }],
+    p_equipment: [],
+  })
+  if (error?.code === '23514') record(name, true, 'Refused: hours must be 0 to 24.')
+  else if (error) record(name, false, `Refused for the wrong reason (${error.code}): ${error.message}`)
+  else record(name, false, 'BREACH: negative hours were saved.')
+}
+
+{
+  const { data, error } = await site.client
+    .from('daily_reports')
+    .update({ status: 'submitted' })
+    .eq('id', pendingReportId)
+    .select('id')
+  if (error || data.length !== 1) stop(`site manager 1 could not submit the pending test report: ${error?.message}`)
+}
+
+{
+  const name = "Owner: the pending person's 4 h are unpriced and cost nothing; Absent adds nothing"
+  const costs = await pendingProjectCosts()
+  const { data: unpriced, error } = await owner.client
+    .from('unpriced_hours')
+    .select('employee_id, hours, employee_status')
+    .eq('project_id', pendingProjectId)
+  const only = unpriced?.length === 1 ? unpriced[0] : null
+  if (costs.error || error) {
+    record(name, false, `Error: ${(costs.error ?? error).message}`)
+  } else if (costs.spent !== 0) {
+    record(name, false, `Spent ${rand(costs.spent)} - it should be R0.`)
+  } else if (
+    costs.unpriced !== 4 ||
+    !only ||
+    only.employee_id !== pendingPerson.id ||
+    Number(only.hours) !== 4 ||
+    only.employee_status !== 'pending'
+  ) {
+    record(name, false, `Unpriced: ${costs.unpriced} h; list: ${JSON.stringify(unpriced)}`)
+  } else {
+    record(name, true, 'R0 spent; 4 h unpriced, listed as Pending. The absent line is in neither.')
+  }
+  covers('rate_on', 'unpriced_hours')
+}
+
+{
+  const name = "Owner: the pending person's labour summary costs R0, with 4 h unpriced"
+  const { data, error } = await owner.client.rpc('employee_month_summary', {
+    p_employee_id: pendingPerson.id,
+    p_month: '2026-04-01',
+    p_project_id: pendingProjectId,
+  })
+  const row = data?.[0]
+  if (error || !row) {
+    record(name, false, `Error: ${error?.message ?? 'no row'}`)
+  } else {
+    const ok = Number(row.total_hours) === 4 && Number(row.provisional_cost) === 0 && Number(row.unpriced_hours) === 4
+    record(name, ok, ok ? '4 h, R0, 4 h unpriced.' : `Got: ${JSON.stringify(row)}`)
+  }
+  covers('rate_on')
+}
+
+{
+  const name = 'Owner: the New employees queue shows them, who added them and their hours'
+  const { data, error } = await owner.client
+    .from('pending_employees')
+    .select('id, created_by, added_by_name, hours_logged, first_worked')
+    .eq('id', pendingPerson.id)
+  const row = data?.[0]
+  if (error || !row) {
+    record(name, false, `Error: ${error?.message ?? 'not in the queue'}`)
+  } else {
+    const ok =
+      row.created_by === site.userId &&
+      Boolean(row.added_by_name) &&
+      Number(row.hours_logged) === 4 &&
+      row.first_worked === PENDING_DAY
+    record(name, ok, ok ? `Added by ${row.added_by_name}; 4 h from ${PENDING_DAY}.` : `Got: ${JSON.stringify(row)}`)
+  }
+  covers('pending_employees')
+}
+
+// --- The owner decides ---------------------------------------------------------------
+{
+  const name = 'Owner approves without a rate (directly, and with approve_employee)'
+  const direct = await owner.client.from('employees').update({ status: 'approved' }).eq('id', pendingPerson.id).select('id')
+  const viaFunction = await owner.client.rpc('approve_employee', {
+    p_employee_id: pendingPerson.id,
+    p_hourly_rate: null,
+    p_effective_from: PENDING_DAY,
+  })
+  const after = await readPerson(pendingPerson.id)
+  const ok = direct.error?.code === '23514' && viaFunction.error?.code === '23514' && after?.status === 'pending'
+  record(
+    name,
+    ok,
+    ok
+      ? 'Refused both ways; still Pending.'
+      : `Direct: ${direct.error?.message ?? 'no error'}; function: ${viaFunction.error?.message ?? 'no error'}; status ${after?.status}.`,
+  )
+  covers('employees_before_write', 'approve_employee')
+}
+
+{
+  const name = 'Owner rejects without a reason'
+  const { error } = await owner.client.from('employees').update({ status: 'inactive' }).eq('id', pendingPerson.id).select('id')
+  const after = await readPerson(pendingPerson.id)
+  const ok = error?.code === '23514' && after?.status === 'pending'
+  record(name, ok, ok ? 'Refused; still Pending.' : `Error: ${error?.message ?? 'none'}; status ${after?.status}.`)
+  covers('employees_before_write')
+}
+
+{
+  const name = "Owner approves with a rate (the app's way): the 4 h are now priced at R400"
+  try {
+    await approveEmployee(owner.client, pendingPerson.id, 100, PENDING_DAY)
+    const after = await readPerson(pendingPerson.id)
+    const costs = await pendingProjectCosts()
+    const ok =
+      after?.status === 'approved' &&
+      after.approved_by === owner.userId &&
+      costs.spent === 400 &&
+      costs.unpriced === 0
+    record(
+      name,
+      ok,
+      ok ? 'Approved and stamped; R400 spent, 0 h unpriced.' : `Status ${after?.status}; spent ${rand(costs.spent)}; ${costs.unpriced} h unpriced.`,
+    )
+  } catch (error) {
+    record(name, false, `Could not approve: ${error.message}`)
+  }
+  covers('approve_employee', 'rate_on', 'employees_before_write')
+}
+
+await attackUpdate(
+  'Site manager renames the person after they were approved',
+  site,
+  owner,
+  'employees',
+  pendingPerson.id,
+  { full_name: 'HACKED' },
+  'full_name',
+)
+covers('employees_before_write')
+
+{
+  const name = "Owner rejects a new person with a reason (the app's way)"
+  try {
+    const second = await addEmployee(site.client, { fullName: `ZZ Pending Reject ${RUN_TAG}`, category: 'general_worker' })
+    await rejectEmployee(owner.client, second.id, 'RLS test: duplicate')
+    const after = await readPerson(second.id)
+    const ok =
+      after?.status === 'inactive' &&
+      Boolean(after.rejected_at) &&
+      after.reject_reason === 'RLS test: duplicate' &&
+      after.approved_at === null
+    record(name, ok, ok ? 'Inactive, with the reason and when it was rejected.' : `Got: ${JSON.stringify(after)}`)
+  } catch (error) {
+    record(name, false, `Error: ${error.message}`)
+  }
+  covers('employees_before_write')
+}
+
+// --- Finish off this run's test data (nothing can be deleted) -------------------
+{
+  const outcomes = await Promise.all([
+    owner.client.from('employees').update({ status: 'inactive' }).eq('id', pendingPerson.id).select('id'),
+    owner.client.from('projects').update({ status: 'complete' }).eq('id', pendingProjectId).select('id'),
+  ])
+  const failed = outcomes.find((outcome) => outcome.error)
+  if (failed) console.log(`          (note: tidy-up incomplete: ${failed.error.message})`)
+}
+
+// --- Every object created in phases 5 and 6 (and since) must be attacked ------
+// (Rework A's file is left out: everything it created was undone by the
+// undo-rework-A file, which is checked here instead.)
 for (const [phase, file] of [
   [5, '20261005120000_budgets_and_costing.sql'],
   [6, '20261006090000_dashboard.sql'],
   ['6 (insights)', '20261006120000_dashboard_insights.sql'],
+  ['"undo rework A"', '20261007090000_undo_rework_a.sql'],
+  ['rework B', '20261007120000_rework_b_crew_and_new_employees.sql'],
 ]) {
   const sql = readFileSync(fileURLToPath(new URL(`../supabase/migrations/${file}`, import.meta.url)), 'utf8')
   const created = [...sql.matchAll(/create\s+(?:or\s+replace\s+)?(table|view|function)\s+public\.(\w+)/gi)].map(

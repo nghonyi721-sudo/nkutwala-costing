@@ -21,6 +21,14 @@ export const EMPLOYEE_CATEGORY_LABELS = {
   general_worker: 'General worker',
 }
 
+// Where a person stands: added by a site manager (pending), approved by the
+// owner with a rate, or no longer working here / rejected (inactive).
+export const EMPLOYEE_STATUS_LABELS = {
+  pending: 'Pending',
+  approved: 'Approved',
+  inactive: 'Inactive',
+}
+
 export function isOwnerOrAdmin(role) {
   return role === 'owner' || role === 'system_admin'
 }

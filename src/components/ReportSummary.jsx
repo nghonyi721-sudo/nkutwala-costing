@@ -35,6 +35,9 @@ const hours = (value) => `${Number(value).toFixed(1)} h`
 // for submitted reports and by owners for every report. Quantities only.
 function ReportSummary({ report }) {
   const crew = report.report_crew ?? []
+  // 0 hours = absent (the person stays on the report).
+  const presentCount = crew.filter((line) => Number(line.hours) > 0).length
+  const absentCount = crew.length - presentCount
   const equipment = report.report_equipment ?? []
   const onSite = hoursBetween(report.start_time, report.end_time)
 
@@ -47,7 +50,8 @@ function ReportSummary({ report }) {
         value={totalHours(crew).toFixed(1)}
         unit="h"
         figures={[
-          { label: 'Crew', value: crew.length },
+          { label: 'Crew', value: presentCount },
+          ...(absentCount > 0 ? [{ label: 'Absent', value: absentCount }] : []),
           { label: 'Plant hours', value: totalHours(equipment).toFixed(1), unit: 'h' },
           { label: 'Fuel', value: Number(report.fuel_litres).toFixed(0), unit: 'L' },
           { label: 'Rain', value: report.rain_percent, unit: '%' },
@@ -94,10 +98,14 @@ function ReportSummary({ report }) {
         <Row icon={ClockIcon} title="End" trailing={formatTime(report.end_time)} />
       </Section>
 
-      <Section title={`Crew · ${crew.length}`}>
+      <Section title={`Crew · ${presentCount}${absentCount > 0 ? ` · ${absentCount} absent` : ''}`}>
         {crew.length === 0 && <Row title="No crew recorded" />}
         {crew.map((line) => (
-          <Row key={line.id} title={line.employee?.full_name} trailing={hours(line.hours)} />
+          <Row
+            key={line.id}
+            title={line.employee?.full_name}
+            trailing={Number(line.hours) > 0 ? hours(line.hours) : 'Absent'}
+          />
         ))}
         <Row tone="strong" title="Total man-hours" trailing={hours(totalHours(crew))} />
       </Section>

@@ -35,6 +35,9 @@ function HomePage({ user }) {
   // Owners/admins: receipts waiting for approval (the tab's badge).
   const [pendingReceipts, setPendingReceipts] = useState(0)
   const [receiptChanges, setReceiptChanges] = useState(0)
+  // Owners/admins: new employees waiting for approval (More / Employees badge).
+  const [pendingEmployees, setPendingEmployees] = useState(0)
+  const [employeeChanges, setEmployeeChanges] = useState(0)
 
   useEffect(() => {
     let cancelled = false
@@ -81,6 +84,24 @@ function HomePage({ user }) {
     }
   }, [isAdmin, visit, receiptChanges])
 
+  // Counted again on every tab tap and after every approve/reject.
+  useEffect(() => {
+    if (!isAdmin) return undefined
+    let cancelled = false
+
+    supabase
+      .from('employees')
+      .select('id', { count: 'exact', head: true })
+      .eq('status', 'pending')
+      .then(({ count }) => {
+        if (!cancelled) setPendingEmployees(count ?? 0)
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [isAdmin, visit, employeeChanges])
+
   // Until a nav tab is tapped: owners land on the Dashboard, site managers on
   // My reports.
   let current = screen
@@ -122,7 +143,9 @@ function HomePage({ user }) {
       </Page>
     )
   }
-  if (isAdmin && current === 'more') page = <MorePage key={pageKey} onNavigate={navigate} />
+  if (isAdmin && current === 'more') {
+    page = <MorePage key={pageKey} pendingEmployees={pendingEmployees} onNavigate={navigate} />
+  }
   if (isAdmin && current === 'reports') page = <ReportsPage key={pageKey} />
   if (isAdmin && current === 'receipts') {
     page = (
@@ -135,7 +158,9 @@ function HomePage({ user }) {
     )
   }
   if (isAdmin && current === 'projects') page = <ProjectsPage key={pageKey} />
-  if (isAdmin && current === 'employees') page = <EmployeesPage key={pageKey} />
+  if (isAdmin && current === 'employees') {
+    page = <EmployeesPage key={pageKey} onChanged={() => setEmployeeChanges((count) => count + 1)} />
+  }
   if (isAdmin && current === 'equipment') page = <EquipmentPage key={pageKey} />
   if (isSiteManager && (current === 'new-report' || current === 'my-reports')) {
     page = (
@@ -155,7 +180,7 @@ function HomePage({ user }) {
       screen={current}
       onNavigate={navigate}
       onLogout={() => supabase.auth.signOut()}
-      badges={{ receipts: pendingReceipts }}
+      badges={{ receipts: pendingReceipts, more: pendingEmployees, employees: pendingEmployees }}
     >
       {error && (
         <Page title="Can't load your account">

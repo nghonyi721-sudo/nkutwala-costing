@@ -37,6 +37,11 @@ Replaces a paper Daily Activity Report. NOT a SaaS product.
 - owner — all costs, rates, gross pay, approvals
 - site_manager — quantities ONLY. Never rates, never totals.
 Employees do not log in. Site managers record them by name.
+Site managers may ADD a new person (name, category, phone) - always as
+Pending - and fix the pending people they added. Only owner/system_admin
+approve someone, and only together with a dated hourly rate
+(approve_employee). Rejecting needs a reason. Owners adding someone
+enter the rate on the same form.
 
 ## THE RATE WALL — the most important rule in this project
 Site managers must never receive money data. Not hidden in the UI —
@@ -57,6 +62,12 @@ If you are about to send a rand value to a site_manager, STOP and flag it.
 - One daily report per manager per project per day.
   Two managers must never overwrite each other.
 - Store timestamps in UTC. Report date is the site's local calendar date.
+- Employee status: pending / approved / inactive. A pending person's hours
+  are UNPRICED until they are approved (rate_on() only prices approved
+  people) - never silently zero.
+- Project teams (project_employees): who works where. Never deleted -
+  switched off. A new daily report starts with the project's team.
+- Absent = 0 hours on a crew line; the row stays on the report.
 
 ## Out of scope for v1 — do NOT build these
 Payroll deductions (PAYE/UIF), offline sync, receipt OCR, multi-tenancy,

@@ -43,8 +43,10 @@ function monthCells(month) {
 const hoursText = (hours) => Number(hours).toFixed(1)
 
 // Calendar shading: darker blue for longer days (a full day is about 9 h).
+// 0 h = marked Absent on the report: no shading.
 function heatClass(hours) {
   const value = Number(hours)
+  if (value === 0) return ''
   if (value >= 9) return s.heat3
   if (value >= 6) return s.heat2
   return s.heat1
@@ -141,11 +143,11 @@ function EmployeeCalendar({ projectId, onOpenReport }) {
                   key={day}
                   type="button"
                   className={`${s.day} ${s.dayWorked} ${heatClass(row.hours)}`}
-                  aria-label={`${dayNumber}: ${hoursText(row.hours)} hours - open the report`}
+                  aria-label={`${dayNumber}: ${Number(row.hours) > 0 ? `${hoursText(row.hours)} hours` : 'absent'} - open the report`}
                   onClick={() => openDay(day)}
                 >
                   <span className={s.dayNumber}>{dayNumber}</span>
-                  <span className={`${s.dayHours} num`}>{hoursText(row.hours)}</span>
+                  <span className={`${s.dayHours} num`}>{Number(row.hours) > 0 ? hoursText(row.hours) : '–'}</span>
                 </button>
               ) : (
                 <span key={day} className={s.day}>

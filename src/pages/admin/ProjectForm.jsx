@@ -3,16 +3,17 @@ import { supabase } from '../../lib/supabaseClient'
 import { PROJECT_STATUS_LABELS } from '../../lib/labels'
 import ActionBar from '../../components/ActionBar'
 import Button from '../../components/Button'
-import { CoinsIcon, HashIcon, MapPinIcon } from '../../components/icons'
+import { CoinsIcon, HashIcon, MapPinIcon, UsersThreeIcon } from '../../components/icons'
 import Page from '../../components/Page'
 import { FieldRow, Row } from '../../components/Row'
 import Section from '../../components/Section'
 import SegmentedControl from '../../components/SegmentedControl'
 import ProjectBudget from './ProjectBudget'
+import ProjectTeam from './ProjectTeam'
 
 // Add a project (project = null) or edit one. Projects are never deleted:
 // mark them Complete instead. company_id is filled in by the database.
-// An existing project also opens its Budget and costs.
+// An existing project also opens its Team and its Budget and costs.
 function ProjectForm({ project, onDone }) {
   const [name, setName] = useState(project?.name ?? '')
   const [contractNumber, setContractNumber] = useState(project?.contract_number ?? '')
@@ -20,6 +21,7 @@ function ProjectForm({ project, onDone }) {
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
   const [showingBudget, setShowingBudget] = useState(false)
+  const [showingTeam, setShowingTeam] = useState(false)
 
   async function handleSubmit(event) {
     event.preventDefault()
@@ -45,6 +47,10 @@ function ProjectForm({ project, onDone }) {
     } else {
       onDone(true)
     }
+  }
+
+  if (showingTeam) {
+    return <ProjectTeam project={project} onBack={() => setShowingTeam(false)} />
   }
 
   if (showingBudget) {
@@ -86,6 +92,18 @@ function ProjectForm({ project, onDone }) {
           onChange={(e) => setContractNumber(e.target.value)}
         />
       </Section>
+
+      {project && (
+        <Section title="People">
+          <Row
+            icon={UsersThreeIcon}
+            title="Team"
+            subtitle="Who works on this project"
+            chevron
+            onClick={() => setShowingTeam(true)}
+          />
+        </Section>
+      )}
 
       {project && (
         <Section title="Money">

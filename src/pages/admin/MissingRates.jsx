@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../../lib/supabaseClient'
+import { EMPLOYEE_COLUMNS } from '../../lib/employeeSteps'
 import { formatDate } from '../../lib/labels'
 import EmptyState from '../../components/EmptyState'
 import { BulldozerIcon, CheckCircleIcon, UserIcon } from '../../components/icons'
@@ -9,6 +10,7 @@ import { Row } from '../../components/Row'
 import Section from '../../components/Section'
 import Skeleton from '../../components/Skeleton'
 import EmployeeForm from './EmployeeForm'
+import EmployeeReview from './EmployeeReview'
 import EquipmentForm from './EquipmentForm'
 
 // One entry per person or machine: all their unpriced hours together.
@@ -18,7 +20,8 @@ function groupByWho(lines) {
     const kind = line.employee_id ? 'employee' : 'equipment'
     const id = line.employee_id ?? line.equipment_id
     const key = `${kind}:${id}`
-    const group = groups.get(key) ?? { key, kind, id, name: line.name, hours: 0, first: line.report_date, last: line.report_date, projects: new Set() }
+    // status: a person's (pending people need approving, not just a rate)
+    const group = groups.get(key) ?? { key, kind, id, status: line.employee_status, name: line.name, hours: 0, first: line.report_date, last: line.report_date, projects: new Set() }
     group.hours += Number(line.hours)
     if (line.report_date < group.first) group.first = line.report_date
     if (line.report_date > group.last) group.last = line.report_date
@@ -30,14 +33,16 @@ function groupByWho(lines) {
 
 // Owner/admin: hours on submitted reports that have no rate on their date,
 // so they are in no cost total. Tap a person or machine to add the rate -
-// a rate from the right start date prices those hours automatically.
+// a rate from the right start date prices those hours automatically. New
+// people a site manager added are approved instead (with their rate).
 //   projectId: only this project's hours (otherwise every project)
 function MissingRates({ projectId, backLabel, onBack }) {
   // undefined = loading, array = loaded
   const [groups, setGroups] = useState(undefined)
   const [loadError, setLoadError] = useState('')
   const [reloadCount, setReloadCount] = useState(0)
-  // The person or machine whose rates are open: { kind, record }
+  // The person or machine whose rates are open: { kind, record }, or a new
+  // person being approved: { kind: 'review', id }
   const [open, setOpen] = useState(null)
   const [openError, setOpenError] = useState('')
 
@@ -46,7 +51,7 @@ function MissingRates({ projectId, backLabel, onBack }) {
 
     let query = supabase
       .from('unpriced_hours')
-      .select('project_name, report_date, employee_id, equipment_id, name, hours')
+      .select('project_name, report_date, employee_id, equipment_id, name, hours, employee_status')
       .order('report_date')
     if (projectId) query = query.eq('project_id', projectId)
 
@@ -67,9 +72,13 @@ function MissingRates({ projectId, backLabel, onBack }) {
 
   async function openRates(group) {
     setOpenError('')
+    if (group.status === 'pending') {
+      setOpen({ kind: 'review', id: group.id })
+      return
+    }
     const { data, error } =
       group.kind === 'employee'
-        ? await supabase.from('employees').select('id, full_name, category, active').eq('id', group.id).single()
+        ? await supabase.from('employees').select(EMPLOYEE_COLUMNS).eq('id', group.id).single()
         : await supabase.from('equipment').select('id, name, ownership, active').eq('id', group.id).single()
     if (error) {
       setOpenError('Could not open it. Check your signal and try again.')
@@ -82,6 +91,9 @@ function MissingRates({ projectId, backLabel, onBack }) {
     const done = () => {
       setOpen(null)
       setReloadCount((count) => count + 1)
+    }
+    if (open.kind === 'review') {
+      return <EmployeeReview employeeId={open.id} backLabel="Missing rates" onDone={done} />
     }
     return open.kind === 'employee' ? (
       <EmployeeForm employee={open.record} backLabel="Missing rates" onDone={done} />
@@ -114,7 +126,7 @@ function MissingRates({ projectId, backLabel, onBack }) {
       {groups?.length > 0 && (
         <Section
           title="Hours with no rate"
-          footer="Add a rate that starts on or before the first date shown. Those hours are then priced automatically; old months keep their old rates."
+          footer="Add a rate that starts on or before the first date shown. Those hours are then priced automatically; old months keep their old rates. New people are approved with their rate."
         >
           {groups.map((group) => (
             <Row
@@ -128,7 +140,7 @@ function MissingRates({ projectId, backLabel, onBack }) {
                 (group.projects.size === 1 ? ` · ${[...group.projects][0]}` : ` · ${group.projects.size} projects`)
               }
               mono
-              trailing="Add rate"
+              trailing={group.status === 'pending' ? 'Approve' : 'Add rate'}
               chevron
               onClick={() => openRates(group)}
             />

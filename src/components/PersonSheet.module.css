@@ -1,0 +1,47 @@
+.message {
+  margin: 0 var(--gutter) var(--space-3);
+}
+
+.label {
+  margin: var(--space-5) calc(var(--gutter) * 2) var(--space-2);
+  font-size: var(--text-footnote);
+  color: var(--label-2);
+  text-transform: uppercase;
+}
+
+/* Category: big buttons, two per row (like the receipt categories) */
+.categories {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin: 0 var(--gutter);
+}
+
+.category {
+  min-height: 56px;
+  padding: 0 14px;
+  border: 2px solid transparent;
+  border-radius: var(--radius-group);
+  background: var(--sheet-cell);
+  color: var(--label);
+  font: inherit;
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+}
+
+.category:active {
+  background: var(--fill);
+}
+
+.category[aria-checked='true'] {
+  border-color: var(--tint-solid);
+  background: var(--tint-fill);
+  color: var(--tint);
+  font-weight: 600;
+}
+
+.category:focus-visible {
+  outline: 2px solid var(--tint);
+  outline-offset: 2px;
+}

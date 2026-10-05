@@ -18,3 +18,108 @@
   outline-offset: -2px;
   border-radius: 50%;
 }
+
+/* --- Crew rows: name on top; Absent and the hours stepper underneath ---- */
+.crewRow {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 10px var(--gutter);
+  background: var(--surface);
+}
+
+/* Hairline under each person (the next row starts after it) */
+.crewRow::after {
+  content: '';
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: var(--gutter);
+  border-bottom: 0.5px solid var(--separator);
+}
+
+.crewBody {
+  flex: 1;
+  min-width: 0;
+}
+
+.crewName {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+  min-height: 28px;
+}
+
+.nameText,
+.nameButton {
+  font-size: var(--text-body);
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.nameButton {
+  min-height: 44px;
+  margin: -8px 0;
+  padding: 0;
+  background: none;
+  border: 0;
+  color: var(--tint);
+  text-align: left;
+  cursor: pointer;
+}
+
+.nameButton:focus-visible {
+  outline: 2px solid var(--tint);
+  outline-offset: 2px;
+}
+
+.crewControls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 6px;
+}
+
+.absentButton {
+  min-width: 96px;
+  min-height: var(--tap);
+  padding: 0 16px;
+  border: 2px solid transparent;
+  border-radius: var(--radius-control);
+  background: var(--fill);
+  color: var(--label);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.absentButton:active {
+  background: var(--fill-pressed);
+}
+
+.absentButton[aria-pressed='true'] {
+  border-color: var(--destructive-solid);
+  background: var(--destructive-fill);
+  color: var(--destructive);
+}
+
+.absentButton:focus-visible {
+  outline: 2px solid var(--tint);
+  outline-offset: 2px;
+}
+
+.absentHours {
+  min-width: 150px;
+  color: var(--label-2);
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+/* Absent: the name is greyed out */
+.crewAbsent .nameText {
+  color: var(--label-2);
+  text-decoration: line-through;
+}

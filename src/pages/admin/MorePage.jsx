@@ -5,15 +5,21 @@ import Section from '../../components/Section'
 
 // Owner/admin, phones only: the sections that don't fit in the five-tab bar
 // (like the "More" tab in iPhone apps). Wide screens show them in the top bar.
+//   pendingEmployees: new employees waiting for approval
 //   onNavigate: open that section
-function MorePage({ onNavigate }) {
+function MorePage({ pendingEmployees = 0, onNavigate }) {
   return (
     <Page title="More">
       <Section>
         <Row
           icon={UsersThreeIcon}
           title="Employees"
-          subtitle="People and their hourly rates"
+          subtitle={
+            pendingEmployees > 0
+              ? `${pendingEmployees} new ${pendingEmployees === 1 ? 'person' : 'people'} to approve`
+              : 'People, their hourly rates and new people to approve'
+          }
+          iconTone={pendingEmployees > 0 ? 'red' : undefined}
           chevron
           onClick={() => onNavigate('employees')}
         />
