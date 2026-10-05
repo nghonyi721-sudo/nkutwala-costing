@@ -20,6 +20,8 @@
 // (complete) are created once and reused, because nothing can be deleted.
 // Each run adds a few "ZZ RLS Test Vendor" receipts and leaves every one of
 // them rejected, reversed or discarded, so none wait in the Pending queue.
+// For costing, each run creates its own "ZZ Costing Test <run>" project and
+// inactive "ZZ Costing" people and machines, and marks the project complete.
 
 import { createHash, randomUUID } from 'node:crypto'
 import { readFileSync } from 'node:fs'
@@ -28,6 +30,8 @@ import { createClient } from '@supabase/supabase-js'
 // The app's own receipt-sending steps, so the test saves, uploads (to the
 // place the database gives) and submits exactly the way the app does.
 import { saveDraft, submitDraft, uploadPhoto } from '../src/lib/receiptSteps.js'
+// The app's one category list, checked against the database's.
+import { COST_CATEGORY_LABELS } from '../src/lib/labels.js'
 
 process.loadEnvFile(fileURLToPath(new URL('../.env', import.meta.url)))
 
@@ -78,9 +82,11 @@ const ALLOWED_COLUMNS = {
 }
 
 const results = []
+const checkNames = []
 
 function record(name, passed, detail) {
   results.push(passed)
+  checkNames.push(name)
   const number = String(results.length).padStart(2, ' ')
   console.log(`${passed ? 'PASS' : 'FAIL'}  ${number}. ${name}\n          ${detail}`)
 }
@@ -186,7 +192,8 @@ async function liveTestRates(client, employeeId) {
 // An insert that must NOT be allowed. By default it must be refused for lack
 // of permission; pass expectedCode when it must be refused for a specific
 // reason (e.g. a limit or a duplicate), so a refusal for some other reason
-// can't be mistaken for a pass.
+// can't be mistaken for a pass. keyColumn: the table's key, asked for back
+// (most tables use "id").
 async function attackInsert(
   name,
   client,
@@ -194,8 +201,9 @@ async function attackInsert(
   values,
   expectedCode = PERMISSION_DENIED,
   refusedBecause = 'Server refused.',
+  keyColumn = 'id',
 ) {
-  const { data, error } = await client.from(table).insert(values).select('id')
+  const { data, error } = await client.from(table).insert(values).select(keyColumn)
   if (error?.code === expectedCode) {
     record(name, true, refusedBecause)
   } else if (error) {
@@ -1430,6 +1438,547 @@ await attackReceipt(
 }
 
 await finishLeftoverTestReceipts()
+
+// =============================================================================
+// Budgets and costing (phase 5)
+// =============================================================================
+// Each run uses its OWN project, people and machines ("ZZ Costing … <run>"),
+// so every total is exact. Nothing can be deleted, so afterwards the test
+// finishes everything off: project complete, receipts rejected/reversed,
+// people and machines created inactive.
+console.log('\nBudgets and costing attacks…\n')
+
+// Which checks attack which object - reported at the end of this section.
+const coverage = new Map()
+function covers(...objects) {
+  for (const object of objects) {
+    coverage.set(object, [...(coverage.get(object) ?? []), results.length])
+  }
+}
+
+const COST_DAY_1 = '2026-03-02' // a Monday
+const COST_DAY_2 = '2026-03-03'
+const COST_DAY_3 = '2026-03-04'
+const COST_PREFIX = 'ZZ Costing Test'
+
+async function ownerInsert(table, values, label) {
+  const { data, error } = await owner.client.from(table).insert(values).select('id').single()
+  if (error) stop(`owner setup: could not create ${label}: ${error.message}`)
+  return data.id
+}
+
+// Finish off a costing project left active by an interrupted run.
+{
+  const { error } = await owner.client
+    .from('projects')
+    .update({ status: 'complete' })
+    .like('name', `${COST_PREFIX}%`)
+    .eq('status', 'active')
+  if (error) stop(`owner could not tidy up old costing test projects: ${error.message}`)
+}
+
+const costProjectId = await ownerInsert('projects', { name: `${COST_PREFIX} ${RUN_TAG}`, status: 'active' }, 'the costing test project')
+const ratedEmployeeId = await ownerInsert(
+  'employees',
+  { full_name: `ZZ Costing Rated ${RUN_TAG}`, category: 'general_worker', active: false },
+  'the rated test employee',
+)
+const unratedEmployeeId = await ownerInsert(
+  'employees',
+  { full_name: `ZZ Costing Unrated ${RUN_TAG}`, category: 'general_worker', active: false },
+  'the unrated test employee',
+)
+const ownedPlantId = await ownerInsert(
+  'equipment',
+  { name: `ZZ Costing Owned Plant ${RUN_TAG}`, ownership: 'own', active: false },
+  'the owned test plant',
+)
+const rentedPlantId = await ownerInsert(
+  'equipment',
+  { name: `ZZ Costing Rented Plant ${RUN_TAG}`, ownership: 'rented', active: false },
+  'the rented test plant',
+)
+await ownerInsert('employee_rates', { employee_id: ratedEmployeeId, hourly_rate: 100, effective_from: '2026-01-01' }, 'the R100 rate')
+
+{
+  const { error } = await owner.client
+    .from('equipment_rates')
+    .insert({ equipment_id: ownedPlantId, hourly_rate: 250, effective_from: '2026-01-01' })
+  record(
+    'Owner adds a rate for owned equipment (R250/h)',
+    !error,
+    error ? `Could not add it: ${error.message}` : 'Added.',
+  )
+  covers('equipment_rates', 'equipment_rates_before_insert')
+  if (error) stop('the costing checks need the owned-plant rate.')
+}
+
+await attackInsert(
+  'Owner adds a rate for RENTED equipment',
+  owner.client,
+  'equipment_rates',
+  { equipment_id: rentedPlantId, hourly_rate: 300, effective_from: '2026-01-01' },
+  '23514',
+  'Refused: rented equipment is costed from its hire receipts, not a rate.',
+)
+covers('equipment_rates', 'equipment_rates_before_insert')
+
+// --- Site manager 1 fills in the reports, the app's way -----------------------
+async function saveCostReport(date, crew, equipment) {
+  const { data, error } = await site.client.rpc('save_report_draft', {
+    p_report: { project_id: costProjectId, report_date: date, fuel_litres: 40, activities: `RLS costing test ${RUN_TAG}` },
+    p_crew: crew,
+    p_equipment: equipment,
+  })
+  if (error) stop(`site manager 1 could not save a costing test report: ${error.message}`)
+  return data
+}
+async function submitCostReport(reportId) {
+  const { data, error } = await site.client
+    .from('daily_reports')
+    .update({ status: 'submitted' })
+    .eq('id', reportId)
+    .select('status')
+  if (error || data.length !== 1) stop(`site manager 1 could not submit a costing test report: ${error?.message}`)
+}
+
+// Report A: 10 rated crew hours, 4 owned-plant hours, 5 RENTED hours, 40 litres
+// of fuel. Submitted.
+const reportA = await saveCostReport(
+  COST_DAY_1,
+  [{ employee_id: ratedEmployeeId, hours: 10 }],
+  [
+    { equipment_id: ownedPlantId, hours: 4 },
+    { equipment_id: rentedPlantId, hours: 5 },
+  ],
+)
+await submitCostReport(reportA)
+// Report B: 3 rated hours, left as a DRAFT - must not count.
+await saveCostReport(COST_DAY_2, [{ employee_id: ratedEmployeeId, hours: 3 }], [])
+// Report C: 2 hours for the person with NO rate. Saved now, submitted later.
+const reportC = await saveCostReport(COST_DAY_3, [{ employee_id: unratedEmployeeId, hours: 2 }], [])
+
+// Receipts, with the app's own steps: R500 fuel (approved), R300 materials
+// (submitted, NOT approved), R200 food (rejected).
+async function costReceipt(category, amount, tag) {
+  const photo = testPhoto(`cost-${tag}`)
+  const values = {
+    id: randomUUID(),
+    project_id: costProjectId,
+    receipt_date: saToday,
+    vendor: `${TEST_VENDOR_PREFIX} ${RUN_TAG} costing ${tag}`,
+    category,
+    amount,
+    notes: `RLS costing test ${RUN_TAG}`,
+    image_hash: sha256(photo),
+  }
+  try {
+    const saved = await saveDraft(site.client, values)
+    await uploadPhoto(site.client, saved.image_path, photo)
+    await submitDraft(site.client, values.id)
+  } catch (error) {
+    stop(`site manager 1 could not send a costing test receipt: ${error.message}`)
+  }
+  return values.id
+}
+const fuelReceiptId = await costReceipt('fuel', 500, 'fuel')
+const materialsReceiptId = await costReceipt('materials', 300, 'materials')
+const foodReceiptId = await costReceipt('food', 200, 'food')
+for (const [id, changes] of [
+  [fuelReceiptId, { status: 'approved', duplicate_checked: true }],
+  [foodReceiptId, { status: 'rejected', review_reason: 'RLS costing test: rejected on purpose' }],
+]) {
+  const { error } = await changeReceipt(owner, id, changes)
+  if (error) stop(`owner could not set up a costing test receipt: ${error.message}`)
+}
+
+// --- Owner: the totals --------------------------------------------------------
+async function projectCosts() {
+  const { data, error } = await owner.client
+    .from('project_cost_vs_budget')
+    .select('category, budget, spent, remaining, percent_used, unpriced_hours')
+    .eq('project_id', costProjectId)
+  if (error) return { error }
+  const byCategory = Object.fromEntries(data.map((row) => [row.category, row]))
+  const total = data.reduce((sum, row) => sum + Number(row.spent), 0)
+  const unpriced = data.reduce((sum, row) => sum + Number(row.unpriced_hours), 0)
+  return { rows: data, byCategory, total, unpriced }
+}
+const rand = (value) => `R${Number(value).toFixed(2)}`
+
+{
+  const name = 'Owner: project total is exactly R2,500'
+  const costs = await projectCosts()
+  const spent = (category) => Number(costs.byCategory?.[category]?.spent ?? NaN)
+  if (costs.error) {
+    record(name, false, `Error: ${costs.error.message}`)
+  } else if (
+    costs.total !== 2500 ||
+    spent('labour') !== 1000 ||
+    spent('owned_plant') !== 1000 ||
+    spent('fuel') !== 500 ||
+    spent('materials') !== 0 ||
+    spent('food') !== 0 ||
+    spent('plant_hire') !== 0
+  ) {
+    record(
+      name,
+      false,
+      `Got ${rand(costs.total)}: labour ${rand(spent('labour'))}, owned plant ${rand(spent('owned_plant'))}, ` +
+        `fuel ${rand(spent('fuel'))}, materials ${rand(spent('materials'))}, food ${rand(spent('food'))}, plant hire ${rand(spent('plant_hire'))}.`,
+    )
+  } else {
+    record(
+      name,
+      true,
+      '10h x R100 + 4h x R250 + approved R500 fuel. Not counted: the R300 submitted and R200 rejected receipts, ' +
+        '3 hours on a draft report, 5 rented-plant hours, 40 litres of fuel.',
+    )
+  }
+  covers('project_cost_vs_budget', 'project_cost_lines', 'cost_categories', 'rate_on', 'equipment_rate_on')
+}
+
+{
+  const name = 'Owner: project_cost_lines holds exactly the three priced lines'
+  const { data, error } = await owner.client
+    .from('project_cost_lines')
+    .select('category, hours, unit_rate, amount')
+    .eq('project_id', costProjectId)
+    .order('category')
+  const lines = (data ?? []).map((l) => `${l.category} ${rand(l.amount)}`).join(', ')
+  const expected = 'fuel R500.00, labour R1000.00, owned_plant R1000.00'
+  if (error) record(name, false, `Error: ${error.message}`)
+  else record(name, lines === expected, lines === expected ? lines : `Got: ${lines || 'nothing'}`)
+  covers('project_cost_lines')
+}
+
+await submitCostReport(reportC)
+
+{
+  const name = 'Owner: 2 hours with no rate leave the total at R2,500 and show 2 unpriced hours'
+  const costs = await projectCosts()
+  const { data: unpriced, error } = await owner.client
+    .from('unpriced_hours')
+    .select('category, employee_id, report_date, hours')
+    .eq('project_id', costProjectId)
+  const onlyRow = unpriced?.length === 1 ? unpriced[0] : null
+  if (costs.error || error) {
+    record(name, false, `Error: ${(costs.error ?? error).message}`)
+  } else if (costs.total !== 2500) {
+    record(name, false, `The total changed to ${rand(costs.total)}.`)
+  } else if (costs.unpriced !== 2 || Number(costs.byCategory.labour.unpriced_hours) !== 2) {
+    record(name, false, `Unpriced hours shown: ${costs.unpriced}.`)
+  } else if (
+    !onlyRow ||
+    onlyRow.employee_id !== unratedEmployeeId ||
+    onlyRow.report_date !== COST_DAY_3 ||
+    Number(onlyRow.hours) !== 2
+  ) {
+    record(name, false, `The unpriced-hours list is wrong: ${JSON.stringify(unpriced)}`)
+  } else {
+    record(name, true, 'Total still R2,500; "2 hours unpriced" shown, and listed with the person and date.')
+  }
+  covers('unpriced_hours', 'project_cost_vs_budget', 'rate_on')
+}
+
+{
+  const name = 'Owner: cost per week adds up to the same R2,500'
+  const { data, error } = await owner.client
+    .from('project_cost_by_week')
+    .select('week_start, category, amount')
+    .eq('project_id', costProjectId)
+  const sum = (data ?? []).reduce((total, row) => total + Number(row.amount), 0)
+  const firstWeek = (data ?? [])
+    .filter((row) => row.week_start === COST_DAY_1)
+    .reduce((total, row) => total + Number(row.amount), 0)
+  if (error) record(name, false, `Error: ${error.message}`)
+  else if (sum !== 2500 || firstWeek !== 2000) record(name, false, `Weeks add up to ${rand(sum)}; week of ${COST_DAY_1}: ${rand(firstWeek)}.`)
+  else record(name, true, `Week of ${COST_DAY_1}: R2,000 (labour + owned plant); the fuel receipt in its own week.`)
+  covers('project_cost_by_week')
+}
+
+{
+  const name = 'Owner: vendor spend shows only the approved receipt'
+  const { data, error } = await owner.client
+    .from('vendor_spend')
+    .select('vendor, receipts, amount')
+    .eq('project_id', costProjectId)
+  if (error) record(name, false, `Error: ${error.message}`)
+  else if (data.length !== 1 || Number(data[0].amount) !== 500 || Number(data[0].receipts) !== 1) {
+    record(name, false, `Got: ${JSON.stringify(data)}`)
+  } else {
+    record(name, true, `${data[0].vendor}: 1 receipt, R500 (submitted and rejected ones left out).`)
+  }
+  covers('vendor_spend')
+}
+
+{
+  const name = 'Owner: provisional labour per employee per week'
+  const { data, error } = await owner.client
+    .from('labour_provisional_by_employee_week')
+    .select('employee_id, week_start, hours, cost, unpriced_hours, basis')
+    .in('employee_id', [ratedEmployeeId, unratedEmployeeId])
+  const rated = data?.find((row) => row.employee_id === ratedEmployeeId)
+  const unrated = data?.find((row) => row.employee_id === unratedEmployeeId)
+  if (error) {
+    record(name, false, `Error: ${error.message}`)
+  } else if (
+    !rated ||
+    rated.week_start !== COST_DAY_1 ||
+    Number(rated.hours) !== 10 ||
+    Number(rated.cost) !== 1000 ||
+    !unrated ||
+    Number(unrated.cost) !== 0 ||
+    Number(unrated.unpriced_hours) !== 2 ||
+    !rated.basis.startsWith('PROVISIONAL')
+  ) {
+    record(name, false, `Got: ${JSON.stringify(data)}`)
+  } else {
+    record(name, true, '10h / R1,000 (the draft report\'s 3h left out); 2h unpriced; labelled PROVISIONAL.')
+  }
+  covers('labour_provisional_by_employee_week', 'rate_on')
+}
+
+{
+  const name = 'Owner: equipment_rate_on() gives the rate in force on a date'
+  const [onDay, before] = await Promise.all([
+    owner.client.rpc('equipment_rate_on', { p_equipment_id: ownedPlantId, p_date: COST_DAY_1 }),
+    owner.client.rpc('equipment_rate_on', { p_equipment_id: ownedPlantId, p_date: '2025-12-31' }),
+  ])
+  const error = onDay.error ?? before.error
+  if (error) record(name, false, `Error: ${error.message}`)
+  else if (Number(onDay.data) !== 250 || before.data !== null) record(name, false, `Got ${onDay.data} and ${before.data}.`)
+  else record(name, true, 'R250 on the day; nothing before the rate started.')
+  covers('equipment_rate_on')
+}
+
+// --- Owner: budgets -----------------------------------------------------------
+let budgetId
+{
+  const name = 'Owner: setting and changing a budget writes budget_changes rows'
+  const first = await owner.client
+    .from('project_budgets')
+    .insert({ project_id: costProjectId, category: 'labour', amount: 3000 })
+    .select('id, updated_by')
+    .single()
+  budgetId = first.data?.id
+  const second = budgetId
+    ? await owner.client.from('project_budgets').update({ amount: 3500 }).eq('id', budgetId).select('updated_by')
+    : { error: first.error }
+  const { data: log } = await owner.client
+    .from('budget_changes')
+    .select('old_amount, new_amount, changed_by')
+    .eq('project_id', costProjectId)
+    .order('changed_at')
+  const steps = (log ?? []).map((row) => `${row.old_amount ?? 'none'} -> ${row.new_amount}`).join(', ')
+  const byOwner = (log ?? []).every((row) => row.changed_by === owner.userId)
+  if (first.error || second.error) {
+    record(name, false, `Error: ${(first.error ?? second.error).message}`)
+  } else if (log?.length !== 2 || Number(log[0].new_amount) !== 3000 || log[0].old_amount !== null ||
+             Number(log[1].old_amount) !== 3000 || Number(log[1].new_amount) !== 3500 || !byOwner) {
+    record(name, false, `Log: ${steps || 'empty'}.`)
+  } else if (second.data?.[0]?.updated_by !== owner.userId) {
+    record(name, false, 'The database did not stamp who changed it.')
+  } else {
+    record(name, true, `Logged automatically: ${steps}, by the owner.`)
+  }
+  covers('project_budgets', 'budget_changes', 'log_budget_change', 'project_budgets_before_write')
+  if (!budgetId) stop('the remaining budget checks need a budget.')
+}
+
+{
+  const name = 'Owner: budget vs spent for labour'
+  const costs = await projectCosts()
+  const labour = costs.byCategory?.labour
+  if (costs.error) record(name, false, `Error: ${costs.error.message}`)
+  else if (Number(labour.budget) !== 3500 || Number(labour.spent) !== 1000 || Number(labour.remaining) !== 2500 || Number(labour.percent_used) !== 28.6) {
+    record(name, false, `Got: ${JSON.stringify(labour)}`)
+  } else {
+    record(name, true, 'Budget R3,500, spent R1,000, remaining R2,500, 28.6% used.')
+  }
+  covers('project_cost_vs_budget', 'project_budgets')
+}
+
+await attackUpdate(
+  "Owner moves a budget to another category",
+  owner,
+  owner,
+  'project_budgets',
+  budgetId,
+  { category: 'fuel' },
+  'category',
+)
+covers('project_budgets')
+
+{
+  const name = 'Owner: budget changes are in the audit log'
+  const { data, error } = await owner.client
+    .from('audit_log')
+    .select('action')
+    .eq('entity', 'project_budgets')
+    .eq('entity_id', budgetId)
+  if (error) record(name, false, `Error: ${error.message}`)
+  else record(name, data.length >= 2, `${data.length} audit row(s): ${data.map((row) => row.action).join(', ')}.`)
+  covers('audit_row_change')
+}
+
+// --- Owner: equipment rates are voided, never edited --------------------------
+{
+  const wrongRateId = await ownerInsert(
+    'equipment_rates',
+    { equipment_id: ownedPlantId, hourly_rate: 999, effective_from: '2026-06-01' },
+    'a deliberately wrong equipment rate',
+  )
+  await attackInsert(
+    'Owner adds a second live rate for the same machine and start date',
+    owner.client,
+    'equipment_rates',
+    { equipment_id: ownedPlantId, hourly_rate: 1, effective_from: '2026-06-01' },
+    '23505',
+    'Refused: there is already a live rate from that date (void it first).',
+  )
+  covers('equipment_rates')
+
+  const noReason = await owner.client.from('equipment_rates').update({ void_reason: '  ' }).eq('id', wrongRateId).select('id')
+  record(
+    'Owner voids an equipment rate with a blank reason',
+    noReason.error?.code === '23514',
+    noReason.error ? `Refused: ${noReason.error.message}` : 'BREACH: voided without a reason.',
+  )
+  covers('equipment_rates', 'equipment_rates_before_update')
+
+  const voided = await owner.client
+    .from('equipment_rates')
+    .update({ void_reason: 'RLS costing test: wrong on purpose' })
+    .eq('id', wrongRateId)
+    .select('voided_at, voided_by')
+  record(
+    'Owner voids a wrong equipment rate with a reason',
+    !voided.error && voided.data?.[0]?.voided_at && voided.data[0].voided_by === owner.userId,
+    voided.error ? `Error: ${voided.error.message}` : 'Voided; the database stamped when and who. It stays in the history.',
+  )
+  covers('equipment_rates', 'equipment_rates_before_update', 'audit_row_change')
+}
+
+// --- Site manager attacks (the data above now exists) -------------------------
+for (const table of ['project_budgets', 'budget_changes', 'equipment_rates']) {
+  await attackReadNothing(`Site manager reads ${table}`, site.client, table)
+  covers(table)
+}
+for (const view of [
+  'project_cost_lines',
+  'unpriced_hours',
+  'project_cost_vs_budget',
+  'project_cost_by_week',
+  'vendor_spend',
+  'labour_provisional_by_employee_week',
+]) {
+  await attackReadNothing(`Site manager reads ${view} (their own report hours are in it)`, site.client, view)
+  covers(view)
+}
+
+await attackInsert('Site manager adds a budget', site.client, 'project_budgets', {
+  project_id: costProjectId,
+  category: 'fuel',
+  amount: 1,
+})
+covers('project_budgets')
+await attackUpdate('Site manager changes a budget', site, owner, 'project_budgets', budgetId, { amount: 1 }, 'amount')
+covers('project_budgets')
+await attackInsert('Site manager writes to budget_changes', site.client, 'budget_changes', {
+  company_id: companyId,
+  project_id: costProjectId,
+  category: 'labour',
+  new_amount: 1,
+})
+covers('budget_changes')
+await attackInsert('Site manager adds an equipment rate', site.client, 'equipment_rates', {
+  equipment_id: ownedPlantId,
+  hourly_rate: 1,
+  effective_from: '2030-01-01',
+})
+covers('equipment_rates')
+await attackInsert(
+  'Site manager adds a cost category',
+  site.client,
+  'cost_categories',
+  { code: 'zz_attack', label: 'Attack', sort_order: 99, source: 'receipts' },
+  PERMISSION_DENIED,
+  'Server refused.',
+  'code', // cost_categories is keyed by code, not id
+)
+covers('cost_categories')
+
+for (const [fn, args] of [
+  ['equipment_rate_on', { p_equipment_id: ownedPlantId, p_date: COST_DAY_1 }],
+  ['rate_on', { p_employee_id: ratedEmployeeId, p_date: COST_DAY_1 }],
+]) {
+  const name = `Site manager calls ${fn}() for something that HAS a rate`
+  const { data, error } = await site.client.rpc(fn, args)
+  if (error?.code === PERMISSION_DENIED) record(name, true, 'Server refused (permission denied).')
+  else if (error) record(name, false, `Unexpected error: ${error.message}`)
+  else if (data !== null) record(name, false, `LEAK: ${fn} returned ${data} to a site manager.`)
+  else record(name, true, 'Returned nothing.')
+  covers(fn)
+}
+
+for (const fn of ['log_budget_change', 'equipment_rates_before_insert', 'equipment_rates_before_update', 'project_budgets_before_write', 'audit_row_change']) {
+  const name = `Site manager calls the trigger function ${fn}() directly`
+  const { error } = await site.client.rpc(fn, {})
+  record(name, Boolean(error), error ? `Refused: ${error.message}` : 'BREACH: it ran.')
+  covers(fn)
+}
+
+{
+  const name = "The app's category list matches the database's cost_categories"
+  const { data, error } = await site.client.from('cost_categories').select('code, label').order('sort_order')
+  const db = (data ?? []).map((row) => `${row.code}=${row.label}`).join(', ')
+  const app = Object.entries(COST_CATEGORY_LABELS).map(([code, label]) => `${code}=${label}`).join(', ')
+  if (error) record(name, false, `Error: ${error.message}`)
+  else record(name, db === app, db === app ? `${data.length} categories, same order and names.` : `Database: ${db}\n          App:      ${app}`)
+  covers('cost_categories')
+}
+
+// --- Finish off this run's test data (nothing can be deleted) -----------------
+{
+  const steps = [
+    changeReceipt(owner, materialsReceiptId, { status: 'rejected', review_reason: 'RLS costing test: tidy-up' }),
+    changeReceipt(admin, fuelReceiptId, { status: 'reversed', review_reason: 'RLS costing test: tidy-up' }),
+    owner.client.from('projects').update({ status: 'complete' }).eq('id', costProjectId).select('id'),
+  ]
+  const outcomes = await Promise.all(steps)
+  const failed = outcomes.find((outcome) => outcome.error)
+  if (failed) console.log(`          (note: tidy-up incomplete: ${failed.error.message})`)
+}
+
+// --- Every object created this phase must have been attacked -------------------
+{
+  const sql = readFileSync(
+    fileURLToPath(new URL('../supabase/migrations/20261005120000_budgets_and_costing.sql', import.meta.url)),
+    'utf8',
+  )
+  const created = [...sql.matchAll(/create\s+(?:or\s+replace\s+)?(table|view|function)\s+public\.(\w+)/gi)].map(
+    ([, kind, name]) => ({ kind: kind.toLowerCase(), name }),
+  )
+  console.log('\n          Everything phase 5 creates, and the checks that attack it:')
+  const notAttacked = []
+  for (const { kind, name } of created) {
+    const checks = [...new Set(coverage.get(name) ?? [])]
+    const failed = checks.filter((number) => !results[number - 1])
+    console.log(
+      `          ${kind.padEnd(9)}${name.padEnd(38)}${checks.length ? `checks ${checks.join(', ')}` : 'NOT ATTACKED'}` +
+        (failed.length ? `  (failed: ${failed.join(', ')})` : ''),
+    )
+    if (checks.length === 0) notAttacked.push(name)
+  }
+  console.log('')
+  record(
+    'Every table, view and function created in phase 5 has an attack',
+    created.length > 0 && notAttacked.length === 0,
+    notAttacked.length ? `Not attacked: ${notAttacked.join(', ')}` : `${created.length} objects, all attacked.`,
+  )
+}
+
 await site2.client.auth.signOut()
 await admin.client.auth.signOut()
 

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { supabase } from '../../lib/supabaseClient'
-import { RECEIPT_CATEGORY_LABELS, formatDate, formatRand, todayLocal } from '../../lib/labels'
+import { RECEIPT_CATEGORY_LABELS, formatDate, formatRand, parseRand, todayLocal } from '../../lib/labels'
 import { photoFingerprint, shrinkReceiptPhoto } from '../../lib/receiptImage'
 import {
   discardDraft,
@@ -55,14 +55,6 @@ const CATEGORIES = [
 const SUBMITTED = 'Receipt submitted. The office will check it.'
 const NOT_SENT =
   'Not sent yet - check your signal and tap Submit again. Your receipt is saved under "Not sent".'
-
-// "1 250,50", "R1250.5" -> 1250.5. Anything else -> null.
-function parseAmount(text) {
-  const cleaned = text.replace(/[\sR]/gi, '').replace(',', '.')
-  if (!/^\d+(\.\d{1,2})?$/.test(cleaned)) return null
-  const value = Number(cleaned)
-  return value > 0 && value < 1e10 ? value : null
-}
 
 // Site manager: photograph a receipt, type in the details, check, submit.
 // The amount is typed here and shown on the check screen from what was
@@ -201,7 +193,7 @@ function AddReceiptPage({ user, photo: firstPhoto, onDone }) {
     setMessage('')
   }
 
-  const amount = parseAmount(form.amount)
+  const amount = parseRand(form.amount)
   const projectChoices = (projects ?? []).filter((p) => p.status === 'active' || p.id === form.project_id)
   const projectName = projectChoices.find((p) => p.id === form.project_id)?.name
 
@@ -323,7 +315,7 @@ function AddReceiptPage({ user, photo: firstPhoto, onDone }) {
 
         <SummaryCard
           icon={ReceiptIcon}
-          label="Amount"
+          label="Amount (incl. VAT)"
           meta={RECEIPT_CATEGORY_LABELS[form.category]}
           value={formatRand(amount)}
         />
@@ -399,7 +391,7 @@ function AddReceiptPage({ user, photo: firstPhoto, onDone }) {
       {photoError && <Notice tone="error">{photoError}</Notice>}
       {loadError && <Notice tone="error">{loadError}</Notice>}
 
-      <Section title="Amount">
+      <Section title="Total paid (incl. VAT)">
         <label className={s.amount}>
           <span className={s.currency} aria-hidden="true">
             R

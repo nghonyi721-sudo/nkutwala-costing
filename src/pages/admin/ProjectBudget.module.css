@@ -1,0 +1,50 @@
+/* Extra lines under a category's figures ("R 83 550,00 left", "6.0 h unpriced") */
+.line {
+  display: block;
+}
+
+.unpriced {
+  color: var(--destructive);
+}
+
+/* % of budget used, on the right */
+.percent {
+  color: var(--label);
+  font-weight: 600;
+}
+
+/* How much of the budget is used: a thin bar under the figures */
+.bar {
+  display: block;
+  height: 6px;
+  margin-top: 6px;
+  overflow: hidden;
+  border-radius: 3px;
+  background: var(--fill);
+}
+
+.bar > span {
+  display: block;
+  height: 100%;
+  border-radius: 3px;
+  background: var(--tint-solid);
+}
+
+.over > span {
+  background: var(--destructive-solid);
+}
+
+.overText {
+  color: var(--destructive);
+  font-weight: 600;
+}
+
+.setBudget {
+  color: var(--tint);
+}
+
+/* "See missing rates" under the unpriced-hours notice */
+.noticeAction {
+  display: block;
+  margin: 2px 0 -8px -8px;
+}

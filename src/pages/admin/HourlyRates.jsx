@@ -11,12 +11,22 @@ import Section from '../../components/Section'
 import Sheet, { SheetGroup } from '../../components/Sheet'
 import Skeleton from '../../components/Skeleton'
 import StatusBadge from '../../components/StatusBadge'
-import s from './EmployeeRates.module.css'
+import s from './HourlyRates.module.css'
 
-// Owner/admin only (the database refuses site managers): an employee's dated
-// hourly rates. Rates are NEVER edited. A rate change is a new row; a wrong
-// rate is voided with a reason and stays in the history, crossed out.
-function EmployeeRates({ employeeId }) {
+// Where each kind of rate is stored.
+const RATE_TABLES = {
+  employee: { table: 'employee_rates', column: 'employee_id' },
+  equipment: { table: 'equipment_rates', column: 'equipment_id' },
+}
+
+// Owner/admin only (the database refuses site managers): dated hourly rates
+// for a person or an owned machine. Rates are NEVER edited. A rate change is
+// a new row; a wrong rate is voided with a reason and stays in the history,
+// crossed out.
+//   kind:    'employee' | 'equipment'
+//   ownerId: the person's or machine's id
+function HourlyRates({ kind, ownerId }) {
+  const { table, column } = RATE_TABLES[kind]
   // undefined = loading, array = loaded
   const [rates, setRates] = useState(undefined)
   const [loadError, setLoadError] = useState('')
@@ -36,9 +46,9 @@ function EmployeeRates({ employeeId }) {
     let cancelled = false
 
     supabase
-      .from('employee_rates')
+      .from(table)
       .select('id, hourly_rate, effective_from, voided_at, void_reason')
-      .eq('employee_id', employeeId)
+      .eq(column, ownerId)
       .order('effective_from', { ascending: false })
       .order('created_at', { ascending: false })
       .then(({ data, error }) => {
@@ -54,7 +64,7 @@ function EmployeeRates({ employeeId }) {
     return () => {
       cancelled = true
     }
-  }, [employeeId, reloadCount])
+  }, [table, column, ownerId, reloadCount])
 
   // The live rate with the latest start date that isn't in the future.
   const today = todayLocal()
@@ -74,8 +84,8 @@ function EmployeeRates({ employeeId }) {
 
     setAddError('')
     setAdding(true)
-    const { error } = await supabase.from('employee_rates').insert({
-      employee_id: employeeId,
+    const { error } = await supabase.from(table).insert({
+      [column]: ownerId,
       hourly_rate: hourlyRate,
       effective_from: effectiveFrom,
     })
@@ -103,7 +113,7 @@ function EmployeeRates({ employeeId }) {
     setVoidError('')
     setVoiding(true)
     const { data, error } = await supabase
-      .from('employee_rates')
+      .from(table)
       .update({ void_reason: voidReason.trim() })
       .eq('id', rateId)
       .select('id')
@@ -251,4 +261,4 @@ function EmployeeRates({ employeeId }) {
   )
 }
 
-export default EmployeeRates
+export default HourlyRates

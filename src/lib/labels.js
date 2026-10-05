@@ -32,6 +32,16 @@ export function formatRand(value) {
   return randFormat.format(Number(value))
 }
 
+// What someone typed as a rand amount: "1 250,50", "R1250.5" -> 1250.5.
+// Anything else -> null. Zero only counts when allowZero (e.g. a budget).
+export function parseRand(text, { allowZero = false } = {}) {
+  const cleaned = String(text).replace(/[\sR]/gi, '').replace(',', '.')
+  if (!/^\d+(\.\d{1,2})?$/.test(cleaned)) return null
+  const value = Number(cleaned)
+  if (value >= 1e10) return null
+  return value > 0 || (allowZero && value === 0) ? value : null
+}
+
 // Today's date on this device as "YYYY-MM-DD" (the site's local calendar date).
 export function todayLocal() {
   return new Date().toLocaleDateString('en-CA')
@@ -58,14 +68,27 @@ export const REPORT_STATUS_LABELS = {
   submitted: 'Submitted',
 }
 
-export const RECEIPT_CATEGORY_LABELS = {
+// THE one category list, for budgets and costing. It must match the
+// database's cost_categories table - the attack test checks that it does.
+export const COST_CATEGORY_LABELS = {
+  labour: 'Labour',
+  owned_plant: 'Owned plant',
+  plant_hire: 'Plant hire',
   fuel: 'Fuel',
   materials: 'Materials',
-  plant_hire: 'Plant hire',
   consumables: 'Consumables',
   food: 'Food',
   other: 'Other',
 }
+
+// Labour and owned plant are priced from daily reports; everything else
+// comes from receipts.
+export const REPORT_COST_CATEGORIES = ['labour', 'owned_plant']
+
+// Receipts use the same list, minus the two daily-report categories.
+export const RECEIPT_CATEGORY_LABELS = Object.fromEntries(
+  Object.entries(COST_CATEGORY_LABELS).filter(([code]) => !REPORT_COST_CATEGORIES.includes(code)),
+)
 
 // A draft is a receipt that never reached the office (e.g. the signal
 // dropped), so it's called "Not sent" and shown in red.

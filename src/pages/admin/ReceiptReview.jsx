@@ -230,7 +230,7 @@ function ReceiptReview({ receiptId, user, role, backLabel, onBack, onChanged }) 
           <div className={s.detailsColumn}>
             <SummaryCard
               icon={ReceiptIcon}
-              label="Amount"
+              label="Amount (incl. VAT)"
               meta={statusBadge(receipt)}
               value={amount === null ? '–' : formatRand(amount)}
             />

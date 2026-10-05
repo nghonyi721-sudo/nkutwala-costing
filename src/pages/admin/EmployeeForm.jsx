@@ -8,11 +8,12 @@ import Page from '../../components/Page'
 import { FieldRow, Row, SwitchRow } from '../../components/Row'
 import Section from '../../components/Section'
 import { PickSheet } from '../../components/Sheet'
-import EmployeeRates from './EmployeeRates'
+import HourlyRates from './HourlyRates'
 
 // Add an employee (employee = null) or edit one. Employees are never deleted:
 // mark them Inactive instead. When editing, their rates are shown below.
-function EmployeeForm({ employee, onDone }) {
+//   backLabel: where Back goes (e.g. "Missing rates" when opened from there)
+function EmployeeForm({ employee, onDone, backLabel = 'Employees' }) {
   const [fullName, setFullName] = useState(employee?.full_name ?? '')
   const [category, setCategory] = useState(employee?.category ?? '')
   const [active, setActive] = useState(employee?.active ?? true)
@@ -56,7 +57,7 @@ function EmployeeForm({ employee, onDone }) {
       title={employee ? employee.full_name : 'New employee'}
       subtitle={employee ? 'Edit employee and hourly rates' : 'Add a person'}
       onBack={() => onDone(false)}
-      backLabel="Employees"
+      backLabel={backLabel}
       footer={
         <ActionBar message={error} tone="error">
           <Button variant="secondary" onClick={() => onDone(false)}>
@@ -94,7 +95,7 @@ function EmployeeForm({ employee, onDone }) {
         </Section>
       </form>
 
-      {employee && <EmployeeRates employeeId={employee.id} />}
+      {employee && <HourlyRates kind="employee" ownerId={employee.id} />}
 
       {pickingCategory && (
         <PickSheet

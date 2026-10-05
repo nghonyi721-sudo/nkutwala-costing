@@ -110,7 +110,7 @@ function ReceiptsPage({ user, role, onChanged }) {
   const total = (receipts ?? []).reduce((sum, receipt) => sum + (amounts[receipt.id] ?? 0), 0)
   let subtitle
   if (receipts && view === 'pending') {
-    subtitle = receipts.length === 0 ? 'Nothing waiting' : `${receipts.length} waiting · ${formatRand(total)}`
+    subtitle = receipts.length === 0 ? 'Nothing waiting' : `${receipts.length} waiting · ${formatRand(total)} incl. VAT`
   } else if (receipts) {
     subtitle = `${receipts.length} receipt${receipts.length === 1 ? '' : 's'} shown`
   }
