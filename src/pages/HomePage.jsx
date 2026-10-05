@@ -9,6 +9,7 @@ import MorePage from './admin/MorePage'
 import ProjectsPage from './admin/ProjectsPage'
 import EmployeesPage from './admin/EmployeesPage'
 import EquipmentPage from './admin/EquipmentPage'
+import ExportsPage from './admin/ExportsPage'
 import ReceiptsPage from './admin/ReceiptsPage'
 import ReportsPage from './admin/ReportsPage'
 import MyReceiptsPage from './receipts/MyReceiptsPage'
@@ -26,7 +27,7 @@ function HomePage({ user }) {
   // undefined = loading, null = no profile row, object = loaded
   const [profile, setProfile] = useState(undefined)
   const [error, setError] = useState('')
-  // 'home' | 'dashboard' | 'projects' | 'employees' | 'equipment' | 'more'
+  // 'home' | 'dashboard' | 'projects' | 'employees' | 'equipment' | 'exports' | 'more'
   // | 'reports' | 'receipts' | 'new-report' | 'my-reports'
   // 'home' = not chosen yet (the role's landing screen is shown).
   // Opening the app at /dashboard asks for the dashboard straight away.
@@ -162,6 +163,7 @@ function HomePage({ user }) {
     page = <EmployeesPage key={pageKey} onChanged={() => setEmployeeChanges((count) => count + 1)} />
   }
   if (isAdmin && current === 'equipment') page = <EquipmentPage key={pageKey} />
+  if (isAdmin && current === 'exports') page = <ExportsPage key={pageKey} />
   if (isSiteManager && (current === 'new-report' || current === 'my-reports')) {
     page = (
       <MyReportsPage

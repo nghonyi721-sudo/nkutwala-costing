@@ -33,10 +33,11 @@ const OWNER_DESKTOP_TABS = [
   { key: 'projects', label: 'Projects' },
   { key: 'employees', label: 'Employees' },
   { key: 'equipment', label: 'Equipment' },
+  { key: 'exports', label: 'Exports' },
 ]
 
 // Screens reached through More keep the More tab lit.
-const TAB_OF_SCREEN = { employees: 'more', equipment: 'more' }
+const TAB_OF_SCREEN = { employees: 'more', equipment: 'more', exports: 'more' }
 
 const SITE_MANAGER_TABS = [
   { key: 'my-reports', label: 'My reports', Icon: ClipboardTextIcon },

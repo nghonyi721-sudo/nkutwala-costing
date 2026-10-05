@@ -25,6 +25,7 @@ import { PickSheet } from '../../components/Sheet'
 import { BudgetRing, DashboardCard, MixBar, ProjectHealth, Tile } from './DashboardCard'
 import { CumulativeChart, Sparkline, WeeklyMixChart } from './DashboardCharts'
 import DrillDown from './DrillDown'
+import ExportButton from './ExportButton'
 import EmployeeCalendar from './EmployeeCalendar'
 import ProjectBudget from './ProjectBudget'
 import ReportView from './ReportView'
@@ -140,7 +141,7 @@ function DashboardPage({ onNavigate }) {
   // period of the figure tapped, so its total equals that figure.
   const drill = (start) => {
     setDrillError('')
-    setOpen({ screen: 'drill', start })
+    setOpen({ screen: 'drill', start: { projectName: project?.name ?? null, ...start } })
   }
   // For "to date" figures: the to-date period, as the dashboard counts it.
   const drillToDate = (id, build) => {
@@ -156,7 +157,21 @@ function DashboardPage({ onNavigate }) {
   ]
 
   return (
-    <Page title="Dashboard" subtitle={project?.name ?? 'All projects'} wide>
+    <Page
+      title="Dashboard"
+      subtitle={project?.name ?? 'All projects'}
+      wide
+      action={
+        current ? (
+          <ExportButton
+            projectId={projectId}
+            projectName={project?.name ?? null}
+            period={{ from: current.period.from_date, to: current.period.to_date }}
+            onError={setDrillError}
+          />
+        ) : undefined
+      }
+    >
       {/* Filters */}
       <div className={s.filters}>
         <Section>

@@ -20,6 +20,7 @@ export { ClockCounterClockwiseIcon } from '@phosphor-icons/react/dist/csr/ClockC
 export { CloudRainIcon } from '@phosphor-icons/react/dist/csr/CloudRain'
 export { DotsThreeCircleIcon } from '@phosphor-icons/react/dist/csr/DotsThreeCircle'
 export { DotsThreeOutlineIcon } from '@phosphor-icons/react/dist/csr/DotsThreeOutline'
+export { DownloadSimpleIcon } from '@phosphor-icons/react/dist/csr/DownloadSimple'
 export { ForkKnifeIcon } from '@phosphor-icons/react/dist/csr/ForkKnife'
 export { GasPumpIcon } from '@phosphor-icons/react/dist/csr/GasPump'
 export { HardHatIcon } from '@phosphor-icons/react/dist/csr/HardHat'

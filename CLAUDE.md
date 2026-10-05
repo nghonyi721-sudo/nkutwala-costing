@@ -69,6 +69,22 @@ If you are about to send a rand value to a site_manager, STOP and flag it.
   switched off. A new daily report starts with the project's team.
 - Absent = 0 hours on a crew line; the row stays on the report.
 
+## Exports (phase 7)
+- Excel with ExcelJS (never the "xlsx" package). PDFs: print-friendly
+  pages saved through the browser (no PDF library).
+- Every figure and total comes from a database function (security
+  invoker + owner/admin check for money). No arithmetic in JS: totals
+  rows are SUM formulas carrying the database's total.
+- Shared builders in src/lib/exports/ (plain JS, the attack test builds
+  the same files). Money "R" #,##0.00 as real numbers, real dates, bold
+  frozen header, autofilter, title rows, POPIA line on money/personal
+  data, receipts labelled VAT inclusive.
+- Filename: nkutwala_{report}_{project}_{from}_{to}.xlsx
+- Every export writes export_log first (who/what/filters/when, set by
+  the database); no log row, no file. Owner/admin read the log.
+- Receipt photos are never put in files as expiring links: link into the
+  app instead (owner login needed).
+
 ## Out of scope for v1 — do NOT build these
 Payroll deductions (PAYE/UIF), offline sync, receipt OCR, multi-tenancy,
 invoicing, variations. If I ask for one, remind me it was cut.

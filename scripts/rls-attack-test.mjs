@@ -46,6 +46,9 @@ import {
   removeFromProject,
   updateEmployeeDetails,
 } from '../src/lib/employeeSteps.js'
+// The app's own export code (the same Excel files the app saves).
+import { buildProjectCost, fetchProjectCost } from '../src/lib/exports/projectCost.js'
+import { buildPayrollHours, fetchPayrollHours } from '../src/lib/exports/payrollHours.js'
 
 process.loadEnvFile(fileURLToPath(new URL('../.env', import.meta.url)))
 
@@ -2303,9 +2306,148 @@ let labourRows = []
   covers('drill_employee_days')
 }
 
+// --- Exports (phase 7a): the app's OWN Excel files, built here -----------------
+// Finds a column by its header text, on the sheet's header row.
+function columnOf(sheet, header) {
+  let found = null
+  sheet.eachRow((row, rowNumber) => {
+    row.eachCell((cell, columnNumber) => {
+      if (!found && cell.value === header) found = { column: columnNumber, row: rowNumber }
+    })
+  })
+  return found
+}
+// The cell in the "Total" row under a header: { value, formula, numFmt }.
+function sheetTotal(workbook, sheetName, header) {
+  const sheet = workbook.getWorksheet(sheetName)
+  const at = sheet && columnOf(sheet, header)
+  let cell = null
+  sheet?.eachRow((row) => {
+    if (row.getCell(1).value === 'Total') cell = row.getCell(at.column)
+  })
+  const value = cell?.value
+  return { value: Number(value?.result ?? value), formula: value?.formula ?? null, numFmt: cell?.numFmt ?? null }
+}
+// A person's row on a sheet: their value under a header.
+function personValue(workbook, sheetName, personName, header) {
+  const sheet = workbook.getWorksheet(sheetName)
+  const at = columnOf(sheet, header)
+  let value
+  sheet.eachRow((row) => {
+    if (row.getCell(1).value === personName) value = row.getCell(at.column).value
+  })
+  return value
+}
+const exportMeta = {
+  company: 'RLS test company',
+  projectName: `${COST_PREFIX} ${RUN_TAG}`,
+  from: dashFrom,
+  to: dashTo,
+  generatedBy: 'RLS test',
+  generatedAt: new Date(),
+}
+const ratedName = `ZZ Costing Rated ${RUN_TAG}`
+const unratedName = `ZZ Costing Unrated ${RUN_TAG}`
+
+{
+  const name = "Export 1 (the app's own file): Summary total exactly R2,500 = the dashboard's Spent"
+  try {
+    const data = await fetchProjectCost(owner.client, { projectId: costProjectId, from: dashFrom, to: dashTo })
+    const { workbook, filename } = buildProjectCost(data, exportMeta)
+    const summary = sheetTotal(workbook, 'Summary', 'Spent in period')
+    const labour = sheetTotal(workbook, 'Labour', 'Cost (provisional)')
+    const receipts = sheetTotal(workbook, 'Receipts', 'Total paid (VAT inclusive)')
+    const rate = personValue(workbook, 'Labour', ratedName, 'Rate (R/h)')
+    const rateFrom = personValue(workbook, 'Labour', ratedName, 'Rate from')
+    const dashSpent = Number(dashSummaryRows[0]?.spent)
+    const expectedName = `nkutwala_project-cost_${exportMeta.projectName.toLowerCase().replace(/[^a-z0-9]+/g, '-')}_${dashFrom}_${dashTo}.xlsx`
+    const problems = [
+      summary.value === 2500 && summary.value === dashSpent ? null : `Summary total ${summary.value}, dashboard ${dashSpent}`,
+      summary.formula?.startsWith('SUM(') && summary.numFmt === '"R" #,##0.00' ? null : `Total cell: ${JSON.stringify(summary)}`,
+      labour.value === 1000 ? null : `Labour total ${labour.value}`,
+      receipts.value === 500 ? null : `Receipts total ${receipts.value}`,
+      rate === 100 && rateFrom instanceof Date && rateFrom.toISOString().slice(0, 10) === '2026-01-01'
+        ? null
+        : `Rated person's rate: ${rate} from ${rateFrom}`,
+      filename === expectedName ? null : `File name ${filename}`,
+    ].filter(Boolean)
+    record(
+      name,
+      problems.length === 0,
+      problems.length ? problems.join('; ') : 'Summary R2,500 (a SUM formula in R format); Labour R1,000 at R100/h from 1 Jan 2026; Receipts R500 VAT inclusive.',
+    )
+  } catch (error) {
+    record(name, false, `Could not build it: ${error.message}`)
+  }
+  covers('export_cost_summary', 'export_labour', 'drill_receipts', 'dashboard_weekly_mix')
+}
+
+{
+  const name = "Export 2 (the app's own file): payroll lists the rated person at R1,000 gross; unpriced hours shown"
+  try {
+    const data = await fetchPayrollHours(owner.client, { from: COST_DAY_1, to: COST_DAY_3 })
+    const { workbook } = buildPayrollHours(data, { ...exportMeta, from: COST_DAY_1, to: COST_DAY_3 })
+    const rated = data.people.find((person) => person.employee_id === ratedEmployeeId)
+    const unrated = data.people.find((person) => person.employee_id === unratedEmployeeId)
+    const sheets = workbook.worksheets.map((sheet) => sheet.name).join(', ')
+    const warning = workbook.getWorksheet('Payroll hours').getRow(7).getCell(1).value
+    const problems = [
+      rated?.included && Number(rated.hours) === 10 && Number(rated.gross) === 1000 ? null : `Rated: ${JSON.stringify(rated)}`,
+      unrated?.included && Number(unrated.unpriced_hours) === 2 && Number(unrated.gross) === 0 ? null : `Unrated: ${JSON.stringify(unrated)}`,
+      personValue(workbook, 'Payroll hours', ratedName, 'Gross (flat rate, provisional)') === 1000 ? null : 'Rated gross not on the sheet',
+      personValue(workbook, 'Payroll hours', unratedName, 'Unpriced hours (no rate on the day)') === 2 ? null : 'Unpriced hours not on the sheet',
+      sheets === 'Payroll hours, Daily grid, Excluded' ? null : `Sheets: ${sheets}`,
+      String(warning).includes('NOT A PAYSLIP') ? null : `Title: ${warning}`,
+    ].filter(Boolean)
+    record(name, problems.length === 0, problems.length ? problems.join('; ') : 'Rated: 10 h, R1,000 gross. Unrated: 2 h unpriced, R0. Three sheets; "NOT A PAYSLIP" in the title.')
+  } catch (error) {
+    record(name, false, `Could not build it: ${error.message}`)
+  }
+  covers('export_payroll', 'export_labour', 'export_daily_hours')
+}
+
+// --- The export log ------------------------------------------------------------
+{
+  const name = 'Owner logs an export; it is in the log, recorded as them'
+  const marker = `rls-test-${RUN_TAG}`
+  const { error } = await owner.client.from('export_log').insert({ report_type: 'project_cost', filters: { marker } })
+  const { data } = await owner.client.from('export_log').select('user_id, report_type').eq('filters->>marker', marker)
+  if (error) record(name, false, `Could not log it: ${error.message}`)
+  else record(name, data?.length === 1 && data[0].user_id === owner.userId, `Found: ${JSON.stringify(data)}`)
+  covers('export_log', 'export_log_before_insert')
+}
+{
+  const name = 'Site manager logs their own export (allowed), but can read NO export log rows'
+  const { error } = await site.client.from('export_log').insert({ report_type: 'my_labour_return', filters: { marker: `rls-site-${RUN_TAG}` } })
+  const read = await site.client.from('export_log').select('id')
+  if (error) record(name, false, `Could not log their own export: ${error.message}`)
+  else if (read.error) record(name, false, `Unexpected error reading: ${read.error.message}`)
+  else record(name, read.data.length === 0, read.data.length === 0 ? 'Logged; 0 rows readable.' : `LEAK: ${read.data.length} log rows readable.`)
+  covers('export_log')
+}
+await attackInsert('Site manager logs an export as someone else', site.client, 'export_log', {
+  report_type: 'project_cost',
+  filters: {},
+  user_id: owner.userId,
+})
+{
+  const name = 'Site manager changes or deletes export log rows'
+  const changed = await site.client.from('export_log').update({ report_type: 'payroll_hours' }).neq('report_type', 'zz').select('id')
+  const deleted = await site.client.from('export_log').delete().neq('report_type', 'zz').select('id')
+  const ok = (changed.error || changed.data.length === 0) && (deleted.error || deleted.data.length === 0)
+  record(name, ok, ok ? 'Refused / nothing changed.' : 'BREACH: rows were changed or deleted.')
+  covers('export_log')
+}
+
 // Site manager: every dashboard function, on data that includes THEIR OWN
 // reports and receipts - nothing at all may come back.
 for (const [fn, args, note] of [
+  ['export_cost_summary', drillArgs, ''],
+  ['export_cost_summary', { p_project_id: null, p_from: dashFrom, p_to: dashTo }, ' for all projects'],
+  ['export_labour', drillArgs, ''],
+  ['export_payroll', { p_from: dashFrom, p_to: dashTo }, ''],
+  ['export_daily_hours', drillArgs, ''],
+  ['export_daily_hours', { p_project_id: null, p_from: dashFrom, p_to: dashTo }, ' for all projects'],
   ['drill_hours', { ...drillArgs, p_category: 'labour' }, ''],
   ['drill_hours', { ...drillArgs, p_category: 'owned_plant' }, ' for owned plant'],
   ['drill_hours', { p_project_id: null, p_from: dashFrom, p_to: dashTo, p_category: 'labour' }, ' for all projects'],
@@ -2848,6 +2990,22 @@ if (!pendingReportId) stop('the pending-hours checks need site manager 1\'s repo
   covers('pending_employees')
 }
 
+{
+  const name = 'Export 2 before approval: the pending person is only on the Excluded sheet, with their 4 h'
+  try {
+    const data = await fetchPayrollHours(owner.client, { from: PENDING_DAY, to: PENDING_DAY })
+    const { workbook } = buildPayrollHours(data, { ...exportMeta, from: PENDING_DAY, to: PENDING_DAY })
+    const row = data.people.find((person) => person.employee_id === pendingPerson.id)
+    const onPayroll = personValue(workbook, 'Payroll hours', pendingName, 'Hours')
+    const onExcluded = personValue(workbook, 'Excluded', pendingName, 'Hours')
+    const ok = row && row.included === false && Number(row.hours) === 4 && onPayroll === undefined && onExcluded === 4
+    record(name, ok, ok ? 'Not on the payroll sheet; on Excluded with 4 h - nothing silently dropped.' : `Row: ${JSON.stringify(row)}; payroll ${onPayroll}; excluded ${onExcluded}`)
+  } catch (error) {
+    record(name, false, `Could not build it: ${error.message}`)
+  }
+  covers('export_payroll')
+}
+
 // --- The owner decides ---------------------------------------------------------------
 {
   const name = 'Owner approves without a rate (directly, and with approve_employee)'
@@ -2949,6 +3107,7 @@ for (const [phase, file] of [
   ['"undo rework A"', '20261007090000_undo_rework_a.sql'],
   ['rework B', '20261007120000_rework_b_crew_and_new_employees.sql'],
   ['rework C', '20261007150000_rework_c_drilldown.sql'],
+  ['7a (exports)', '20261008090000_phase7a_exports.sql'],
 ]) {
   const sql = readFileSync(fileURLToPath(new URL(`../supabase/migrations/${file}`, import.meta.url)), 'utf8')
   const created = [...sql.matchAll(/create\s+(?:or\s+replace\s+)?(table|view|function)\s+public\.(\w+)/gi)].map(

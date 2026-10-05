@@ -43,8 +43,12 @@ function DrillDown({ start, onExit }) {
     crumbs,
     backLabel: crumbs.at(-2).label,
     back: () => (depth > 1 ? setStack((current) => current.slice(0, -1)) : onExit()),
-    open: (next) => setStack((current) => [...current, next]),
+    // A level opened from here is about the same project (its name is kept
+    // for exports).
+    open: (next) => setStack((current) => [...current, { projectName: level.projectName, ...next }]),
     reloadCount,
+    // What the Export button exports: this level's project and period.
+    exportScope: level.period ? { projectId: level.projectId, projectName: level.projectName, period: level.period } : null,
   }
   // After an approve / set-rate screen: back to the level below, reloaded.
   const done = () => {

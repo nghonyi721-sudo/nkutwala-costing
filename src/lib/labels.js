@@ -21,6 +21,19 @@ export const EMPLOYEE_CATEGORY_LABELS = {
   general_worker: 'General worker',
 }
 
+// The exports (and the export log's names for them).
+export const EXPORT_LABELS = {
+  project_cost: 'Project cost report',
+  payroll_hours: 'Payroll hours sheet',
+  monthly_cost_pack: 'Monthly cost pack',
+  labour_return: 'Labour return',
+  delay_register: 'Delay register',
+  safety_register: 'Safety register',
+  annual_earnings: 'Annual earnings summary',
+  my_daily_report: 'My daily report (PDF)',
+  my_labour_return: 'My labour return',
+}
+
 // Where a person stands: added by a site manager (pending), approved by the
 // owner with a rate, or no longer working here / rejected (inactive).
 export const EMPLOYEE_STATUS_LABELS = {
