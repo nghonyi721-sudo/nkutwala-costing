@@ -130,6 +130,41 @@ If you are about to send a rand value to a site_manager, STOP and flag it.
   reports on (my_report_projects), own submitted reports, quantities only
   (my_labour_return - never a rand value).
 
+## Bundling (code splitting)
+- Site-manager screens (login, app shell, My reports + daily report form,
+  My receipts + Add receipt) stay in the first download - they must open
+  fast on weak signal.
+- Every owner/admin-only screen is React.lazy in HomePage.jsx (with its
+  title in TITLES) - including new ones (pay runs, pay rules, approvals).
+  The lazy screens sit inside LoadError (Try again) + Suspense (title and
+  skeleton rows).
+- ExcelJS and recharts are only ever reached through import(): ExcelJS via
+  src/lib/exports/run.js, charts via src/pages/admin/LazyCharts.jsx -
+  never import DashboardCharts.jsx or workbook.js directly from a screen.
+- vite.config.js: react and @supabase in their own cached chunks, matched
+  by exact package name (never a catch-all node_modules group).
+- The build shows ONE expected size warning: the ExcelJS chunk (~935 kB,
+  a single pre-built file, downloaded only when exporting). Do not raise
+  chunkSizeWarningLimit; any OTHER chunk over 500 kB is a real problem.
+
+## Deployment (Vercel) and the installable app (PWA)
+- vercel.json: every path except /assets/ serves index.html (refreshing
+  /dashboard works); /assets/ cached a year (hashed names), everything
+  else no-cache so phones always see new versions.
+- Vercel env vars VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY point at the
+  DEV project (never production, never the service_role key).
+- vite-plugin-pwa (vite.config.js): installable as "Nkutwala Site Reports"
+  / "Nkutwala". Icons in public/ are the logo's N + gear mark (regenerate
+  if a bigger or vector logo arrives).
+- The service worker NEVER caches Supabase (API, auth, storage, photos):
+  no cache rule may match another address. Precache = only the start
+  page's files (recordStartPageFiles) + icons; other /assets/ files are
+  cached when first opened. Do not precache all of /assets/ - site
+  managers would download owner screens and ExcelJS.
+- autoUpdate without a forced reload: a new version is used the next time
+  the app is opened - never reload mid-form (unsaved reports).
+- iPhone: status bar "default" (light header), apple-touch-icon.png.
+
 ## Out of scope for v1 — do NOT build these
 Payroll deductions (PAYE/UIF), offline sync, receipt OCR, multi-tenancy,
 invoicing, variations. If I ask for one, remind me it was cut.

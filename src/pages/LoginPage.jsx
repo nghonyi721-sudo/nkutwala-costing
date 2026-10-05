@@ -40,7 +40,7 @@ function LoginPage() {
         <span className={s.logoTile}>
           <Logo width={120} />
         </span>
-        <h1 className={s.title}>Site Costing</h1>
+        <h1 className={s.title}>Site Reports</h1>
         <p className={s.lead}>Log in with the account the office set up for you.</p>
       </div>
 

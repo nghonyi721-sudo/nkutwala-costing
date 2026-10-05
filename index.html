@@ -10,11 +10,16 @@
     <!-- Safari's own toolbars match the app in light and dark mode. -->
     <meta name="theme-color" content="#f2f2f7" media="(prefers-color-scheme: light)" />
     <meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)" />
-    <!-- "Add to Home Screen" on iPhone opens it like an app. -->
+    <!-- "Add to Home Screen" on iPhone opens it full screen, like an app
+         (the apple- tag for older iPhones). The status bar stays light with
+         dark text, to suit the light header. The install details are in the
+         web app manifest (vite.config.js). -->
     <meta name="mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-title" content="Site Costing" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="Nkutwala" />
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
-    <title>Nkutwala Site Costing</title>
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <title>Nkutwala Site Reports</title>
   </head>
   <body>
     <div id="root"></div>

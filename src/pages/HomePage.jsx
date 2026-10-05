@@ -2,22 +2,36 @@ import { lazy, Suspense, useEffect, useState } from 'react'
 import { supabase } from '../lib/supabaseClient'
 import { isOwnerOrAdmin } from '../lib/labels'
 import AppShell from '../components/AppShell'
+import LoadError from '../components/LoadError'
 import Notice from '../components/Notice'
 import Page from '../components/Page'
 import Skeleton from '../components/Skeleton'
-import MorePage from './admin/MorePage'
-import ProjectsPage from './admin/ProjectsPage'
-import EmployeesPage from './admin/EmployeesPage'
-import EquipmentPage from './admin/EquipmentPage'
-import ExportsPage from './admin/ExportsPage'
-import ReceiptsPage from './admin/ReceiptsPage'
-import ReportsPage from './admin/ReportsPage'
+// Site-manager screens: part of the app's first download, so they open fast.
 import MyReceiptsPage from './receipts/MyReceiptsPage'
 import MyReportsPage from './reports/MyReportsPage'
 
-// The dashboard (and its chart library) is only ever downloaded for owners
-// and admins - site managers never load its code.
+// Owner/admin screens are only downloaded the first time they're opened -
+// site managers never load their code (or the chart library).
 const DashboardPage = lazy(() => import('./admin/DashboardPage'))
+const MorePage = lazy(() => import('./admin/MorePage'))
+const ReportsPage = lazy(() => import('./admin/ReportsPage'))
+const ReceiptsPage = lazy(() => import('./admin/ReceiptsPage'))
+const ProjectsPage = lazy(() => import('./admin/ProjectsPage'))
+const EmployeesPage = lazy(() => import('./admin/EmployeesPage'))
+const EquipmentPage = lazy(() => import('./admin/EquipmentPage'))
+const ExportsPage = lazy(() => import('./admin/ExportsPage'))
+
+// Each screen's title: shown while it downloads, or if it can't.
+const TITLES = {
+  dashboard: 'Dashboard',
+  more: 'More',
+  reports: 'Reports',
+  receipts: 'Receipts',
+  projects: 'Projects',
+  employees: 'Employees',
+  equipment: 'Equipment',
+  exports: 'Exports',
+}
 
 const DASHBOARD_PATH = '/dashboard'
 
@@ -123,19 +137,7 @@ function HomePage({ user }) {
   const pageKey = `${current}-${visit}`
 
   let page = null
-  if (isAdmin && current === 'dashboard') {
-    page = (
-      <Suspense
-        fallback={
-          <Page title="Dashboard">
-            <Skeleton rows={4} />
-          </Page>
-        }
-      >
-        <DashboardPage key={pageKey} onNavigate={navigate} />
-      </Suspense>
-    )
-  }
+  if (isAdmin && current === 'dashboard') page = <DashboardPage key={pageKey} onNavigate={navigate} />
   // Anyone else who opens /dashboard: a plain page, and no money requests.
   if (profile && !isAdmin && current === 'dashboard') {
     page = (
@@ -202,7 +204,21 @@ function HomePage({ user }) {
         </Page>
       )}
 
-      {page}
+      {/* A screen still downloading: its title and grey rows. One that
+          can't download: a message and Try again. */}
+      {page && (
+        <LoadError key={pageKey} title={TITLES[current]}>
+          <Suspense
+            fallback={
+              <Page title={TITLES[current]}>
+                <Skeleton rows={4} />
+              </Page>
+            }
+          >
+            {page}
+          </Suspense>
+        </LoadError>
+      )}
     </AppShell>
   )
 }
