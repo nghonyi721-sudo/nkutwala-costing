@@ -75,7 +75,13 @@ const EMPTY_FORM = {
   activities: '',
 }
 
+// The database refuses any change to a report dated inside a closed or
+// paid pay period, with exactly this message.
+const PERIOD_CLOSED = 'This period is closed. Contact the office.'
+const isPeriodClosed = (error) => String(error?.message ?? '').includes(PERIOD_CLOSED)
+
 function saveErrorMessage(error) {
+  if (isPeriodClosed(error)) return PERIOD_CLOSED
   if (error.code === '23505') {
     return 'You already have a report for this project and date. Open it from My reports.'
   }
@@ -427,7 +433,9 @@ function ReportForm({ user, reportId, onDone }) {
     if (submitError || data.length === 0) {
       setBusy(false)
       setConfirming(false)
-      setError('Saved as a draft, but could not submit. Check your signal and try again.')
+      setError(
+        isPeriodClosed(submitError) ? PERIOD_CLOSED : 'Saved as a draft, but could not submit. Check your signal and try again.',
+      )
       return
     }
 

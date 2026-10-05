@@ -3418,6 +3418,390 @@ await otReport(otProjectA, SUNDAY_2099, [{ employee_id: premiumPerson, hours: 5 
   if (failed) console.log(`          (note: tidy-up incomplete: ${failed.error.message})`)
 }
 
+// =============================================================================
+// Pay periods and pay runs (phase 8B-1)
+// =============================================================================
+// Pay periods are company-wide, never deleted and can never overlap, so the
+// test uses its own 2001+ "test window": each run takes the next free 14 days
+// after the previous run's (and the 14 after that for the late-hours check).
+// Real dates and the other tests' dates (2026, 2099) are never touched.
+console.log('\nPay period and pay run attacks…\n')
+
+const PAY_PREFIX = 'ZZ Pay Run Test'
+const PAY_WINDOW_END = '2020-01-01'
+let payStart
+{
+  const { data, error } = await owner.client
+    .from('pay_periods')
+    .select('end_date')
+    .lt('end_date', PAY_WINDOW_END)
+    .order('end_date', { ascending: false })
+    .limit(1)
+  if (error) stop(`the pay run checks need pay_periods - run the 8B-1 migration first (${error.message})`)
+  payStart = data.length ? shiftDate(data[0].end_date, 1) : '2001-01-01'
+}
+const payEnd = shiftDate(payStart, 13)
+const PAY_D1 = shiftDate(payStart, 1)
+const PAY_D2 = shiftDate(payStart, 2)
+const PAY_D3 = shiftDate(payStart, 3)
+const PAY_D4 = shiftDate(payStart, 4)
+const fromPeriodStart = { hourly_rate: 100, effective_from: payStart }
+
+// Finish off a project an interrupted run left active.
+{
+  const { error } = await owner.client
+    .from('projects')
+    .update({ status: 'complete' })
+    .like('name', `${PAY_PREFIX}%`)
+    .eq('status', 'active')
+  if (error) stop(`owner could not tidy up old pay run test projects: ${error.message}`)
+}
+
+const payProject = await ownerInsert('projects', { name: `${PAY_PREFIX} ${RUN_TAG}`, status: 'active' }, 'the pay run test project')
+const payA = await createTestPerson(`ZZ Pay A ${RUN_TAG}`, { rate: fromPeriodStart })
+const payB = await createTestPerson(`ZZ Pay B ${RUN_TAG}`, { rate: fromPeriodStart })
+// Approved, but the rate only starts after the hours below: unpriced.
+const payC = await createTestPerson(`ZZ Pay C ${RUN_TAG}`, { rate: { hourly_rate: 100, effective_from: shiftDate(payStart, 20) } })
+// Added by site manager 1: pending (no rate) - left out, paid later.
+let payD = null
+try {
+  payD = await addEmployee(site.client, { fullName: `ZZ Pay D ${RUN_TAG}`, category: 'general_worker' })
+} catch (error) {
+  stop(`site manager 1 could not add the pending pay run test person: ${error.message}`)
+}
+
+// A report by site manager 1 (submitted unless asked not to).
+async function payReport(date, crew, { submit = true } = {}) {
+  const { data: reportId, error } = await site.client.rpc('save_report_draft', {
+    p_report: { project_id: payProject, report_date: date, activities: `RLS pay run test ${RUN_TAG}` },
+    p_crew: crew,
+    p_equipment: [],
+  })
+  if (error) stop(`site manager 1 could not save a pay run test report: ${error.message}`)
+  if (submit) {
+    const { data, error: submitError } = await site.client
+      .from('daily_reports')
+      .update({ status: 'submitted' })
+      .eq('id', reportId)
+      .select('id')
+    if (submitError || data.length !== 1) stop(`site manager 1 could not submit a pay run test report: ${submitError?.message}`)
+  }
+  return reportId
+}
+
+const payR1 = await payReport(PAY_D1, [
+  { employee_id: payA, hours: 10 },
+  { employee_id: payB, hours: 8 },
+])
+const payR2 = await payReport(PAY_D2, [{ employee_id: payA, hours: 4 }], { submit: false })
+await payReport(PAY_D3, [
+  { employee_id: payC, hours: 2 },
+  { employee_id: payD.id, hours: 3 },
+])
+
+// --- Periods: create, no overlaps ---------------------------------------------------
+let payPeriod = null
+{
+  const name = 'Owner creates a pay period (starts open)'
+  const { data, error } = await owner.client
+    .from('pay_periods')
+    .insert({ start_date: payStart, end_date: payEnd, notes: `RLS test ${RUN_TAG}` })
+    .select('id, status, created_by')
+    .single()
+  payPeriod = data?.id ?? null
+  if (error) record(name, false, `Error: ${error.message}`)
+  else record(name, data.status === 'open' && data.created_by === owner.userId, `${payStart} to ${payEnd}: ${data.status}.`)
+  covers('pay_periods', 'pay_periods_before_write')
+}
+if (!payPeriod) stop('the pay run checks need the test pay period')
+
+await attackInsert(
+  'Owner creates a pay period that overlaps another',
+  owner.client,
+  'pay_periods',
+  { start_date: shiftDate(payStart, 5), end_date: shiftDate(payStart, 20) },
+  '23P01',
+  'Refused: periods can never overlap.',
+)
+covers('pay_periods')
+
+{
+  const name = 'Suggested next period and gap check (owner)'
+  const [next, gap] = await Promise.all([
+    owner.client.rpc('next_pay_period_dates'),
+    owner.client.rpc('pay_period_gap', { p_start: shiftDate(payEnd, 3) }),
+  ])
+  const row = next.data?.[0]
+  const ok = !next.error && !gap.error && Boolean(row?.start_date) && Number(gap.data) === 2
+  record(name, ok, ok ? `Suggests ${row.start_date} to ${row.end_date}; a start 3 days after this period shows a 2-day gap.` : `Got: ${JSON.stringify({ next, gap })}`)
+  covers('next_pay_period_dates', 'pay_period_gap')
+}
+
+// --- Closing is blocked by a draft report and by unpriced hours ------------------
+{
+  const name = 'Close is blocked by a draft report and by unpriced hours - and says which'
+  const blockers = await owner.client.rpc('pay_period_blockers', { p_period_id: payPeriod })
+  const close = await owner.client.rpc('close_pay_period', { p_period_id: payPeriod })
+  const rows = blockers.data ?? []
+  const draft = rows.find((row) => row.kind === 'draft_report' && row.report_id === payR2)
+  const unpriced = rows.find((row) => row.kind === 'unpriced_hours' && row.person_id === payC && row.report_date === PAY_D3)
+  const pendingBlocks = rows.some((row) => row.person_id === payD.id)
+  const ok = Boolean(draft) && Boolean(unpriced) && Number(unpriced.hours) === 2 && !pendingBlocks && close.error?.code === '23514'
+  record(
+    name,
+    ok,
+    ok
+      ? `Blocked: the draft report of ${PAY_D2}, and 2 unpriced hours on ${PAY_D3}. The pending person does not block.`
+      : `Blockers: ${JSON.stringify(rows)}; close: ${close.error?.message ?? 'no error'}`,
+  )
+  covers('pay_period_blockers', 'close_pay_period')
+}
+
+// Fix both: submit the draft, give C a rate from the period start (C has no paid days).
+{
+  const { data, error } = await site.client.from('daily_reports').update({ status: 'submitted' }).eq('id', payR2).select('id')
+  if (error || data.length !== 1) stop(`site manager 1 could not submit the draft pay run test report: ${error?.message}`)
+  await ownerInsert('employee_rates', { employee_id: payC, ...fromPeriodStart }, 'the rate that prices C')
+}
+
+// --- Close cleanly: the snapshot equals the 8A figures ---------------------------
+let payRun1 = null
+{
+  const name = 'Owner closes the period: the snapshot equals the 8A pay figures'
+  try {
+    const close = await owner.client.rpc('close_pay_period', { p_period_id: payPeriod })
+    if (close.error) throw close.error
+    payRun1 = close.data
+    const [{ data: lines, error: linesError }, { data: days, error: daysError }] = await Promise.all([
+      owner.client.from('pay_run_lines').select('employee_id, included, hours, ordinary_hours, ot_hours, gross, rates').eq('run_id', payRun1),
+      owner.client.from('labour_days').select('employee_id, total_pay').in('employee_id', [payA, payB, payC]).gte('day', payStart).lte('day', payEnd),
+    ])
+    if (linesError || daysError) throw linesError ?? daysError
+    const line = (id, included = true) => lines.find((row) => row.employee_id === id && row.included === included)
+    const live = (id) => days.filter((row) => row.employee_id === id).reduce((sum, row) => sum + Number(row.total_pay), 0)
+    const a = line(payA)
+    const problems = [
+      Number(a?.gross) === 1500 && Number(a.ordinary_hours) === 12 && Number(a.ot_hours) === 2 ? null : `A: ${JSON.stringify(a)}`,
+      Number(line(payB)?.gross) === 800 ? null : `B: ${JSON.stringify(line(payB))}`,
+      Number(line(payC)?.gross) === 200 ? null : `C: ${JSON.stringify(line(payC))}`,
+      [payA, payB, payC].every((id) => Number(line(id)?.gross) === live(id)) ? null : 'Snapshot differs from labour_days',
+      Number(line(payD.id, false)?.hours) === 3 && line(payD.id, false)?.gross === null && !line(payD.id) ? null : `D: ${JSON.stringify(lines.filter((row) => row.employee_id === payD.id))}`,
+      a?.rates?.[0]?.from === payStart && Number(a.rates[0].rate) === 100 ? null : `A's rates: ${JSON.stringify(a?.rates)}`,
+    ].filter(Boolean)
+    record(
+      name,
+      problems.length === 0,
+      problems.length
+        ? problems.join('; ')
+        : 'A: 10 h + 4 h = R1,100 + R400 = R1,500 (12 ordinary + 2 overtime); B: 8 h = R800; C: R200 - all equal to labour_days. D (pending): excluded, 3 h.',
+    )
+  } catch (error) {
+    record(name, false, `Error: ${error.message}`)
+  }
+  covers('close_pay_period', 'pay_runs', 'pay_run_lines', 'pay_run_days', 'labour_days')
+}
+if (!payRun1) stop('the lock checks need the closed pay run')
+
+// --- Locks while closed --------------------------------------------------------------
+{
+  const name = 'Site manager saves a new report dated in the closed period'
+  const { error } = await site.client.rpc('save_report_draft', {
+    p_report: { project_id: payProject, report_date: PAY_D4, activities: 'attack' },
+    p_crew: [{ employee_id: payA, hours: 8 }],
+    p_equipment: [],
+  })
+  const ok = String(error?.message ?? '').includes('This period is closed. Contact the office.')
+  record(name, ok, ok ? 'Refused: "This period is closed. Contact the office."' : `Got: ${error?.message ?? 'BREACH: it was saved'}`)
+  covers('daily_reports_period_lock', 'save_report_draft')
+}
+{
+  const name = 'Owner reopens a report dated in the closed period'
+  const { error } = await owner.client
+    .from('daily_reports')
+    .update({ status: 'draft', reopen_reason: 'attack' })
+    .eq('id', payR1)
+    .select('id')
+  const ok = String(error?.message ?? '').includes('This period is closed')
+  record(name, ok, ok ? 'Refused: the period is closed.' : `Got: ${error?.message ?? 'BREACH: it was reopened'}`)
+  covers('daily_reports_period_lock')
+}
+{
+  // (Submitted lines are already locked to everyone; the period lock is the
+  // second wall behind that.)
+  const name = 'Crew lines of a report in the closed period cannot change'
+  const { error } = await owner.client.from('report_crew').update({ hours: 1 }).eq('report_id', payR1).select('id')
+  const { data: after } = await owner.client.from('report_crew').select('hours').eq('report_id', payR1).eq('employee_id', payA).single()
+  const ok = Number(after?.hours) === 10
+  record(name, ok, ok ? `Unchanged (${error ? `refused: ${error.message}` : 'nothing changed'}).` : `BREACH: hours now ${after?.hours}`)
+  covers('report_lines_period_lock')
+}
+for (const [label, values, table] of [
+  ['adds a rate dated inside the closed period', { employee_id: payA, hourly_rate: 150, effective_from: PAY_D2 }, 'employee_rates'],
+  ['adds a pay rule dated inside the closed period', { effective_from: PAY_D2, ot_multiplier: 2 }, 'pay_rules'],
+  ['adds a back-dated pay rule (before the period) that would change paid days', { effective_from: shiftDate(payStart, -10), ot_multiplier: 2 }, 'pay_rules'],
+  ['adds a public holiday on a paid day', { holiday_date: PAY_D1, name: 'Attack' }, 'public_holidays'],
+]) {
+  await attackInsert(`Owner ${label}`, owner.client, table, values, PERMISSION_DENIED, 'Refused: it would change days already in a pay run.')
+}
+covers('employee_rates_period_lock', 'pay_rules_period_lock', 'public_holidays_period_lock')
+{
+  const name = "Owner voids the rate that priced paid days (it would change them)"
+  const { data: rate } = await owner.client
+    .from('employee_rates')
+    .select('id')
+    .eq('employee_id', payA)
+    .eq('effective_from', payStart)
+    .is('voided_at', null)
+    .single()
+  const { error } = await owner.client.from('employee_rates').update({ void_reason: 'attack' }).eq('id', rate?.id).select('id')
+  record(name, error?.code === PERMISSION_DENIED, error ? `Refused: ${error.message}` : 'BREACH: the rate was voided.')
+  covers('employee_rates_period_lock')
+}
+{
+  const name = 'Owner reopens the pay period (only a system admin may)'
+  const { error } = await owner.client.rpc('reopen_pay_period', { p_period_id: payPeriod, p_reason: 'attack' })
+  record(name, error?.code === PERMISSION_DENIED, error ? `Refused: ${error.message}` : 'BREACH: the owner reopened it.')
+  covers('reopen_pay_period')
+}
+{
+  const name = 'Outstanding: the paid days are gone; the pending person\'s day is still there'
+  const { data, error } = await owner.client
+    .from('pay_outstanding')
+    .select('employee_id, day, total_hours, period_status')
+    .in('employee_id', [payA, payB, payD.id])
+  const pending = data?.find((row) => row.employee_id === payD.id && row.day === PAY_D3)
+  const ok = !error && !data.some((row) => row.employee_id === payA || row.employee_id === payB) && Number(pending?.total_hours) === 3 && pending.period_status === 'closed'
+  record(name, ok, ok ? `A and B are paid; D's 3 h on ${PAY_D3} are still to be paid.` : `Got: ${error?.message ?? JSON.stringify(data)}`)
+  covers('pay_outstanding')
+}
+
+// --- Site manager sees nothing ---------------------------------------------------------
+for (const table of ['pay_periods', 'pay_runs', 'pay_run_lines', 'pay_run_days', 'pay_outstanding']) {
+  await attackReadNothing(`Site manager reads ${table}`, site.client, table)
+  covers(table)
+}
+for (const [fn, args] of [
+  ['close_pay_period', { p_period_id: payPeriod }],
+  ['mark_pay_period_paid', { p_period_id: payPeriod, p_paid_on: payEnd }],
+  ['reopen_pay_period', { p_period_id: payPeriod, p_reason: 'attack' }],
+]) {
+  const name = `Site manager calls ${fn}()`
+  const { error } = await site.client.rpc(fn, args)
+  record(name, error?.code === PERMISSION_DENIED, error ? `Refused: ${error.message}` : 'BREACH: it ran.')
+  covers(fn)
+}
+for (const [fn, args] of [
+  ['pay_period_blockers', { p_period_id: payPeriod }],
+  ['next_pay_period_dates', {}],
+  ['pay_period_gap', { p_start: payEnd }],
+]) {
+  const name = `Site manager calls ${fn}()`
+  const { data, error } = await site.client.rpc(fn, args)
+  const empty = Array.isArray(data) ? data.length === 0 : data === null
+  if (error?.code === PERMISSION_DENIED) record(name, true, 'Server refused (permission denied).')
+  else if (error) record(name, false, `Unexpected error: ${error.message}`)
+  else record(name, empty, empty ? 'Nothing came back.' : `LEAK: ${JSON.stringify(data)}`)
+  covers(fn)
+}
+for (const fn of [
+  'pay_periods_before_write',
+  'pay_date_locked',
+  'daily_reports_period_lock',
+  'report_lines_period_lock',
+  'employee_rates_period_lock',
+  'pay_rules_period_lock',
+  'public_holidays_period_lock',
+]) {
+  const name = `Site manager calls ${fn}() directly`
+  const { error } = await site.client.rpc(fn, fn === 'pay_date_locked' ? { p_company_id: randomUUID(), p_day: payStart } : {})
+  record(name, Boolean(error), error ? `Refused: ${error.message}` : 'BREACH: it ran.')
+  covers(fn)
+}
+
+// --- System admin reopens; the old snapshot is kept ---------------------------------------
+{
+  const name = 'System admin reopens without a reason'
+  const { error } = await admin.client.rpc('reopen_pay_period', { p_period_id: payPeriod, p_reason: ' ' })
+  record(name, error?.code === '23514', error ? `Refused: ${error.message}` : 'BREACH: reopened without a reason.')
+  covers('reopen_pay_period')
+}
+let payRun2 = null
+{
+  const name = 'System admin reopens with a reason; closing again makes version 2 and v1 is kept as superseded'
+  try {
+    const reopen = await admin.client.rpc('reopen_pay_period', { p_period_id: payPeriod, p_reason: `RLS test ${RUN_TAG}` })
+    if (reopen.error) throw reopen.error
+    const { data: period } = await owner.client.from('pay_periods').select('status, reopened_by, reopen_reason').eq('id', payPeriod).single()
+    const close = await owner.client.rpc('close_pay_period', { p_period_id: payPeriod })
+    if (close.error) throw close.error
+    payRun2 = close.data
+    const { data: runs } = await owner.client.from('pay_runs').select('id, version, status, superseded_reason').eq('period_id', payPeriod).order('version')
+    const { data: a2 } = await owner.client.from('pay_run_lines').select('gross').eq('run_id', payRun2).eq('employee_id', payA).eq('included', true).single()
+    const ok =
+      period?.status === 'reopened' &&
+      period.reopened_by === admin.userId &&
+      runs?.length === 2 &&
+      runs[0].id === payRun1 &&
+      runs[0].status === 'superseded' &&
+      runs[0].superseded_reason === `RLS test ${RUN_TAG}` &&
+      runs[1].version === 2 &&
+      runs[1].status === 'active' &&
+      Number(a2?.gross) === 1500
+    record(name, ok, ok ? 'Reopened (logged with who and why); v1 kept as superseded; v2 active with the same R1,500 for A.' : `Period ${JSON.stringify(period)}; runs ${JSON.stringify(runs)}; A ${JSON.stringify(a2)}`)
+  } catch (error) {
+    record(name, false, `Error: ${error.message}`)
+  }
+  covers('reopen_pay_period', 'close_pay_period', 'pay_runs')
+}
+{
+  const name = 'Owner marks the period paid, with the paid date'
+  const { error } = await owner.client.rpc('mark_pay_period_paid', { p_period_id: payPeriod, p_paid_on: payEnd })
+  const { data: period } = await owner.client.from('pay_periods').select('status, paid_on, paid_by').eq('id', payPeriod).single()
+  const { data: run } = await owner.client.from('pay_runs').select('paid_on').eq('id', payRun2 ?? randomUUID()).maybeSingle()
+  const ok = !error && period?.status === 'paid' && period.paid_on === payEnd && period.paid_by === owner.userId && run?.paid_on === payEnd
+  record(name, ok, ok ? `Paid on ${payEnd}; the run records it too.` : `Error: ${error?.message}; period ${JSON.stringify(period)}; run ${JSON.stringify(run)}`)
+  covers('mark_pay_period_paid')
+}
+
+// --- Late hours: the pending person, approved later, is paid in the next run ------------
+{
+  const name = 'Late hours: the pending person, approved later, is paid in the next run'
+  try {
+    // Their rate may start inside the paid period - none of their days were paid.
+    await approveEmployee(owner.client, payD.id, 100, payStart)
+    const nextStart = shiftDate(payEnd, 1)
+    const { data: next, error: nextError } = await owner.client
+      .from('pay_periods')
+      .insert({ start_date: nextStart, end_date: shiftDate(nextStart, 13), notes: `RLS test ${RUN_TAG} (late hours)` })
+      .select('id')
+      .single()
+    if (nextError) throw nextError
+    const close = await owner.client.rpc('close_pay_period', { p_period_id: next.id })
+    if (close.error) throw close.error
+    const [{ data: line }, { data: day }, { data: outstanding }] = await Promise.all([
+      owner.client.from('pay_run_lines').select('gross, late_hours').eq('run_id', close.data).eq('employee_id', payD.id).eq('included', true).maybeSingle(),
+      owner.client.from('pay_run_days').select('late, total_pay').eq('run_id', close.data).eq('employee_id', payD.id).eq('day', PAY_D3).maybeSingle(),
+      owner.client.from('pay_outstanding').select('day').eq('employee_id', payD.id),
+    ])
+    await owner.client.rpc('mark_pay_period_paid', { p_period_id: next.id, p_paid_on: shiftDate(nextStart, 13) })
+    const ok = Number(line?.gross) === 300 && Number(line.late_hours) === 3 && day?.late === true && (outstanding ?? []).length === 0
+    record(name, ok, ok ? `Approved at R100: the 3 h of ${PAY_D3} paid in the next run as late hours (R300); no longer outstanding.` : `Line ${JSON.stringify(line)}; day ${JSON.stringify(day)}; outstanding ${JSON.stringify(outstanding)}`)
+  } catch (error) {
+    record(name, false, `Error: ${error.message}`)
+  }
+  covers('close_pay_period', 'pay_run_days', 'pay_outstanding', 'employee_rates_period_lock')
+}
+
+// --- Finish off this run's pay run test data (nothing can be deleted) -----------------
+{
+  const outcomes = await Promise.all([
+    owner.client.from('projects').update({ status: 'complete' }).eq('id', payProject).select('id'),
+    owner.client.from('employees').update({ status: 'inactive' }).eq('id', payD.id).select('id'),
+  ])
+  const failed = outcomes.find((outcome) => outcome.error)
+  if (failed) console.log(`          (note: tidy-up incomplete: ${failed.error.message})`)
+}
+
 // --- Every object created in phases 5 and 6 (and since) must be attacked ------
 // (Rework A's file is left out: everything it created was undone by the
 // undo-rework-A file, which is checked here instead.)
@@ -3430,6 +3814,7 @@ for (const [phase, file] of [
   ['rework C', '20261007150000_rework_c_drilldown.sql'],
   ['7a (exports)', '20261008090000_phase7a_exports.sql'],
   ['8A-1 (overtime)', '20261009090000_phase8a1_overtime.sql'],
+  ['8B-1 (pay runs)', '20261010090000_phase8b1_pay_runs.sql'],
 ]) {
   const sql = readFileSync(fileURLToPath(new URL(`../supabase/migrations/${file}`, import.meta.url)), 'utf8')
   const created = [...sql.matchAll(/create\s+(?:or\s+replace\s+)?(table|view|function)\s+public\.(\w+)/gi)].map(

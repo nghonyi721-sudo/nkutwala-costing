@@ -62,7 +62,10 @@ function ReportView({ reportId, onBack, backLabel = 'Reports', readOnly = false,
       .select('id')
     setBusy(false)
 
-    if (error || data.length === 0) {
+    if (String(error?.message ?? '').includes('This period is closed')) {
+      // The report is dated inside a closed or paid pay period.
+      setReopenError('This period is closed. Contact the office.')
+    } else if (error || data.length === 0) {
       setReopenError('Could not reopen the report. Check your signal and try again.')
     } else {
       setReopening(false)

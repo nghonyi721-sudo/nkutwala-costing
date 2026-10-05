@@ -81,6 +81,20 @@ If you are about to send a rand value to a site_manager, STOP and flag it.
   Overtime is shown as its own figures. "Before deductions", provisional.
 - Owned plant has no overtime. Pending/unpriced hours stay unpriced.
 
+## Pay periods and pay runs (phase 8B)
+- pay_periods never overlap (database constraint). open -> closed ->
+  paid; only a system_admin reopens, with a reason.
+- Closing saves a snapshot (pay_runs v1, v2..., pay_run_lines per person,
+  pay_run_days per day). It never changes; reopening marks it superseded.
+- Close is blocked by draft reports or unpriced hours of approved people.
+  Pending people are left out (excluded) and paid later as late hours.
+- LOCKS (database triggers) while closed/paid: reports and their lines
+  dated in it can't change ("This period is closed. Contact the office.");
+  no rate, pay rule or holiday may change a day already in an active run.
+- close/mark paid/reopen and the lock triggers are SECURITY DEFINER (they
+  write/see what the app can't); everything else invoker.
+- Site managers see nothing of pay periods or runs.
+
 ## Exports (phase 7)
 - Excel with ExcelJS (never the "xlsx" package). PDFs: print-friendly
   pages saved through the browser (no PDF library).
