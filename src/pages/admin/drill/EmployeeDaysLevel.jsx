@@ -56,6 +56,8 @@ function EmployeeDaysLevel({ level, nav }) {
         value={formatRand(totals?.total_cost ?? 0)}
         figures={[
           { label: 'Hours', value: Number(totals?.total_hours ?? 0).toFixed(1), unit: 'h' },
+          { label: 'Overtime', value: formatRand(totals?.total_ot_pay ?? 0) },
+          { label: 'OT hours', value: Number(totals?.total_ot_hours ?? 0).toFixed(1), unit: 'h' },
           { label: 'Unpriced', value: Number(totals?.total_unpriced_hours ?? 0).toFixed(1), unit: 'h' },
         ]}
       />
@@ -68,7 +70,13 @@ function EmployeeDaysLevel({ level, nav }) {
             <Row
               key={row.day}
               title={formatDate(row.day)}
-              subtitle={`${row.projects} · ${row.rate === null ? 'no rate - unpriced' : `${formatRand(row.rate)}/h`}`}
+              subtitle={[
+                row.projects,
+                row.rate === null ? 'no rate - unpriced' : `${formatRand(row.rate)}/h`,
+                Number(row.ot_hours) > 0 ? `${hoursText(row.ordinary_hours)} ordinary + ${hoursText(row.ot_hours)} overtime (${formatRand(row.ot_pay)})` : null,
+              ]
+                .filter(Boolean)
+                .join(' · ')}
               trailing={
                 <span className={s.trailingStack}>
                   <span className="num">{hoursText(row.hours)}</span>

@@ -182,7 +182,7 @@ function ExportsPage() {
       )}
       <Section
         plain
-        footer="All projects. Gross at a flat rate, before deductions and overtime - provisional, NOT a payslip. People not yet approved are listed separately."
+        footer="All projects. Gross with overtime, before deductions - provisional, NOT a payslip. People not yet approved are listed separately."
       >
         <Button icon={DownloadSimpleIcon} busy={busy === 'payroll'} disabled={Boolean(busy)} onClick={() => run('payroll')}>
           {busy === 'payroll' ? 'Exporting…' : 'Download Excel'}

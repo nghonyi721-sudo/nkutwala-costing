@@ -20,6 +20,11 @@ export function ratesText(rates) {
 
 export const daysText = (days) => `${days} day${Number(days) === 1 ? '' : 's'}`
 
-// Labour and owned plant costs are flat rate × hours.
+// Labour: hours × the rate on each day, with overtime per the pay rules.
 export const PROVISIONAL_NOTE =
-  'Provisional: hours × the rate on each day. Overtime rules are not applied.'
+  'Provisional: hours × the rate on each day, overtime included per the pay rules, before deductions.'
+
+// "incl. R 300,00 overtime (2.0 h)", or '' when there is none.
+export function overtimeText(otPay, otHours) {
+  return Number(otHours) > 0 ? `incl. ${formatRand(otPay)} overtime (${hoursText(otHours)})` : ''
+}

@@ -7,7 +7,7 @@ import Section from '../../../components/Section'
 import StatusBadge from '../../../components/StatusBadge'
 import SummaryCard from '../../../components/SummaryCard'
 import DrillPage from './DrillPage'
-import { LOAD_ERROR, PROVISIONAL_NOTE, daysText, hoursText, ratesText } from './drillText'
+import { LOAD_ERROR, PROVISIONAL_NOTE, daysText, hoursText, overtimeText, ratesText } from './drillText'
 import { employeeLevel } from './levels'
 import s from './Drill.module.css'
 
@@ -48,6 +48,12 @@ function HoursLevel({ level, nav }) {
         value={formatRand(totals?.total_cost ?? 0)}
         figures={[
           { label: 'Hours', value: Number(totals?.total_hours ?? 0).toFixed(1), unit: 'h' },
+          ...(people
+            ? [
+                { label: 'Overtime', value: formatRand(totals?.total_ot_pay ?? 0) },
+                { label: 'OT hours', value: Number(totals?.total_ot_hours ?? 0).toFixed(1), unit: 'h' },
+              ]
+            : []),
           { label: 'Unpriced', value: Number(totals?.total_unpriced_hours ?? 0).toFixed(1), unit: 'h' },
         ]}
       />
@@ -69,6 +75,7 @@ function HoursLevel({ level, nav }) {
                 [
                   `${hoursText(row.hours)} · ${daysText(row.days)}`,
                   row.rates.length > 0 ? ratesText(row.rates) : 'no rate',
+                  people ? overtimeText(row.ot_pay, row.ot_hours) : null,
                   unpriced ? `${hoursText(row.unpriced_hours)} unpriced` : null,
                 ]
                   .filter(Boolean)

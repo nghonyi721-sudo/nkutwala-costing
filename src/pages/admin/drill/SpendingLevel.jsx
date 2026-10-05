@@ -8,7 +8,7 @@ import StatusBadge from '../../../components/StatusBadge'
 import SummaryCard from '../../../components/SummaryCard'
 import { WeeklyMixChart } from '../DashboardCharts'
 import DrillPage from './DrillPage'
-import { LOAD_ERROR, PROVISIONAL_NOTE, daysText, hoursText } from './drillText'
+import { LOAD_ERROR, PROVISIONAL_NOTE, daysText, hoursText, overtimeText } from './drillText'
 import { categoryLevel, employeeLevel, unpricedLevel } from './levels'
 import s from './Drill.module.css'
 
@@ -46,7 +46,11 @@ function SpendingLevel({ level, nav }) {
         icon={CoinsIcon}
         label="Spent"
         value={formatRand(summary?.spent ?? 0)}
-        figures={[{ label: 'Unpriced', value: Number(summary?.unpriced_hours ?? 0).toFixed(1), unit: 'h' }]}
+        figures={[
+          { label: 'Overtime', value: formatRand(summary?.ot_pay ?? 0) },
+          { label: 'OT hours', value: Number(summary?.ot_hours ?? 0).toFixed(1), unit: 'h' },
+          { label: 'Unpriced', value: Number(summary?.unpriced_hours ?? 0).toFixed(1), unit: 'h' },
+        ]}
       />
 
       <Section title="By category" footer="Tap a category to see what's behind it. Receipts are VAT inclusive.">
@@ -88,10 +92,13 @@ function SpendingLevel({ level, nav }) {
             <Row
               key={person.who_id}
               title={person.name}
-              subtitle={
-                `${hoursText(person.hours)} · ${daysText(person.days)}` +
-                (Number(person.unpriced_hours) > 0 ? ` · ${hoursText(person.unpriced_hours)} unpriced` : '')
-              }
+              subtitle={[
+                `${hoursText(person.hours)} · ${daysText(person.days)}`,
+                overtimeText(person.ot_pay, person.ot_hours),
+                Number(person.unpriced_hours) > 0 ? `${hoursText(person.unpriced_hours)} unpriced` : '',
+              ]
+                .filter(Boolean)
+                .join(' · ')}
               trailing={
                 person.status === 'pending' ? (
                   <span className={s.trailingStack}>

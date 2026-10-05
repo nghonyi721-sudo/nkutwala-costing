@@ -69,6 +69,18 @@ If you are about to send a rand value to a site_manager, STOP and flag it.
   switched off. A new daily report starts with the project's team.
 - Absent = 0 hours on a crew line; the row stays on the report.
 
+## Pay rules and overtime (phase 8A)
+- pay_rules: dated (effective_from), never edited - void with a reason
+  and add a new rule from a date. Each day uses the rule in force that day.
+  ON: daily OT above 8 h at x1.5. Built but OFF: weekly OT above 45 h,
+  Sunday x2.0, public holiday x2.0 (public_holidays table, void-only).
+- Labour pay is worked out per person per DAY across all reports
+  (labour_days), then shared between projects by hours (labour_lines; the
+  project with most hours takes the leftover cent). ALL labour cost
+  (project_cost_lines, dashboard, drill-down, exports) comes from these.
+  Overtime is shown as its own figures. "Before deductions", provisional.
+- Owned plant has no overtime. Pending/unpriced hours stay unpriced.
+
 ## Exports (phase 7)
 - Excel with ExcelJS (never the "xlsx" package). PDFs: print-friendly
   pages saved through the browser (no PDF library).

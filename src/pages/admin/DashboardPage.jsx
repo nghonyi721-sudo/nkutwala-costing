@@ -259,7 +259,11 @@ function Overview({
           icon={CoinsIcon}
           label="Spent"
           value={formatRand(summary.spent)}
-          note={`${periodName} · receipts incl. VAT`}
+          note={
+            Number(summary.ot_hours) > 0
+              ? `${periodName} · incl. ${formatRand(summary.ot_pay)} overtime`
+              : `${periodName} · receipts incl. VAT`
+          }
           onOpen={() => onDrill(spendingLevel(projectId, projectName, period))}
         >
           {weeklyMix.length > 1 && <Sparkline weeks={weeklyMix} />}

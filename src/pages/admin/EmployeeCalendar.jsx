@@ -162,10 +162,18 @@ function EmployeeCalendar({ projectId, onOpenReport }) {
               <Row title="Total hours" tone="strong" trailing={`${hoursText(current.summary.total_hours)} h`} />
               <Row
                 title="Labour cost"
-                subtitle="PROVISIONAL — overtime not applied"
+                subtitle="PROVISIONAL — overtime included, before deductions"
                 mono
                 trailing={formatRand(current.summary.provisional_cost)}
               />
+              {Number(current.summary.ot_hours) > 0 && (
+                <Row
+                  title="of which overtime"
+                  subtitle={`${hoursText(current.summary.ot_hours)} h overtime`}
+                  mono
+                  trailing={formatRand(current.summary.ot_pay)}
+                />
+              )}
               {Number(current.summary.unpriced_hours) > 0 && (
                 <Row
                   title={`${hoursText(current.summary.unpriced_hours)} h have no rate`}

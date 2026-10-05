@@ -1659,14 +1659,14 @@ async function projectCosts() {
 const rand = (value) => `R${Number(value).toFixed(2)}`
 
 {
-  const name = 'Owner: project total is exactly R2,500'
+  const name = 'Owner: project total is exactly R2,600 (labour R1,100 with 2 h overtime)'
   const costs = await projectCosts()
   const spent = (category) => Number(costs.byCategory?.[category]?.spent ?? NaN)
   if (costs.error) {
     record(name, false, `Error: ${costs.error.message}`)
   } else if (
-    costs.total !== 2500 ||
-    spent('labour') !== 1000 ||
+    costs.total !== 2600 ||
+    spent('labour') !== 1100 ||
     spent('owned_plant') !== 1000 ||
     spent('fuel') !== 500 ||
     spent('materials') !== 0 ||
@@ -1683,7 +1683,7 @@ const rand = (value) => `R${Number(value).toFixed(2)}`
     record(
       name,
       true,
-      '10h x R100 + 4h x R250 + approved R500 fuel. Not counted: the R300 submitted and R200 rejected receipts, ' +
+      '10h: 8h x R100 + 2h overtime x R150, + 4h x R250 plant + approved R500 fuel. Not counted: the R300 submitted and R200 rejected receipts, ' +
         '3 hours on a draft report, 5 rented-plant hours, 40 litres of fuel.',
     )
   }
@@ -1698,7 +1698,7 @@ const rand = (value) => `R${Number(value).toFixed(2)}`
     .eq('project_id', costProjectId)
     .order('category')
   const lines = (data ?? []).map((l) => `${l.category} ${rand(l.amount)}`).join(', ')
-  const expected = 'fuel R500.00, labour R1000.00, owned_plant R1000.00'
+  const expected = 'fuel R500.00, labour R1100.00, owned_plant R1000.00'
   if (error) record(name, false, `Error: ${error.message}`)
   else record(name, lines === expected, lines === expected ? lines : `Got: ${lines || 'nothing'}`)
   covers('project_cost_lines')
@@ -1707,7 +1707,7 @@ const rand = (value) => `R${Number(value).toFixed(2)}`
 await submitCostReport(reportC)
 
 {
-  const name = 'Owner: 2 hours with no rate leave the total at R2,500 and show 2 unpriced hours'
+  const name = 'Owner: 2 hours with no rate leave the total at R2,600 and show 2 unpriced hours'
   const costs = await projectCosts()
   const { data: unpriced, error } = await owner.client
     .from('unpriced_hours')
@@ -1716,7 +1716,7 @@ await submitCostReport(reportC)
   const onlyRow = unpriced?.length === 1 ? unpriced[0] : null
   if (costs.error || error) {
     record(name, false, `Error: ${(costs.error ?? error).message}`)
-  } else if (costs.total !== 2500) {
+  } else if (costs.total !== 2600) {
     record(name, false, `The total changed to ${rand(costs.total)}.`)
   } else if (costs.unpriced !== 2 || Number(costs.byCategory.labour.unpriced_hours) !== 2) {
     record(name, false, `Unpriced hours shown: ${costs.unpriced}.`)
@@ -1728,13 +1728,13 @@ await submitCostReport(reportC)
   ) {
     record(name, false, `The unpriced-hours list is wrong: ${JSON.stringify(unpriced)}`)
   } else {
-    record(name, true, 'Total still R2,500; "2 hours unpriced" shown, and listed with the person and date.')
+    record(name, true, 'Total still R2,600; "2 hours unpriced" shown, and listed with the person and date.')
   }
   covers('unpriced_hours', 'project_cost_vs_budget', 'rate_on')
 }
 
 {
-  const name = 'Owner: cost per week adds up to the same R2,500'
+  const name = 'Owner: cost per week adds up to the same R2,600'
   const { data, error } = await owner.client
     .from('project_cost_by_week')
     .select('week_start, category, amount')
@@ -1744,8 +1744,8 @@ await submitCostReport(reportC)
     .filter((row) => row.week_start === COST_DAY_1)
     .reduce((total, row) => total + Number(row.amount), 0)
   if (error) record(name, false, `Error: ${error.message}`)
-  else if (sum !== 2500 || firstWeek !== 2000) record(name, false, `Weeks add up to ${rand(sum)}; week of ${COST_DAY_1}: ${rand(firstWeek)}.`)
-  else record(name, true, `Week of ${COST_DAY_1}: R2,000 (labour + owned plant); the fuel receipt in its own week.`)
+  else if (sum !== 2600 || firstWeek !== 2100) record(name, false, `Weeks add up to ${rand(sum)}; week of ${COST_DAY_1}: ${rand(firstWeek)}.`)
+  else record(name, true, `Week of ${COST_DAY_1}: R2,100 (labour R1,100 + owned plant R1,000); the fuel receipt in its own week.`)
   covers('project_cost_by_week')
 }
 
@@ -1768,7 +1768,7 @@ await submitCostReport(reportC)
   const name = 'Owner: provisional labour per employee per week'
   const { data, error } = await owner.client
     .from('labour_provisional_by_employee_week')
-    .select('employee_id, week_start, hours, cost, unpriced_hours, basis')
+    .select('employee_id, week_start, hours, cost, unpriced_hours, basis, ot_hours, ot_pay')
     .in('employee_id', [ratedEmployeeId, unratedEmployeeId])
   const rated = data?.find((row) => row.employee_id === ratedEmployeeId)
   const unrated = data?.find((row) => row.employee_id === unratedEmployeeId)
@@ -1778,15 +1778,18 @@ await submitCostReport(reportC)
     !rated ||
     rated.week_start !== COST_DAY_1 ||
     Number(rated.hours) !== 10 ||
-    Number(rated.cost) !== 1000 ||
+    Number(rated.cost) !== 1100 ||
+    Number(rated.ot_hours) !== 2 ||
+    Number(rated.ot_pay) !== 300 ||
     !unrated ||
     Number(unrated.cost) !== 0 ||
     Number(unrated.unpriced_hours) !== 2 ||
-    !rated.basis.startsWith('PROVISIONAL')
+    !rated.basis.startsWith('PROVISIONAL') ||
+    rated.basis.includes('not applied')
   ) {
     record(name, false, `Got: ${JSON.stringify(data)}`)
   } else {
-    record(name, true, '10h / R1,000 (the draft report\'s 3h left out); 2h unpriced; labelled PROVISIONAL.')
+    record(name, true, '10h / R1,100 incl. 2h overtime R300 (the draft report\'s 3h left out); 2h unpriced; labelled PROVISIONAL, overtime included.')
   }
   covers('labour_provisional_by_employee_week', 'rate_on')
 }
@@ -1843,10 +1846,10 @@ let budgetId
   const costs = await projectCosts()
   const labour = costs.byCategory?.labour
   if (costs.error) record(name, false, `Error: ${costs.error.message}`)
-  else if (Number(labour.budget) !== 3500 || Number(labour.spent) !== 1000 || Number(labour.remaining) !== 2500 || Number(labour.percent_used) !== 28.6) {
+  else if (Number(labour.budget) !== 3500 || Number(labour.spent) !== 1100 || Number(labour.remaining) !== 2400 || Number(labour.percent_used) !== 31.4) {
     record(name, false, `Got: ${JSON.stringify(labour)}`)
   } else {
-    record(name, true, 'Budget R3,500, spent R1,000, remaining R2,500, 28.6% used.')
+    record(name, true, 'Budget R3,500, spent R1,100 (with overtime), remaining R2,400, 31.4% used.')
   }
   covers('project_cost_vs_budget', 'project_budgets')
 }
@@ -1878,7 +1881,7 @@ let dashTo
 }
 
 {
-  const name = 'Dashboard: headline "spent" is exactly R2,500'
+  const name = 'Dashboard: headline "spent" is exactly R2,600, overtime shown separately'
   const { data, error } = await owner.client.rpc('dashboard_summary', {
     p_project_id: costProjectId,
     p_from: dashFrom,
@@ -1888,17 +1891,19 @@ let dashTo
   if (error || !s) {
     record(name, false, `Error: ${error?.message ?? 'no row'}`)
   } else if (
-    Number(s.spent) !== 2500 ||
-    Number(s.spent_to_date) !== 2500 ||
+    Number(s.spent) !== 2600 ||
+    Number(s.spent_to_date) !== 2600 ||
     Number(s.budget) !== 3500 ||
-    Number(s.remaining) !== 1000 ||
-    Number(s.percent_used) !== 71.4 ||
+    Number(s.remaining) !== 900 ||
+    Number(s.percent_used) !== 74.3 ||
     Number(s.unpriced_hours) !== 2 ||
-    Number(s.missing_rate_items) !== 1
+    Number(s.missing_rate_items) !== 1 ||
+    Number(s.ot_hours) !== 2 ||
+    Number(s.ot_pay) !== 300
   ) {
     record(name, false, `Got: ${JSON.stringify(s)}`)
   } else {
-    record(name, true, 'Spent R2,500; budget R3,500, remaining R1,000, 71.4% used; 2 h unpriced (1 person).')
+    record(name, true, 'Spent R2,600 incl. R300 overtime (2 h); budget R3,500, remaining R900, 74.3% used; 2 h unpriced (1 person).')
   }
   covers('dashboard_summary')
 }
@@ -1912,8 +1917,8 @@ let dashTo
   })
   const s = data?.[0]
   if (error || !s) record(name, false, `Error: ${error?.message ?? 'no row'}`)
-  else if (Number(s.spent) !== 2000 || Number(s.spent_to_date) !== 2500) record(name, false, `Got: ${JSON.stringify(s)}`)
-  else record(name, true, 'March: R2,000 (the reports); the fuel receipt is dated later. Spent to date still R2,500.')
+  else if (Number(s.spent) !== 2100 || Number(s.spent_to_date) !== 2600) record(name, false, `Got: ${JSON.stringify(s)}`)
+  else record(name, true, 'March: R2,100 (the reports); the fuel receipt is dated later. Spent to date still R2,600.')
   covers('dashboard_summary')
 }
 
@@ -1930,8 +1935,8 @@ let dashTo
   } else if (
     data.length !== 8 ||
     Number(by.labour.budget) !== 3500 ||
-    Number(by.labour.spent_to_date) !== 1000 ||
-    Number(by.labour.percent_used) !== 28.6 ||
+    Number(by.labour.spent_to_date) !== 1100 ||
+    Number(by.labour.percent_used) !== 31.4 ||
     by.labour.warning !== false ||
     by.owned_plant.budget !== null ||
     Number(by.owned_plant.spent_to_date) !== 1000 ||
@@ -1939,7 +1944,7 @@ let dashTo
   ) {
     record(name, false, `Got: ${JSON.stringify(data)}`)
   } else {
-    record(name, true, 'All 8 categories; labour R1,000 of R3,500 (28.6%), owned plant R1,000 (no budget), fuel R500.')
+    record(name, true, 'All 8 categories; labour R1,100 of R3,500 (31.4%), owned plant R1,000 (no budget), fuel R500.')
   }
   covers('dashboard_categories')
 }
@@ -1960,7 +1965,7 @@ let dashTo
   else if (fuel?.warning !== true || Number(fuel.percent_used) !== 96.2 || labour?.warning !== false) {
     record(name, false, `Got: fuel ${JSON.stringify(fuel)}, labour ${JSON.stringify(labour)}`)
   } else {
-    record(name, true, 'Fuel R500 of R520 (96.2%) flagged; labour at 28.6% not flagged.')
+    record(name, true, 'Fuel R500 of R520 (96.2%) flagged; labour at 31.4% not flagged.')
   }
   covers('dashboard_categories')
 }
@@ -1985,13 +1990,13 @@ let dashTo
     rows[0]?.week_start !== COST_DAY_1 ||
     rows.at(-1)?.week_start !== receiptWeek ||
     !contiguous ||
-    amountFor(COST_DAY_1) !== 2000 ||
+    amountFor(COST_DAY_1) !== 2100 ||
     amountFor(receiptWeek) !== 500 ||
     others.some((row) => Number(row.spent) !== 0)
   ) {
     record(name, false, `Got ${rows.length} week(s): ${JSON.stringify(rows.filter((row) => Number(row.spent) !== 0))}`)
   } else {
-    record(name, true, `${rows.length} weeks: R2,000 in the week of ${COST_DAY_1}, R500 in the week of ${receiptWeek}, R0 in between.`)
+    record(name, true, `${rows.length} weeks: R2,100 in the week of ${COST_DAY_1}, R500 in the week of ${receiptWeek}, R0 in between.`)
   }
   covers('dashboard_weekly')
 }
@@ -2055,7 +2060,7 @@ let dashTo
 }
 
 {
-  const name = 'Dashboard: employee month totals, cost labelled PROVISIONAL'
+  const name = 'Dashboard: employee month totals with overtime, labelled PROVISIONAL'
   const [rated, unrated] = await Promise.all(
     [ratedEmployeeId, unratedEmployeeId].map((id) =>
       owner.client.rpc('employee_month_summary', { p_employee_id: id, p_month: '2026-03-01', p_project_id: costProjectId }),
@@ -2067,7 +2072,9 @@ let dashTo
     record(name, false, `Error: ${(rated.error ?? unrated.error)?.message ?? 'no row'}`)
   } else if (
     Number(r.total_hours) !== 10 ||
-    Number(r.provisional_cost) !== 1000 ||
+    Number(r.provisional_cost) !== 1100 ||
+    Number(r.ot_hours) !== 2 ||
+    Number(r.ot_pay) !== 300 ||
     !r.basis.startsWith('PROVISIONAL') ||
     Number(u.total_hours) !== 2 ||
     Number(u.provisional_cost) !== 0 ||
@@ -2075,7 +2082,7 @@ let dashTo
   ) {
     record(name, false, `Got: ${JSON.stringify({ rated: r, unrated: u })}`)
   } else {
-    record(name, true, 'Rated: 10 h, R1,000 (PROVISIONAL). Unrated: 2 h, R0, 2 h unpriced.')
+    record(name, true, 'Rated: 10 h, R1,100 incl. 2 h overtime R300 (PROVISIONAL). Unrated: 2 h, R0, 2 h unpriced.')
   }
   covers('employee_month_summary')
 }
@@ -2090,15 +2097,15 @@ let dashTo
     record(name, false, `Error: ${error?.message ?? 'the test project is missing'}`)
   } else if (
     Number(row.budget) !== 4020 ||
-    Number(row.spent_to_date) !== 2500 ||
-    Number(row.remaining) !== 1520 ||
-    Number(row.percent_used) !== 62.2 ||
+    Number(row.spent_to_date) !== 2600 ||
+    Number(row.remaining) !== 1420 ||
+    Number(row.percent_used) !== 64.7 ||
     Number(row.unpriced_hours) !== 2 ||
     row.health !== 'on_track'
   ) {
     record(name, false, `Got: ${JSON.stringify(row)}`)
   } else {
-    record(name, true, 'R2,500 of R4,020 (62.2%), 2 h unpriced, On track.')
+    record(name, true, 'R2,600 of R4,020 (64.7%), 2 h unpriced, On track.')
   }
   covers('dashboard_projects')
 }
@@ -2116,15 +2123,15 @@ let dashTo
     record(name, false, `Error: ${error.message}`)
   } else if (
     first?.week_start !== COST_DAY_1 ||
-    Number(first.cumulative_spent) !== 2000 ||
+    Number(first.cumulative_spent) !== 2100 ||
     last?.week_start !== mondayOf(saToday) ||
-    Number(last.cumulative_spent) !== 2500 ||
+    Number(last.cumulative_spent) !== 2600 ||
     Number(last.budget) !== 4020 ||
     !contiguous
   ) {
     record(name, false, `Got ${rows.length} week(s); first ${JSON.stringify(first)}, last ${JSON.stringify(last)}`)
   } else {
-    record(name, true, `${rows.length} weeks: R2,000 by the week of ${COST_DAY_1}, R2,500 by this week; budget line R4,020.`)
+    record(name, true, `${rows.length} weeks: R2,100 by the week of ${COST_DAY_1}, R2,600 by this week; budget line R4,020.`)
   }
   covers('dashboard_cumulative')
 }
@@ -2142,16 +2149,16 @@ let dashTo
   if (error) {
     record(name, false, `Error: ${error.message}`)
   } else if (
-    Number(reports?.labour) !== 1000 ||
+    Number(reports?.labour) !== 1100 ||
     Number(reports?.owned_plant) !== 1000 ||
     Number(reports?.receipts) !== 0 ||
-    Number(reports?.total) !== 2000 ||
+    Number(reports?.total) !== 2100 ||
     Number(receiptWeek?.receipts) !== 500 ||
     Number(receiptWeek?.total) !== 500
   ) {
     record(name, false, `Got: ${JSON.stringify({ reports, receiptWeek })}`)
   } else {
-    record(name, true, `Week of ${COST_DAY_1}: labour R1,000 + owned plant R1,000; receipt week: R500.`)
+    record(name, true, `Week of ${COST_DAY_1}: labour R1,100 + owned plant R1,000; receipt week: R500.`)
   }
   covers('dashboard_weekly_mix')
 }
@@ -2164,9 +2171,9 @@ let dashTo
     p_to: dashTo,
   })
   const got = (data ?? []).map((row) => `${row.source} ${Number(row.amount)} ${Number(row.percent)}%`).join(', ')
-  const expected = 'labour 1000 40%, owned_plant 1000 40%, receipts 500 20%'
+  const expected = 'labour 1100 42.3%, owned_plant 1000 38.5%, receipts 500 19.2%'
   if (error) record(name, false, `Error: ${error.message}`)
-  else record(name, got === expected, got === expected ? 'Labour R1,000 (40%), owned plant R1,000 (40%), receipts R500 (20%).' : `Got: ${got}`)
+  else record(name, got === expected, got === expected ? 'Labour R1,100 (42.3%), owned plant R1,000 (38.5%), receipts R500 (19.2%).' : `Got: ${got}`)
   covers('dashboard_mix')
 }
 
@@ -2187,7 +2194,7 @@ const receiptsFigure = Number(dashMixRows.find((row) => row.source === 'receipts
 
 let labourRows = []
 {
-  const name = 'Drill-down: Labour per person adds up to R1,000 - the dashboard\'s Labour figure'
+  const name = 'Drill-down: Labour per person adds up to R1,100 - the dashboard\'s Labour figure; overtime shown'
   const { data, error } = await owner.client.rpc('drill_hours', { ...drillArgs, p_category: 'labour' })
   labourRows = data ?? []
   const rated = labourRows.find((row) => row.who_id === ratedEmployeeId)
@@ -2195,13 +2202,16 @@ let labourRows = []
   const total = Number(labourRows[0]?.total_cost)
   if (error) {
     record(name, false, `Error: ${error.message}`)
-  } else if (total !== 1000 || total !== categoryFigure('labour')) {
+  } else if (total !== 1100 || total !== categoryFigure('labour') || Number(labourRows[0]?.total_ot_pay) !== 300) {
     record(name, false, `Drill-down total ${rand(total)}; dashboard Labour ${rand(categoryFigure('labour'))}.`)
   } else if (
     !rated ||
     Number(rated.hours) !== 10 ||
     Number(rated.days) !== 1 ||
-    Number(rated.cost) !== 1000 ||
+    Number(rated.cost) !== 1100 ||
+    Number(rated.ordinary_hours) !== 8 ||
+    Number(rated.ot_hours) !== 2 ||
+    Number(rated.ot_pay) !== 300 ||
     rated.rates.map(Number).join(',') !== '100' ||
     !unrated ||
     Number(unrated.unpriced_hours) !== 2 ||
@@ -2210,7 +2220,7 @@ let labourRows = []
   ) {
     record(name, false, `Rows: ${JSON.stringify(labourRows)}`)
   } else {
-    record(name, true, 'R1,000 = the Labour figure. Rated: 10 h, 1 day, R100/h, R1,000. Unrated: 2 h unpriced. Draft hours left out.')
+    record(name, true, 'R1,100 = the Labour figure. Rated: 10 h (8 ordinary + 2 overtime), 1 day, R100/h, R1,100 incl. R300 overtime. Unrated: 2 h unpriced. Draft hours left out.')
   }
   covers('drill_hours')
 }
@@ -2285,7 +2295,7 @@ let labourRows = []
 }
 
 {
-  const name = "Drill-down: the rated person's days add up to their Labour row (R1,000)"
+  const name = "Drill-down: the rated person's days add up to their Labour row (R1,100 incl. overtime)"
   const { data, error } = await owner.client.rpc('drill_employee_days', { p_employee_id: ratedEmployeeId, ...drillArgs })
   const personRow = labourRows.find((row) => row.who_id === ratedEmployeeId)
   const only = data?.length === 1 ? data[0] : null
@@ -2293,15 +2303,18 @@ let labourRows = []
   else if (
     !only ||
     Number(only.total_cost) !== Number(personRow?.cost) ||
-    Number(only.total_cost) !== 1000 ||
+    Number(only.total_cost) !== 1100 ||
     Number(only.total_hours) !== 10 ||
+    Number(only.ot_hours) !== 2 ||
+    Number(only.ot_pay) !== 300 ||
+    Number(only.total_ot_pay) !== 300 ||
     only.day !== COST_DAY_1 ||
     Number(only.rate) !== 100 ||
     only.reports?.[0]?.report_id !== reportA
   ) {
     record(name, false, `Rows: ${JSON.stringify(data)}; labour row: ${JSON.stringify(personRow)}`)
   } else {
-    record(name, true, `${COST_DAY_1}: 10 h at R100/h = R1,000, with the report. The draft's 3 h on ${COST_DAY_2} left out.`)
+    record(name, true, `${COST_DAY_1}: 8 h x R100 + 2 h overtime x R150 = R1,100, with the report. The draft's 3 h on ${COST_DAY_2} left out.`)
   }
   covers('drill_employee_days')
 }
@@ -2350,7 +2363,7 @@ const ratedName = `ZZ Costing Rated ${RUN_TAG}`
 const unratedName = `ZZ Costing Unrated ${RUN_TAG}`
 
 {
-  const name = "Export 1 (the app's own file): Summary total exactly R2,500 = the dashboard's Spent"
+  const name = "Export 1 (the app's own file): Summary total exactly R2,600 = the dashboard's Spent; overtime columns"
   try {
     const data = await fetchProjectCost(owner.client, { projectId: costProjectId, from: dashFrom, to: dashTo })
     const { workbook, filename } = buildProjectCost(data, exportMeta)
@@ -2362,9 +2375,15 @@ const unratedName = `ZZ Costing Unrated ${RUN_TAG}`
     const dashSpent = Number(dashSummaryRows[0]?.spent)
     const expectedName = `nkutwala_project-cost_${exportMeta.projectName.toLowerCase().replace(/[^a-z0-9]+/g, '-')}_${dashFrom}_${dashTo}.xlsx`
     const problems = [
-      summary.value === 2500 && summary.value === dashSpent ? null : `Summary total ${summary.value}, dashboard ${dashSpent}`,
+      summary.value === 2600 && summary.value === dashSpent ? null : `Summary total ${summary.value}, dashboard ${dashSpent}`,
       summary.formula?.startsWith('SUM(') && summary.numFmt === '"R" #,##0.00' ? null : `Total cell: ${JSON.stringify(summary)}`,
-      labour.value === 1000 ? null : `Labour total ${labour.value}`,
+      labour.value === 1100 ? null : `Labour total ${labour.value}`,
+      personValue(workbook, 'Labour', ratedName, 'Overtime hours') === 2 &&
+      personValue(workbook, 'Labour', ratedName, 'Overtime pay') === 300 &&
+      personValue(workbook, 'Labour', ratedName, 'Ordinary pay') === 800
+        ? null
+        : 'Rated person\'s overtime columns are wrong',
+      sheetTotal(workbook, 'Labour', 'Overtime pay').value === 300 ? null : 'Overtime pay total is wrong',
       receipts.value === 500 ? null : `Receipts total ${receipts.value}`,
       rate === 100 && rateFrom instanceof Date && rateFrom.toISOString().slice(0, 10) === '2026-01-01'
         ? null
@@ -2374,7 +2393,7 @@ const unratedName = `ZZ Costing Unrated ${RUN_TAG}`
     record(
       name,
       problems.length === 0,
-      problems.length ? problems.join('; ') : 'Summary R2,500 (a SUM formula in R format); Labour R1,000 at R100/h from 1 Jan 2026; Receipts R500 VAT inclusive.',
+      problems.length ? problems.join('; ') : 'Summary R2,600 (a SUM formula in R format); Labour R1,100 at R100/h from 1 Jan 2026 (R800 ordinary + R300 for 2 h overtime); Receipts R500 VAT inclusive.',
     )
   } catch (error) {
     record(name, false, `Could not build it: ${error.message}`)
@@ -2383,7 +2402,7 @@ const unratedName = `ZZ Costing Unrated ${RUN_TAG}`
 }
 
 {
-  const name = "Export 2 (the app's own file): payroll lists the rated person at R1,000 gross; unpriced hours shown"
+  const name = "Export 2 (the app's own file): payroll lists the rated person at R1,100 gross incl. overtime; unpriced hours shown"
   try {
     const data = await fetchPayrollHours(owner.client, { from: COST_DAY_1, to: COST_DAY_3 })
     const { workbook } = buildPayrollHours(data, { ...exportMeta, from: COST_DAY_1, to: COST_DAY_3 })
@@ -2392,14 +2411,17 @@ const unratedName = `ZZ Costing Unrated ${RUN_TAG}`
     const sheets = workbook.worksheets.map((sheet) => sheet.name).join(', ')
     const warning = workbook.getWorksheet('Payroll hours').getRow(7).getCell(1).value
     const problems = [
-      rated?.included && Number(rated.hours) === 10 && Number(rated.gross) === 1000 ? null : `Rated: ${JSON.stringify(rated)}`,
+      rated?.included && Number(rated.hours) === 10 && Number(rated.gross) === 1100 && Number(rated.ot_pay) === 300
+        ? null
+        : `Rated: ${JSON.stringify(rated)}`,
       unrated?.included && Number(unrated.unpriced_hours) === 2 && Number(unrated.gross) === 0 ? null : `Unrated: ${JSON.stringify(unrated)}`,
-      personValue(workbook, 'Payroll hours', ratedName, 'Gross (flat rate, provisional)') === 1000 ? null : 'Rated gross not on the sheet',
+      personValue(workbook, 'Payroll hours', ratedName, 'Gross (provisional)') === 1100 ? null : 'Rated gross not on the sheet',
+      personValue(workbook, 'Payroll hours', ratedName, 'Overtime hours') === 2 ? null : 'Rated overtime hours not on the sheet',
       personValue(workbook, 'Payroll hours', unratedName, 'Unpriced hours (no rate on the day)') === 2 ? null : 'Unpriced hours not on the sheet',
       sheets === 'Payroll hours, Daily grid, Excluded' ? null : `Sheets: ${sheets}`,
-      String(warning).includes('NOT A PAYSLIP') ? null : `Title: ${warning}`,
+      String(warning).includes('NOT A PAYSLIP') && !String(warning).includes('OVERTIME') ? null : `Title: ${warning}`,
     ].filter(Boolean)
-    record(name, problems.length === 0, problems.length ? problems.join('; ') : 'Rated: 10 h, R1,000 gross. Unrated: 2 h unpriced, R0. Three sheets; "NOT A PAYSLIP" in the title.')
+    record(name, problems.length === 0, problems.length ? problems.join('; ') : 'Rated: 10 h (2 h overtime), R1,100 gross. Unrated: 2 h unpriced, R0. Three sheets; "NOT A PAYSLIP" in the title, no "overtime not applied".')
   } catch (error) {
     record(name, false, `Could not build it: ${error.message}`)
   }
@@ -3097,6 +3119,305 @@ covers('employees_before_write')
   if (failed) console.log(`          (note: tidy-up incomplete: ${failed.error.message})`)
 }
 
+// =============================================================================
+// Overtime (phase 8A-1)
+// =============================================================================
+// Pay is worked out per person per DAY across all reports and projects:
+// up to 8 h ordinary, the rest overtime at x1.5, at the rate on that day,
+// then shared between projects by their share of the day's hours. Its own
+// projects, people and dates. The switched-off rules (weekly, Sunday,
+// public holiday) are proven in a 2099 test week with a temporary rule that
+// is voided afterwards - real dates are never touched.
+console.log('\nOvertime attacks and sums…\n')
+
+const OT_PREFIX = 'ZZ Overtime Test'
+const OT_MON = '2026-05-04' // a Monday
+const OT_WED = '2026-05-06'
+const OT_THU = '2026-05-07'
+const TEST_RULE_FROM = '2099-01-01'
+const WEEK_2099 = ['2099-03-02', '2099-03-03', '2099-03-04', '2099-03-05', '2099-03-06', '2099-03-07'] // Mon-Sat
+const HOLIDAY_2099 = '2099-03-10' // a Tuesday
+const SUNDAY_2099 = '2099-03-15'
+const R100 = { hourly_rate: 100, effective_from: '2026-01-01' }
+
+// Finish off what an interrupted run left behind: projects, and a live 2099
+// test rule or test holiday.
+{
+  const results = await Promise.all([
+    owner.client.from('projects').update({ status: 'complete' }).like('name', `${OT_PREFIX}%`).eq('status', 'active'),
+    owner.client
+      .from('pay_rules')
+      .update({ void_reason: 'RLS test: tidy-up' })
+      .eq('effective_from', TEST_RULE_FROM)
+      .is('voided_at', null),
+    owner.client
+      .from('public_holidays')
+      .update({ void_reason: 'RLS test: tidy-up' })
+      .eq('holiday_date', HOLIDAY_2099)
+      .is('voided_at', null),
+  ])
+  const failed = results.find((result) => result.error)
+  if (failed) stop(`owner could not tidy up old overtime test data: ${failed.error.message}`)
+}
+
+// --- Site manager: pay rules and the overtime views are owner-only ------------
+await attackReadNothing('Site manager reads pay_rules', site.client, 'pay_rules')
+await attackReadNothing('Site manager reads public_holidays', site.client, 'public_holidays')
+await attackReadNothing('Site manager reads labour_days (pay per person per day)', site.client, 'labour_days')
+await attackReadNothing('Site manager reads labour_lines (pay per report line)', site.client, 'labour_lines')
+covers('pay_rules', 'public_holidays', 'labour_days', 'labour_lines')
+await attackInsert('Site manager adds a pay rule', site.client, 'pay_rules', { effective_from: '2030-01-01', ot_multiplier: 3 })
+await attackInsert('Site manager adds a public holiday', site.client, 'public_holidays', { holiday_date: '2030-01-02', name: 'Attack' })
+covers('pay_rules', 'public_holidays')
+{
+  const { data: seed } = await owner.client
+    .from('pay_rules')
+    .select('id')
+    .eq('effective_from', '2000-01-01')
+    .is('voided_at', null)
+    .maybeSingle()
+  if (!seed) stop('the overtime checks need the first pay rule (from 1 Jan 2000) - run the 8A-1 migration first.')
+  await attackUpdate('Site manager voids the pay rule in force', site, owner, 'pay_rules', seed.id, { void_reason: 'attack' }, 'void_reason')
+  await attackUpdate('Owner edits a pay rule (rules are never edited)', owner, owner, 'pay_rules', seed.id, { ot_multiplier: 3 }, 'ot_multiplier')
+  covers('pay_rules', 'pay_rules_before_write')
+}
+for (const fn of ['pay_rules_before_write', 'public_holidays_before_write']) {
+  const name = `Site manager calls the trigger function ${fn}() directly`
+  const { error } = await site.client.rpc(fn, {})
+  record(name, Boolean(error), error ? `Refused: ${error.message}` : 'BREACH: it ran.')
+  covers(fn)
+}
+
+// --- Owner, at R100/h ------------------------------------------------------------
+const otProjectA = await ownerInsert('projects', { name: `${OT_PREFIX} A ${RUN_TAG}`, status: 'active' }, 'overtime test project A')
+const otProjectB = await ownerInsert('projects', { name: `${OT_PREFIX} B ${RUN_TAG}`, status: 'active' }, 'overtime test project B')
+const splitPerson = await createTestPerson(`ZZ OT Split ${RUN_TAG}`, { rate: R100 })
+const eightPerson = await createTestPerson(`ZZ OT Eight ${RUN_TAG}`, { rate: R100 })
+const raisePerson = await createTestPerson(`ZZ OT Raise ${RUN_TAG}`, { rate: R100 })
+await ownerInsert('employee_rates', { employee_id: raisePerson, hourly_rate: 120, effective_from: OT_THU }, 'the R120 rate from Thursday')
+const weekPerson = await createTestPerson(`ZZ OT Week ${RUN_TAG}`, { rate: R100 })
+const premiumPerson = await createTestPerson(`ZZ OT Premium ${RUN_TAG}`, { rate: R100 })
+
+// A submitted report by site manager 1.
+async function otReport(projectId, date, crew) {
+  const { data: reportId, error } = await site.client.rpc('save_report_draft', {
+    p_report: { project_id: projectId, report_date: date, activities: `RLS overtime test ${RUN_TAG}` },
+    p_crew: crew,
+    p_equipment: [],
+  })
+  if (error) stop(`site manager 1 could not save an overtime test report: ${error.message}`)
+  const { data, error: submitError } = await site.client
+    .from('daily_reports')
+    .update({ status: 'submitted' })
+    .eq('id', reportId)
+    .select('id')
+  if (submitError || data.length !== 1) stop(`site manager 1 could not submit an overtime test report: ${submitError?.message}`)
+  return reportId
+}
+
+await otReport(otProjectA, OT_MON, [
+  { employee_id: splitPerson, hours: 6 },
+  { employee_id: eightPerson, hours: 8 },
+])
+await otReport(otProjectB, OT_MON, [{ employee_id: splitPerson, hours: 4 }])
+await otReport(otProjectA, OT_WED, [{ employee_id: raisePerson, hours: 10 }])
+await otReport(otProjectA, OT_THU, [{ employee_id: raisePerson, hours: 10 }])
+
+// The owner's view of one person's day (labour_days).
+async function payDay(employeeId, day) {
+  const { data, error } = await owner.client
+    .from('labour_days')
+    .select('total_hours, rate, ordinary_hours, ot_hours, premium_hours, premium_kind, ordinary_pay, ot_pay, premium_pay, total_pay')
+    .eq('employee_id', employeeId)
+    .eq('day', day)
+    .maybeSingle()
+  if (error) throw error
+  return data
+}
+// What one project was charged for one person on one day (project_cost_lines).
+async function projectCharge(projectId, employeeId, day) {
+  const { data, error } = await owner.client
+    .from('project_cost_lines')
+    .select('hours, ordinary_hours, ot_hours, amount, ot_amount')
+    .eq('project_id', projectId)
+    .eq('employee_id', employeeId)
+    .eq('cost_date', day)
+  if (error) throw error
+  return data
+}
+
+{
+  const name = 'Overtime: 6 h on project A + 4 h on project B the same day = R1,100; A R660, B R440'
+  try {
+    const day = await payDay(splitPerson, OT_MON)
+    const [a] = await projectCharge(otProjectA, splitPerson, OT_MON)
+    const [b] = await projectCharge(otProjectB, splitPerson, OT_MON)
+    const ok =
+      Number(day?.total_hours) === 10 &&
+      Number(day.ordinary_hours) === 8 &&
+      Number(day.ot_hours) === 2 &&
+      Number(day.total_pay) === 1100 &&
+      Number(a?.amount) === 660 &&
+      Number(a.ot_hours) === 1.2 &&
+      Number(b?.amount) === 440 &&
+      Number(b.ot_hours) === 0.8
+    record(
+      name,
+      ok,
+      ok
+        ? 'Day: 8 h x R100 + 2 h x R150 = R1,100. A (6 h) R660 incl. 1.2 h overtime; B (4 h) R440 incl. 0.8 h.'
+        : `Day: ${JSON.stringify(day)}; A: ${JSON.stringify(a)}; B: ${JSON.stringify(b)}`,
+    )
+  } catch (error) {
+    record(name, false, `Error: ${error.message}`)
+  }
+  covers('labour_days', 'labour_lines', 'project_cost_lines')
+}
+
+{
+  const name = 'Overtime: exactly 8 h = R800, no overtime'
+  try {
+    const day = await payDay(eightPerson, OT_MON)
+    const ok = Number(day?.total_pay) === 800 && Number(day.ot_hours) === 0 && Number(day.ot_pay) === 0
+    record(name, ok, ok ? '8 h x R100 = R800; 0 h overtime.' : `Got: ${JSON.stringify(day)}`)
+  } catch (error) {
+    record(name, false, `Error: ${error.message}`)
+  }
+  covers('labour_days')
+}
+
+{
+  const name = 'Overtime: R100 until Wednesday, R120 from Thursday; 10 h on Thursday = R1,320'
+  try {
+    const wednesday = await payDay(raisePerson, OT_WED)
+    const thursday = await payDay(raisePerson, OT_THU)
+    const ok =
+      Number(wednesday?.rate) === 100 &&
+      Number(wednesday.total_pay) === 1100 &&
+      Number(thursday?.rate) === 120 &&
+      Number(thursday.ordinary_pay) === 960 &&
+      Number(thursday.ot_pay) === 360 &&
+      Number(thursday.total_pay) === 1320
+    record(
+      name,
+      ok,
+      ok ? 'Wednesday at R100: R1,100. Thursday at R120: 8 x R120 + 2 x R180 = R1,320.' : `Wed: ${JSON.stringify(wednesday)}; Thu: ${JSON.stringify(thursday)}`,
+    )
+  } catch (error) {
+    record(name, false, `Error: ${error.message}`)
+  }
+  covers('labour_days', 'rate_on')
+}
+
+// --- The switched-off rules, in a 2099 test week -------------------------------
+let testRuleId = null
+let testHolidayId = null
+{
+  const name = 'Owner adds a dated pay rule and a public holiday (2099 test week)'
+  const rule = await owner.client
+    .from('pay_rules')
+    .insert({ effective_from: TEST_RULE_FROM, weekly_ot_enabled: true, sunday_enabled: true, public_holiday_enabled: true })
+    .select('id, created_by')
+    .single()
+  const holiday = await owner.client
+    .from('public_holidays')
+    .insert({ holiday_date: HOLIDAY_2099, name: `RLS test holiday ${RUN_TAG}` })
+    .select('id')
+    .single()
+  testRuleId = rule.data?.id ?? null
+  testHolidayId = holiday.data?.id ?? null
+  const failed = rule.error ?? holiday.error
+  if (failed) record(name, false, `Error: ${failed.message}`)
+  else record(name, rule.data.created_by === owner.userId, 'Added; the rule records who added it.')
+  covers('pay_rules', 'public_holidays', 'pay_rules_before_write', 'public_holidays_before_write')
+}
+if (!testRuleId || !testHolidayId) stop('the 2099 checks need the test rule and holiday')
+
+for (const day of WEEK_2099) await otReport(otProjectA, day, [{ employee_id: weekPerson, hours: 8 }])
+await otReport(otProjectA, HOLIDAY_2099, [{ employee_id: premiumPerson, hours: 8 }])
+await otReport(otProjectA, SUNDAY_2099, [{ employee_id: premiumPerson, hours: 5 }])
+
+{
+  const name = 'Public holiday rule (when ON): 8 h on a holiday at x2.0 = R1,600'
+  try {
+    const day = await payDay(premiumPerson, HOLIDAY_2099)
+    const ok = day?.premium_kind === 'public_holiday' && Number(day.premium_hours) === 8 && Number(day.total_pay) === 1600 && Number(day.ot_hours) === 0
+    record(name, ok, ok ? '8 h x R100 x 2.0 = R1,600.' : `Got: ${JSON.stringify(day)}`)
+  } catch (error) {
+    record(name, false, `Error: ${error.message}`)
+  }
+  covers('labour_days', 'public_holidays')
+}
+
+{
+  const name = 'Sunday rule (when ON): 5 h on a Sunday at x2.0 = R1,000'
+  try {
+    const day = await payDay(premiumPerson, SUNDAY_2099)
+    const ok = day?.premium_kind === 'sunday' && Number(day.premium_hours) === 5 && Number(day.total_pay) === 1000
+    record(name, ok, ok ? '5 h x R100 x 2.0 = R1,000.' : `Got: ${JSON.stringify(day)}`)
+  } catch (error) {
+    record(name, false, `Error: ${error.message}`)
+  }
+  covers('labour_days', 'pay_rules')
+}
+
+{
+  const name = 'Weekly rule (when ON): 8 h Mon-Sat = 48 h; 3 h over 45 become overtime on Saturday (R950)'
+  try {
+    const days = await Promise.all(WEEK_2099.map((day) => payDay(weekPerson, day)))
+    const saturday = days.at(-1)
+    const weekdays = days.slice(0, -1)
+    const ok =
+      weekdays.every((day) => Number(day?.total_pay) === 800 && Number(day.ot_hours) === 0) &&
+      Number(saturday?.ordinary_hours) === 5 &&
+      Number(saturday.ot_hours) === 3 &&
+      Number(saturday.total_pay) === 950
+    record(name, ok, ok ? 'Mon-Fri R800 each; Saturday 5 h x R100 + 3 h x R150 = R950.' : `Got: ${JSON.stringify(days)}`)
+  } catch (error) {
+    record(name, false, `Error: ${error.message}`)
+  }
+  covers('labour_days', 'pay_rules')
+}
+
+{
+  const name = 'Owner voids a pay rule without a reason'
+  const { error } = await owner.client.from('pay_rules').update({ void_reason: ' ' }).eq('id', testRuleId).select('id')
+  record(name, error?.code === '23514', error ? `Refused: ${error.message}` : 'BREACH: voided without a reason.')
+  covers('pay_rules_before_write')
+}
+
+{
+  const name = 'Voiding the 2099 rule and holiday puts those days back on the rule in force (Saturday R800)'
+  const results = await Promise.all([
+    owner.client.from('pay_rules').update({ void_reason: 'RLS test: done' }).eq('id', testRuleId).select('voided_at'),
+    owner.client.from('public_holidays').update({ void_reason: 'RLS test: done' }).eq('id', testHolidayId).select('voided_at'),
+  ])
+  const failed = results.find((result) => result.error)
+  try {
+    if (failed) throw failed.error
+    const saturday = await payDay(weekPerson, WEEK_2099.at(-1))
+    const holiday = await payDay(premiumPerson, HOLIDAY_2099)
+    const ok =
+      results.every((result) => result.data?.[0]?.voided_at) &&
+      Number(saturday?.total_pay) === 800 &&
+      holiday?.premium_kind === null &&
+      Number(holiday.total_pay) === 800
+    record(name, ok, ok ? 'Voided (kept in history); Saturday back to R800, the holiday back to a normal R800 day.' : `Saturday: ${JSON.stringify(saturday)}; holiday: ${JSON.stringify(holiday)}`)
+  } catch (error) {
+    record(name, false, `Error: ${error.message}`)
+  }
+  covers('pay_rules', 'public_holidays', 'labour_days')
+}
+
+// --- Finish off this run's overtime test data (nothing can be deleted) ---------
+{
+  const outcomes = await Promise.all([
+    owner.client.from('projects').update({ status: 'complete' }).in('id', [otProjectA, otProjectB]).select('id'),
+  ])
+  const failed = outcomes.find((outcome) => outcome.error)
+  if (failed) console.log(`          (note: tidy-up incomplete: ${failed.error.message})`)
+}
+
 // --- Every object created in phases 5 and 6 (and since) must be attacked ------
 // (Rework A's file is left out: everything it created was undone by the
 // undo-rework-A file, which is checked here instead.)
@@ -3108,6 +3429,7 @@ for (const [phase, file] of [
   ['rework B', '20261007120000_rework_b_crew_and_new_employees.sql'],
   ['rework C', '20261007150000_rework_c_drilldown.sql'],
   ['7a (exports)', '20261008090000_phase7a_exports.sql'],
+  ['8A-1 (overtime)', '20261009090000_phase8a1_overtime.sql'],
 ]) {
   const sql = readFileSync(fileURLToPath(new URL(`../supabase/migrations/${file}`, import.meta.url)), 'utf8')
   const created = [...sql.matchAll(/create\s+(?:or\s+replace\s+)?(table|view|function)\s+public\.(\w+)/gi)].map(

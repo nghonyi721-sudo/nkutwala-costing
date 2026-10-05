@@ -1,5 +1,5 @@
 import { EMPLOYEE_CATEGORY_LABELS, EMPLOYEE_STATUS_LABELS } from '../labels.js'
-import { rateColumns, rateValues } from './projectCost.js'
+import { hoursSplitColumns, paySplitColumns, rateColumns, rateValues, splitTotals } from './projectCost.js'
 import {
   CONFIDENTIAL,
   HOURS,
@@ -12,8 +12,8 @@ import {
 } from './workbook.js'
 
 // Export 2: the payroll hours sheet, all projects (owners/admins only - the
-// database returns nothing to anyone else). NOT a payslip: gross at a flat
-// rate, before deductions and overtime. Three sheets:
+// database returns nothing to anyone else). NOT a payslip: gross with
+// overtime (per the pay rules), before deductions. Three sheets:
 //   Payroll hours - approved people (now or before)
 //   Daily grid    - those people down, the dates across, hours
 //   Excluded      - people never approved, with their hours, so nobody is
@@ -21,7 +21,7 @@ import {
 // Every figure and total comes from the database.
 
 export const PAYROLL_HOURS = { type: 'payroll_hours', slug: 'payroll-hours', name: 'Payroll hours sheet' }
-export const PAYROLL_WARNING = 'GROSS, FLAT RATE, BEFORE DEDUCTIONS AND OVERTIME — PROVISIONAL, NOT A PAYSLIP'
+export const PAYROLL_WARNING = 'GROSS, BEFORE DEDUCTIONS — PROVISIONAL, NOT A PAYSLIP'
 
 export async function fetchPayrollHours(client, { from, to }) {
   const [people, days] = await Promise.all([
@@ -66,13 +66,16 @@ export function buildPayrollHours(data, meta) {
       { header: 'Status', key: 'status_label', type: 'text', width: 11 },
       { header: 'Days worked', key: 'days', type: 'whole', width: 11 },
       { header: 'Hours', key: 'hours', type: 'hours', width: 10 },
+      ...hoursSplitColumns(included),
       { header: 'Unpriced hours (no rate on the day)', key: 'unpriced_hours', type: 'hours', width: 16 },
       ...rateColumns(included),
-      { header: 'Gross (flat rate, provisional)', key: 'gross', type: 'money', width: 18 },
+      ...paySplitColumns(included),
+      { header: 'Gross (provisional)', key: 'gross', type: 'money', width: 18 },
     ],
     rows: included.map((person) => ({ ...describe(person), ...rateValues(person) })),
     totals: {
       hours: totals.total_hours ?? 0,
+      ...splitTotals(totals),
       unpriced_hours: totals.total_unpriced_hours ?? 0,
       gross: totals.total_gross ?? 0,
     },

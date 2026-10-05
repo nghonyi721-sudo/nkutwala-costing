@@ -40,6 +40,38 @@ export function rateColumns(people) {
   return columns
 }
 
+// Hours split by the pay rules: ordinary, overtime and (only when someone
+// has any) Sunday / public holiday hours. Real numbers, from the database.
+const hasPremium = (people) => people.some((person) => Number(person.premium_hours) > 0)
+
+export function hoursSplitColumns(people) {
+  return [
+    { header: 'Ordinary hours', key: 'ordinary_hours', type: 'hours', width: 11 },
+    { header: 'Overtime hours', key: 'ot_hours', type: 'hours', width: 11 },
+    ...(hasPremium(people) ? [{ header: 'Sunday / holiday hours', key: 'premium_hours', type: 'hours', width: 12 }] : []),
+  ]
+}
+
+export function paySplitColumns(people) {
+  return [
+    { header: 'Ordinary pay', key: 'ordinary_pay', type: 'money', width: 15 },
+    { header: 'Overtime pay', key: 'ot_pay', type: 'money', width: 15 },
+    ...(hasPremium(people) ? [{ header: 'Sunday / holiday pay', key: 'premium_pay', type: 'money', width: 15 }] : []),
+  ]
+}
+
+// The database's totals for those columns (its rows all carry them).
+export function splitTotals(totals) {
+  return {
+    ordinary_hours: totals.total_ordinary_hours ?? 0,
+    ot_hours: totals.total_ot_hours ?? 0,
+    premium_hours: totals.total_premium_hours ?? 0,
+    ordinary_pay: totals.total_ordinary_pay ?? 0,
+    ot_pay: totals.total_ot_pay ?? 0,
+    premium_pay: totals.total_premium_pay ?? 0,
+  }
+}
+
 export function rateValues(person) {
   return Object.fromEntries(
     person.rates.flatMap((rate, index) => [
@@ -90,8 +122,10 @@ export function buildProjectCost(data, meta) {
       { header: 'Status', key: 'status_label', type: 'text', width: 11 },
       { header: 'Days worked', key: 'days', type: 'whole', width: 11 },
       { header: 'Hours', key: 'hours', type: 'hours', width: 10 },
+      ...hoursSplitColumns(data.labour),
       { header: 'Unpriced hours', key: 'unpriced_hours', type: 'hours', width: 11 },
       ...rateColumns(data.labour),
+      ...paySplitColumns(data.labour),
       { header: 'Cost (provisional)', key: 'cost', type: 'money', width: 17 },
     ],
     rows: data.labour.map((person) => ({
@@ -102,6 +136,7 @@ export function buildProjectCost(data, meta) {
     })),
     totals: {
       hours: labourTotals.total_hours ?? 0,
+      ...splitTotals(labourTotals),
       unpriced_hours: labourTotals.total_unpriced_hours ?? 0,
       cost: labourTotals.total_cost ?? 0,
     },

@@ -19,7 +19,8 @@ export const WHOLE = '0'
 
 export const CONFIDENTIAL = 'Confidential – contains personal information (POPIA)'
 export const VAT_NOTE = 'Receipt amounts are the total paid, VAT inclusive.'
-export const PROVISIONAL_NOTE = 'Labour and owned plant are provisional: hours × the flat rate on each day, overtime not applied.'
+export const PROVISIONAL_NOTE =
+  'Labour is provisional: hours × the rate on each day, overtime included per the pay rules, before deductions. Owned plant: hours × the machine rate.'
 
 const FORMATS = { money: MONEY, hours: HOURS, date: DATE, percent: PERCENT, whole: WHOLE }
 
