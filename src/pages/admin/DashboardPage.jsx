@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../../lib/supabaseClient'
 import { PERIODS, fetchActionItems, fetchDashboard, fetchPeriod } from '../../lib/dashboard'
+import { fetchToDate } from '../../lib/drilldown'
 import { formatDate, formatRand } from '../../lib/labels'
 import Button from '../../components/Button'
 import {
+  CaretRightIcon,
   ChartBarIcon,
   ChartDonutIcon,
   CoinsIcon,
@@ -22,10 +24,17 @@ import SegmentedControl from '../../components/SegmentedControl'
 import { PickSheet } from '../../components/Sheet'
 import { BudgetRing, DashboardCard, MixBar, ProjectHealth, Tile } from './DashboardCard'
 import { CumulativeChart, Sparkline, WeeklyMixChart } from './DashboardCharts'
+import DrillDown from './DrillDown'
 import EmployeeCalendar from './EmployeeCalendar'
-import MissingRates from './MissingRates'
 import ProjectBudget from './ProjectBudget'
 import ReportView from './ReportView'
+import {
+  allReceiptsLevel,
+  categoryLevel,
+  spendingLevel,
+  unpricedLevel,
+  vendorLevel,
+} from './drill/levels'
 import s from './Dashboard.module.css'
 
 const ALL = 'all'
@@ -70,8 +79,9 @@ function DashboardPage({ onNavigate }) {
   const [actions, setActions] = useState(null)
   const [error, setError] = useState('')
   const [reloadCount, setReloadCount] = useState(0)
-  // A screen opened from here: { screen: 'missing' | 'budget' | 'report', ... }
+  // A screen opened from here: { screen: 'drill' | 'budget' | 'report', ... }
   const [open, setOpen] = useState(null)
+  const [drillError, setDrillError] = useState('')
 
   const projectId = projectFilter === ALL ? null : projectFilter
   const project = projects.find((p) => p.id === projectId)
@@ -120,11 +130,25 @@ function DashboardPage({ onNavigate }) {
     setOpen(null)
     setReloadCount((count) => count + 1)
   }
-  if (open?.screen === 'missing') return <MissingRates projectId={projectId} backLabel="Dashboard" onBack={back} />
+  if (open?.screen === 'drill') return <DrillDown start={open.start} onExit={back} />
   if (open?.screen === 'budget') return <ProjectBudget project={open.project} backLabel="Dashboard" onBack={back} />
   if (open?.screen === 'report') return <ReportView reportId={open.reportId} backLabel="Dashboard" onBack={back} />
 
   const current = view?.key === key ? view : null
+
+  // Open the drill-down at a level. Every level keeps the project and the
+  // period of the figure tapped, so its total equals that figure.
+  const drill = (start) => {
+    setDrillError('')
+    setOpen({ screen: 'drill', start })
+  }
+  // For "to date" figures: the to-date period, as the dashboard counts it.
+  const drillToDate = (id, build) => {
+    setDrillError('')
+    fetchToDate(id)
+      .then((period) => drill(build(period)))
+      .catch(() => setDrillError('Could not open that. Check your signal and try again.'))
+  }
   const setBudgets = () => (project ? setOpen({ screen: 'budget', project }) : onNavigate('projects'))
   const projectOptions = [
     { value: ALL, title: 'All projects' },
@@ -151,6 +175,7 @@ function DashboardPage({ onNavigate }) {
       </div>
 
       {error && <Notice tone="error">{error}</Notice>}
+      {drillError && <Notice tone="error">{drillError}</Notice>}
       {!error && !current && <DashboardPlaceholder />}
       {current?.summary && (
         <Overview
@@ -158,7 +183,9 @@ function DashboardPage({ onNavigate }) {
           actions={actions}
           preset={preset}
           projectId={projectId}
-          onPickProject={setProjectFilter}
+          projectName={project?.name ?? null}
+          onDrill={drill}
+          onDrillToDate={drillToDate}
           onSetBudgets={setBudgets}
           onOpen={setOpen}
           onNavigate={onNavigate}
@@ -178,10 +205,24 @@ function DashboardPage({ onNavigate }) {
   )
 }
 
-// The tiles and cards, drawn from the database's numbers.
-function Overview({ data, actions, preset, projectId, onPickProject, onSetBudgets, onOpen, onNavigate }) {
+// The tiles and cards, drawn from the database's numbers. Figures with money
+// (or unpriced hours) behind them can be tapped to drill down.
+function Overview({
+  data,
+  actions,
+  preset,
+  projectId,
+  projectName,
+  onDrill,
+  onDrillToDate,
+  onSetBudgets,
+  onOpen,
+  onNavigate,
+}) {
   const { summary, categories, weeklyMix, mix, vendors, cumulative, projects } = data
   const periodName = PERIODS[preset]
+  // The period on screen, for levels opened from figures in it.
+  const period = { from: data.period.from_date, to: data.period.to_date, name: periodName }
   const noBudget = summary.budget === null
   const budgetWarning = summary.percent_used !== null && Number(summary.percent_used) > 90
   const overBudget = !noBudget && Number(summary.remaining) < 0
@@ -198,7 +239,14 @@ function Overview({ data, actions, preset, projectId, onPickProject, onSetBudget
     <>
       {/* Key numbers */}
       <div className={s.tiles}>
-        <Tile index={0} icon={CoinsIcon} label="Spent" value={formatRand(summary.spent)} note={`${periodName} · receipts incl. VAT`}>
+        <Tile
+          index={0}
+          icon={CoinsIcon}
+          label="Spent"
+          value={formatRand(summary.spent)}
+          note={`${periodName} · receipts incl. VAT`}
+          onOpen={() => onDrill(spendingLevel(projectId, projectName, period))}
+        >
           {weeklyMix.length > 1 && <Sparkline weeks={weeklyMix} />}
         </Tile>
         <Tile
@@ -220,7 +268,7 @@ function Overview({ data, actions, preset, projectId, onPickProject, onSetBudget
           value={Number(summary.unpriced_hours).toFixed(1)}
           unit="h"
           note={unpriced ? 'No rate yet — add missing rates' : `Every hour priced · ${periodName.toLowerCase()}`}
-          onOpen={unpriced ? () => onOpen({ screen: 'missing' }) : undefined}
+          onOpen={unpriced ? () => onDrill(unpricedLevel(projectId, period)) : undefined}
         />
         <Tile
           index={3}
@@ -252,8 +300,13 @@ function Overview({ data, actions, preset, projectId, onPickProject, onSetBudget
 
         {/* Every project at a glance (All projects only) */}
         {projectId === null && projects.length > 0 && (
-          <DashboardCard index={5} wide flush icon={MapPinIcon} title="Projects" meta="Tap one to look at it">
-            <ProjectHealth projects={projects} onPick={onPickProject} />
+          <DashboardCard index={5} wide flush icon={MapPinIcon} title="Projects" meta="Tap one to see its spend">
+            <ProjectHealth
+              projects={projects}
+              onPick={(row) =>
+                onDrillToDate(row.project_id, (toDate) => spendingLevel(row.project_id, row.project_name, toDate))
+              }
+            />
           </DashboardCard>
         )}
 
@@ -261,7 +314,16 @@ function Overview({ data, actions, preset, projectId, onPickProject, onSetBudget
         <DashboardCard index={6} icon={ChartBarIcon} title="Where the money goes" meta={periodName}>
           {spentInPeriod ? (
             <>
-              <MixBar mix={mix} />
+              <MixBar
+                mix={mix}
+                onPick={(source, label) =>
+                  onDrill(
+                    source === 'receipts'
+                      ? allReceiptsLevel(projectId, period)
+                      : categoryLevel(source, label, projectId, period),
+                  )
+                }
+              />
               {weeklyMix.length > 1 && <WeeklyMixChart weeks={weeklyMix} />}
             </>
           ) : (
@@ -281,26 +343,54 @@ function Overview({ data, actions, preset, projectId, onPickProject, onSetBudget
           ) : (
             <>
               <ul className={s.categoryList}>
-                {shownCategories.map((row) => (
-                  <li key={row.category} className={s.categoryRow}>
-                    <span className={s.categoryTop}>
-                      <span className={s.categoryName}>{row.label}</span>
-                      <span className={row.warning ? s.over : s.percent}>
-                        {row.percent_used === null ? '–' : `${row.percent_used}%`}
+                {shownCategories.map((row) => {
+                  const tappable = Number(row.spent_to_date) !== 0
+                  const content = (
+                    <>
+                      <span className={s.categoryTop}>
+                        <span className={s.categoryName}>{row.label}</span>
+                        <span className={s.categoryEnd}>
+                          <span className={row.warning ? s.over : s.percent}>
+                            {row.percent_used === null ? '–' : `${row.percent_used}%`}
+                          </span>
+                          {tappable && (
+                            <CaretRightIcon className={s.rowChevron} size={12} weight="bold" aria-hidden="true" />
+                          )}
+                        </span>
                       </span>
-                    </span>
-                    {row.percent_used !== null && (
-                      <span className={row.warning ? `${s.bar} ${s.barWarning}` : s.bar} aria-hidden="true">
-                        <span style={{ width: `${row.percent_used}%` }} />
+                      {row.percent_used !== null && (
+                        <span className={row.warning ? `${s.bar} ${s.barWarning}` : s.bar} aria-hidden="true">
+                          <span style={{ width: `${row.percent_used}%` }} />
+                        </span>
+                      )}
+                      <span className={`${s.categoryFigures} num`}>
+                        {formatRand(row.spent_to_date)} / {row.budget === null ? 'no budget' : formatRand(row.budget)}
                       </span>
-                    )}
-                    <span className={`${s.categoryFigures} num`}>
-                      {formatRand(row.spent_to_date)} / {row.budget === null ? 'no budget' : formatRand(row.budget)}
-                    </span>
-                  </li>
-                ))}
+                    </>
+                  )
+                  // Spent to date: tap to see what's behind it (to date).
+                  return tappable ? (
+                    <li key={row.category} className={s.categoryRow}>
+                      <button
+                        type="button"
+                        className={s.categoryButton}
+                        onClick={() =>
+                          onDrillToDate(projectId, (toDate) => categoryLevel(row.category, row.label, projectId, toDate))
+                        }
+                      >
+                        {content}
+                      </button>
+                    </li>
+                  ) : (
+                    <li key={row.category} className={s.categoryRow}>
+                      {content}
+                    </li>
+                  )
+                })}
               </ul>
-              <p className={s.cardNote}>Red: more than 90% of the budget used. Receipts are VAT inclusive.</p>
+              <p className={s.cardNote}>
+                Red: more than 90% of the budget used. Receipts are VAT inclusive. Tap a category to see what's behind it.
+              </p>
             </>
           )}
         </DashboardCard>
@@ -314,17 +404,24 @@ function Overview({ data, actions, preset, projectId, onPickProject, onSetBudget
               <ol className={s.vendorList}>
                 {vendors.map((vendor) => (
                   <li key={vendor.vendor}>
-                    <span className={s.vendorName}>
-                      {vendor.vendor}
-                      <span className={s.vendorNote}>
-                        {vendor.receipts} receipt{Number(vendor.receipts) === 1 ? '' : 's'}
+                    <button
+                      type="button"
+                      className={s.vendorButton}
+                      onClick={() => onDrill(vendorLevel(vendor.vendor, projectId, period))}
+                    >
+                      <span className={s.vendorName}>
+                        {vendor.vendor}
+                        <span className={s.vendorNote}>
+                          {vendor.receipts} receipt{Number(vendor.receipts) === 1 ? '' : 's'}
+                        </span>
                       </span>
-                    </span>
-                    <span className={`${s.vendorAmount} num`}>{formatRand(vendor.amount)}</span>
+                      <span className={`${s.vendorAmount} num`}>{formatRand(vendor.amount)}</span>
+                      <CaretRightIcon className={s.rowChevron} size={12} weight="bold" aria-hidden="true" />
+                    </button>
                   </li>
                 ))}
               </ol>
-              <p className={s.cardNote}>Approved receipts, VAT inclusive.</p>
+              <p className={s.cardNote}>Approved receipts, VAT inclusive. Tap a vendor to see their receipts.</p>
             </>
           )}
         </DashboardCard>

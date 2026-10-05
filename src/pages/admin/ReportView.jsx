@@ -15,7 +15,9 @@ import Skeleton from '../../components/Skeleton'
 // Owner/admin: one report, read-only. A submitted report can be reopened
 // (with a reason) so the site manager can correct it. The database keeps
 // the submitted version in the audit log.
-function ReportView({ reportId, onBack, backLabel = 'Reports' }) {
+//   readOnly:    no Reopen button (e.g. when opened from the dashboard drill-down)
+//   breadcrumbs: shown at the top (the drill-down's <Breadcrumbs>)
+function ReportView({ reportId, onBack, backLabel = 'Reports', readOnly = false, breadcrumbs }) {
   // undefined = loading, null = not found, object = loaded
   const [report, setReport] = useState(undefined)
   const [loadError, setLoadError] = useState('')
@@ -78,7 +80,7 @@ function ReportView({ reportId, onBack, backLabel = 'Reports' }) {
       onBack={onBack}
       backLabel={backLabel}
       footer={
-        report?.status === 'submitted' ? (
+        report?.status === 'submitted' && !readOnly ? (
           <ActionBar>
             <Button
               variant="danger"
@@ -94,6 +96,7 @@ function ReportView({ reportId, onBack, backLabel = 'Reports' }) {
         ) : undefined
       }
     >
+      {breadcrumbs}
       {loadError && <Notice tone="error">{loadError}</Notice>}
       {!loadError && report === undefined && <Skeleton rows={4} />}
       {report === null && <Notice tone="error">Report not found.</Notice>}

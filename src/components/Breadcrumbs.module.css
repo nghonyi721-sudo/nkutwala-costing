@@ -1,0 +1,63 @@
+.crumbs {
+  margin: 0 var(--gutter) var(--space-3);
+}
+
+.list {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.item {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.separator {
+  flex: none;
+  margin: 0 2px;
+  color: var(--label-3);
+}
+
+/* Big enough to tap with gloves, though it looks like a text link */
+.crumb {
+  min-height: 44px;
+  padding: 0 6px;
+  background: none;
+  border: 0;
+  border-radius: var(--radius-control);
+  color: var(--tint);
+  font: inherit;
+  font-size: var(--text-subhead);
+  text-align: left;
+  overflow-wrap: anywhere;
+  cursor: pointer;
+}
+
+.crumb:first-child {
+  padding-left: 0;
+}
+
+.crumb:active {
+  background: var(--fill);
+}
+
+.crumb:focus-visible {
+  outline: 2px solid var(--tint);
+  outline-offset: -2px;
+}
+
+.current {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 0 6px;
+  color: var(--label);
+  font-size: var(--text-subhead);
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}

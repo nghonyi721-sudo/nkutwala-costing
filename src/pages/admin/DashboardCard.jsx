@@ -83,8 +83,9 @@ export function BudgetRing({ percent, warning }) {
 const MIX_CLASSES = { labour: s.mixLabour, owned_plant: s.mixOwnedPlant, receipts: s.mixReceipts }
 
 // One bar split into labour / owned plant / receipts, with a legend.
-//   mix: from dashboard_mix (amount and percent per source)
-export function MixBar({ mix }) {
+//   mix:    from dashboard_mix (amount and percent per source)
+//   onPick: tap a part with money in it to see what's behind it (source)
+export function MixBar({ mix, onPick }) {
   return (
     <>
       <div className={s.mixBar} aria-hidden="true">
@@ -95,14 +96,26 @@ export function MixBar({ mix }) {
         )}
       </div>
       <ul className={s.legend}>
-        {mix.map((part) => (
-          <li key={part.source}>
-            <span className={`${s.swatch} ${MIX_CLASSES[part.source]}`} aria-hidden="true" />
-            <span className={s.legendLabel}>{part.label}</span>
-            <span className={`${s.legendAmount} num`}>{formatRand(part.amount)}</span>
-            <span className={`${s.legendPercent} num`}>{part.percent === null ? '–' : `${part.percent}%`}</span>
-          </li>
-        ))}
+        {mix.map((part) => {
+          const content = (
+            <>
+              <span className={`${s.swatch} ${MIX_CLASSES[part.source]}`} aria-hidden="true" />
+              <span className={s.legendLabel}>{part.label}</span>
+              <span className={`${s.legendAmount} num`}>{formatRand(part.amount)}</span>
+              <span className={`${s.legendPercent} num`}>{part.percent === null ? '–' : `${part.percent}%`}</span>
+            </>
+          )
+          return onPick && Number(part.amount) !== 0 ? (
+            <li key={part.source} className={s.tappableItem}>
+              <button type="button" className={s.legendButton} onClick={() => onPick(part.source, part.label)}>
+                {content}
+                <CaretRightIcon className={s.rowChevron} size={12} weight="bold" aria-hidden="true" />
+              </button>
+            </li>
+          ) : (
+            <li key={part.source}>{content}</li>
+          )
+        })}
       </ul>
     </>
   )
@@ -120,15 +133,16 @@ export function HealthPill({ health }) {
   return <span className={`${s.pill} ${pill.className}`}>{pill.label}</span>
 }
 
-// Every project at a glance, worst first. Tap one to look at just that
-// project.
+// Every project at a glance, worst first. Tap one to see what's behind its
+// spend to date.
 //   projects: from dashboard_projects
+//   onPick(project): a row was tapped
 export function ProjectHealth({ projects, onPick }) {
   return (
     <ul className={s.healthList}>
       {projects.map((project) => (
         <li key={project.project_id}>
-          <button type="button" className={s.healthRow} onClick={() => onPick(project.project_id)}>
+          <button type="button" className={s.healthRow} onClick={() => onPick(project)}>
             <span className={s.healthTop}>
               <span className={s.healthName}>{project.project_name}</span>
               <HealthPill health={project.health} />

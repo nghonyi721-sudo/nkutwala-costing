@@ -2167,9 +2167,154 @@ let dashTo
   covers('dashboard_mix')
 }
 
+// --- Drill-down (rework C): each level's total equals the figure tapped -------
+// Same project and period as the dashboard checks above.
+const drillArgs = { p_project_id: costProjectId, p_from: dashFrom, p_to: dashTo }
+const dashFigures = await Promise.all([
+  owner.client.rpc('dashboard_categories', drillArgs),
+  owner.client.rpc('dashboard_summary', drillArgs),
+  owner.client.rpc('dashboard_mix', drillArgs),
+  owner.client.rpc('dashboard_top_vendors', drillArgs),
+])
+const failedFigure = dashFigures.find((result) => result.error)
+if (failedFigure) stop(`the drill-down checks need the dashboard's figures: ${failedFigure.error.message}`)
+const [dashCategoryRows, dashSummaryRows, dashMixRows, dashVendorRows] = dashFigures.map((result) => result.data)
+const categoryFigure = (code) => Number(dashCategoryRows.find((row) => row.category === code)?.spent_in_range)
+const receiptsFigure = Number(dashMixRows.find((row) => row.source === 'receipts')?.amount)
+
+let labourRows = []
+{
+  const name = 'Drill-down: Labour per person adds up to R1,000 - the dashboard\'s Labour figure'
+  const { data, error } = await owner.client.rpc('drill_hours', { ...drillArgs, p_category: 'labour' })
+  labourRows = data ?? []
+  const rated = labourRows.find((row) => row.who_id === ratedEmployeeId)
+  const unrated = labourRows.find((row) => row.who_id === unratedEmployeeId)
+  const total = Number(labourRows[0]?.total_cost)
+  if (error) {
+    record(name, false, `Error: ${error.message}`)
+  } else if (total !== 1000 || total !== categoryFigure('labour')) {
+    record(name, false, `Drill-down total ${rand(total)}; dashboard Labour ${rand(categoryFigure('labour'))}.`)
+  } else if (
+    !rated ||
+    Number(rated.hours) !== 10 ||
+    Number(rated.days) !== 1 ||
+    Number(rated.cost) !== 1000 ||
+    rated.rates.map(Number).join(',') !== '100' ||
+    !unrated ||
+    Number(unrated.unpriced_hours) !== 2 ||
+    Number(unrated.cost) !== 0 ||
+    Number(labourRows[0].total_hours) !== 12
+  ) {
+    record(name, false, `Rows: ${JSON.stringify(labourRows)}`)
+  } else {
+    record(name, true, 'R1,000 = the Labour figure. Rated: 10 h, 1 day, R100/h, R1,000. Unrated: 2 h unpriced. Draft hours left out.')
+  }
+  covers('drill_hours')
+}
+
+{
+  const name = 'Drill-down: Owned plant per machine adds up to R1,000 - the dashboard\'s Owned plant figure'
+  const { data, error } = await owner.client.rpc('drill_hours', { ...drillArgs, p_category: 'owned_plant' })
+  const total = Number(data?.[0]?.total_cost)
+  const only = data?.length === 1 ? data[0] : null
+  if (error) record(name, false, `Error: ${error.message}`)
+  else if (total !== 1000 || total !== categoryFigure('owned_plant')) {
+    record(name, false, `Drill-down total ${rand(total)}; dashboard Owned plant ${rand(categoryFigure('owned_plant'))}.`)
+  } else if (!only || only.who_id !== ownedPlantId || Number(only.hours) !== 4 || only.rates.map(Number).join(',') !== '250') {
+    record(name, false, `Rows: ${JSON.stringify(data)}`)
+  } else {
+    record(name, true, 'R1,000 = the Owned plant figure: the owned machine, 4 h at R250/h. Rented plant left out.')
+  }
+  covers('drill_hours')
+}
+
+{
+  const name = 'Drill-down: Fuel receipts add up to R500 - the dashboard\'s Fuel figure'
+  const { data, error } = await owner.client.rpc('drill_receipts', { ...drillArgs, p_category: 'fuel', p_vendor: null })
+  const total = Number(data?.[0]?.total_amount)
+  if (error) record(name, false, `Error: ${error.message}`)
+  else if (total !== 500 || total !== categoryFigure('fuel') || data.length !== 1 || !data[0].image_path) {
+    record(name, false, `Drill-down total ${rand(total)}; dashboard Fuel ${rand(categoryFigure('fuel'))}; rows: ${JSON.stringify(data)}`)
+  } else {
+    record(name, true, `R500 = the Fuel figure: 1 approved receipt (${data[0].vendor}, uploaded by ${data[0].uploader_name}, with its photo path).`)
+  }
+  covers('drill_receipts')
+}
+
+{
+  const name = 'Drill-down: all receipts add up to the dashboard\'s Receipts figure'
+  const { data, error } = await owner.client.rpc('drill_receipts', { ...drillArgs, p_category: null, p_vendor: null })
+  const total = Number(data?.[0]?.total_amount)
+  if (error) record(name, false, `Error: ${error.message}`)
+  else record(name, total === receiptsFigure && total === 500, `Drill-down ${rand(total)}; dashboard Receipts ${rand(receiptsFigure)}. Submitted and rejected receipts left out.`)
+  covers('drill_receipts')
+}
+
+{
+  const name = 'Drill-down: a vendor\'s receipts add up to their Top vendors figure (capitals don\'t matter)'
+  const top = dashVendorRows[0]
+  const { data, error } = await owner.client.rpc('drill_receipts', {
+    ...drillArgs,
+    p_category: null,
+    p_vendor: top?.vendor?.toUpperCase() ?? 'none',
+  })
+  const total = Number(data?.[0]?.total_amount)
+  if (error) record(name, false, `Error: ${error.message}`)
+  else if (!top || total !== Number(top.amount)) record(name, false, `Vendor ${top?.vendor}: drill-down ${rand(total)}, Top vendors ${rand(top?.amount)}.`)
+  else record(name, true, `${top.vendor}: ${rand(total)} both ways.`)
+  covers('drill_receipts')
+}
+
+{
+  const name = 'Drill-down: Unpriced hours list adds up to the dashboard\'s Unpriced figure (2 h)'
+  const { data, error } = await owner.client.rpc('drill_unpriced', drillArgs)
+  const total = Number(data?.[0]?.total_hours)
+  const figure = Number(dashSummaryRows[0]?.unpriced_hours)
+  const only = data?.length === 1 ? data[0] : null
+  if (error) record(name, false, `Error: ${error.message}`)
+  else if (total !== 2 || total !== figure) record(name, false, `Drill-down ${total} h; dashboard ${figure} h.`)
+  else if (!only || only.who_id !== unratedEmployeeId || only.report_date !== COST_DAY_3 || only.report_id !== reportC) {
+    record(name, false, `Rows: ${JSON.stringify(data)}`)
+  } else {
+    record(name, true, `2 h = the Unpriced figure: the unrated person on ${COST_DAY_3}, with the report.`)
+  }
+  covers('drill_unpriced')
+}
+
+{
+  const name = "Drill-down: the rated person's days add up to their Labour row (R1,000)"
+  const { data, error } = await owner.client.rpc('drill_employee_days', { p_employee_id: ratedEmployeeId, ...drillArgs })
+  const personRow = labourRows.find((row) => row.who_id === ratedEmployeeId)
+  const only = data?.length === 1 ? data[0] : null
+  if (error) record(name, false, `Error: ${error.message}`)
+  else if (
+    !only ||
+    Number(only.total_cost) !== Number(personRow?.cost) ||
+    Number(only.total_cost) !== 1000 ||
+    Number(only.total_hours) !== 10 ||
+    only.day !== COST_DAY_1 ||
+    Number(only.rate) !== 100 ||
+    only.reports?.[0]?.report_id !== reportA
+  ) {
+    record(name, false, `Rows: ${JSON.stringify(data)}; labour row: ${JSON.stringify(personRow)}`)
+  } else {
+    record(name, true, `${COST_DAY_1}: 10 h at R100/h = R1,000, with the report. The draft's 3 h on ${COST_DAY_2} left out.`)
+  }
+  covers('drill_employee_days')
+}
+
 // Site manager: every dashboard function, on data that includes THEIR OWN
 // reports and receipts - nothing at all may come back.
 for (const [fn, args, note] of [
+  ['drill_hours', { ...drillArgs, p_category: 'labour' }, ''],
+  ['drill_hours', { ...drillArgs, p_category: 'owned_plant' }, ' for owned plant'],
+  ['drill_hours', { p_project_id: null, p_from: dashFrom, p_to: dashTo, p_category: 'labour' }, ' for all projects'],
+  ['drill_receipts', { ...drillArgs, p_category: null, p_vendor: null }, ''],
+  ['drill_receipts', { ...drillArgs, p_category: 'fuel', p_vendor: null }, ' for fuel'],
+  ['drill_unpriced', drillArgs, ''],
+  ['drill_unpriced', { p_project_id: null, p_from: dashFrom, p_to: dashTo }, ' for all projects'],
+  ['drill_employee_days', { p_employee_id: ratedEmployeeId, ...drillArgs }, ''],
+  ['drill_employee_days', { p_employee_id: randomUUID(), p_project_id: randomUUID(), p_from: dashFrom, p_to: dashTo }, ' with made-up ids'],
   ['dashboard_period', { p_preset: 'project_to_date', p_project_id: costProjectId }, ''],
   ['dashboard_summary', { p_project_id: costProjectId, p_from: dashFrom, p_to: dashTo }, ''],
   ['dashboard_summary', { p_project_id: null, p_from: dashFrom, p_to: dashTo }, ' for all projects'],
@@ -2803,6 +2948,7 @@ for (const [phase, file] of [
   ['6 (insights)', '20261006120000_dashboard_insights.sql'],
   ['"undo rework A"', '20261007090000_undo_rework_a.sql'],
   ['rework B', '20261007120000_rework_b_crew_and_new_employees.sql'],
+  ['rework C', '20261007150000_rework_c_drilldown.sql'],
 ]) {
   const sql = readFileSync(fileURLToPath(new URL(`../supabase/migrations/${file}`, import.meta.url)), 'utf8')
   const created = [...sql.matchAll(/create\s+(?:or\s+replace\s+)?(table|view|function)\s+public\.(\w+)/gi)].map(

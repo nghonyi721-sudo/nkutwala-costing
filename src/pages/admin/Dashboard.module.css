@@ -679,3 +679,71 @@ button.cardHead {
     opacity: 0.55;
   }
 }
+
+/* --- Tappable rows (drill-down) ------------------------------------------------ */
+/* Each keeps its row's own layout, with a small chevron at the end. */
+.categoryButton,
+.legendButton,
+.vendorButton {
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  background: none;
+  border: 0;
+  border-radius: 8px;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.categoryButton:active,
+.legendButton:active,
+.vendorButton:active {
+  background: var(--fill);
+}
+
+.categoryButton:focus-visible,
+.legendButton:focus-visible,
+.vendorButton:focus-visible {
+  outline: 2px solid var(--tint);
+  outline-offset: 2px;
+}
+
+.categoryButton {
+  display: grid;
+  gap: 6px;
+  min-height: var(--tap);
+}
+
+.legend li.tappableItem {
+  display: block;
+}
+
+.legendButton {
+  display: grid;
+  grid-template-columns: 12px minmax(0, 1fr) auto 3.4rem 12px;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+}
+
+/* The rank circle stays in the list item's first column */
+.vendorButton {
+  display: grid;
+  grid-column: 2 / -1;
+  grid-template-columns: minmax(0, 1fr) auto 12px;
+  align-items: center;
+  gap: 10px;
+  min-height: var(--tap);
+}
+
+.rowChevron {
+  color: var(--chevron);
+}
+
+.categoryEnd {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}

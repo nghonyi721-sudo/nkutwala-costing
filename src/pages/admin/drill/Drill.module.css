@@ -1,0 +1,39 @@
+/* The weekly chart in its own white card */
+.chartCard {
+  padding: 12px var(--gutter) 8px;
+  border-radius: var(--radius-group);
+  background: var(--surface);
+}
+
+/* An amount with a small badge or figure under it, on the right of a row */
+.trailingStack {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+}
+
+.smallFigure {
+  font-size: var(--text-footnote);
+  color: var(--label-2);
+}
+
+.unpriced {
+  color: var(--destructive);
+  font-weight: 600;
+}
+
+/* The receipt photo at the top of its sheet */
+.sheetPhoto {
+  display: flex;
+  justify-content: center;
+  margin: 0 var(--gutter) var(--space-4);
+}
+
+/* Lines up with the notes under sections */
+.note {
+  margin: calc(var(--space-2) * -1) calc(var(--gutter) * 2) var(--space-5);
+  font-size: var(--text-footnote);
+  line-height: 1.35;
+  color: var(--label-2);
+}
