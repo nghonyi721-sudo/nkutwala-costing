@@ -80,6 +80,11 @@ If you are about to send a rand value to a site_manager, STOP and flag it.
   (project_cost_lines, dashboard, drill-down, exports) comes from these.
   Overtime is shown as its own figures. "Before deductions", provisional.
 - Owned plant has no overtime. Pending/unpriced hours stay unpriced.
+- SPEED: labour_lines reads labour_days through a MATERIALIZED step (and
+  its lines too). Without it, functions (dates/project unknown at plan
+  time) recomputed every day's pay per report line: ~2 s each and the
+  dashboard/test hit the 8 s statement limit. Keep it when changing
+  labour_lines; time new labour functions with a read-only check.
 
 ## Pay periods and pay runs (phase 8B)
 - pay_periods never overlap (database constraint). open -> closed ->
@@ -94,6 +99,18 @@ If you are about to send a rand value to a site_manager, STOP and flag it.
 - close/mark paid/reopen and the lock triggers are SECURITY DEFINER (they
   write/see what the app can't); everything else invoker.
 - Site managers see nothing of pay periods or runs.
+- 8B-2 screens (More -> Pay runs, src/pages/admin/pay/, lazy): periods
+  list (pay_period_overview), new period on the suggested dates with a gap
+  warning, blockers (draft report -> ReportView, unpriced -> PersonRates),
+  preview, Close, Mark paid, Reopen (system_admin), versions, Outstanding
+  (pay_outstanding_people).
+- The preview and the close share pay_period_close_days: never change one
+  without the other. close_pay_period also freezes the PROJECT SPLIT
+  (pay_run_allocations, from labour_lines); runs closed before 8B-2 have
+  none (their filtered Excel isn't offered).
+- Pay-run Excel (src/lib/exports/payRun.js) only from the snapshot
+  (pay_run_people / pay_run_grid), export_log type 'pay_run'. Superseded
+  versions say "SUPERSEDED — DO NOT PAY FROM THIS VERSION".
 
 ## Exports (phase 7)
 - Excel with ExcelJS (never the "xlsx" package). PDFs: print-friendly

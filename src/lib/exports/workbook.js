@@ -55,6 +55,15 @@ export function excelDate(isoDate) {
   return new Date(Date.UTC(year, month - 1, day))
 }
 
+// Every date from..to, "YYYY-MM-DD" (a daily grid's columns).
+export function datesBetween(from, to) {
+  const dates = []
+  for (let day = excelDate(from); day <= excelDate(to); day = new Date(day.getTime() + 86400000)) {
+    dates.push(day.toISOString().slice(0, 10))
+  }
+  return dates
+}
+
 // The time on this device, as Excel should show it.
 function excelNow(now) {
   return new Date(

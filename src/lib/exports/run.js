@@ -37,6 +37,33 @@ export async function exportProjectCost({ projects, from, to }) {
   await saveExport(supabase, { type: PROJECT_COST.type, filters: exportLogFilters({ projects, from, to }), ...built })
 }
 
+// The pay-run Excel: one version of a closed pay period, from its snapshot.
+//   period: { id, start_date, end_date }; run: a row of pay_run_versions
+export async function exportPayRun({ period, run, projects }) {
+  const [{ PAY_RUN, buildPayRun, fetchPayRun }, { exportLogFilters, isFiltered }, { saveExport }] = await Promise.all([
+    import('./payRun.js'),
+    import('./workbook.js'),
+    import('./download.js'),
+  ])
+  const from = period.start_date
+  const to = period.end_date
+  const [data, meta] = await Promise.all([fetchPayRun(supabase, { runId: run.run_id, projects }), who()])
+  const built = buildPayRun(data, { ...meta, projects, from, to, run, generatedAt: new Date() })
+  await saveExport(supabase, {
+    type: PAY_RUN.type,
+    filters: exportLogFilters({
+      projects,
+      from,
+      to,
+      allocation: isFiltered(projects),
+      period_id: period.id,
+      run_id: run.run_id,
+      version: run.version,
+    }),
+    ...built,
+  })
+}
+
 // Export 2. All projects: full pay. Chosen projects: a labour cost
 // allocation (logged as such).
 export async function exportPayrollHours({ projects, from, to }) {

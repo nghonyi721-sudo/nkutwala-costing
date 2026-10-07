@@ -20,6 +20,7 @@ const ProjectsPage = lazy(() => import('./admin/ProjectsPage'))
 const EmployeesPage = lazy(() => import('./admin/EmployeesPage'))
 const EquipmentPage = lazy(() => import('./admin/EquipmentPage'))
 const ExportsPage = lazy(() => import('./admin/ExportsPage'))
+const PayRunsPage = lazy(() => import('./admin/pay/PayRunsPage'))
 
 // Each screen's title: shown while it downloads, or if it can't.
 const TITLES = {
@@ -31,6 +32,7 @@ const TITLES = {
   employees: 'Employees',
   equipment: 'Equipment',
   exports: 'Exports',
+  pay: 'Pay runs',
 }
 
 const DASHBOARD_PATH = '/dashboard'
@@ -41,8 +43,8 @@ function HomePage({ user }) {
   // undefined = loading, null = no profile row, object = loaded
   const [profile, setProfile] = useState(undefined)
   const [error, setError] = useState('')
-  // 'home' | 'dashboard' | 'projects' | 'employees' | 'equipment' | 'exports' | 'more'
-  // | 'reports' | 'receipts' | 'new-report' | 'my-reports'
+  // 'home' | 'dashboard' | 'projects' | 'employees' | 'equipment' | 'exports' | 'pay'
+  // | 'more' | 'reports' | 'receipts' | 'new-report' | 'my-reports'
   // 'home' = not chosen yet (the role's landing screen is shown).
   // Opening the app at /dashboard asks for the dashboard straight away.
   const [screen, setScreen] = useState(() => (window.location.pathname === DASHBOARD_PATH ? 'dashboard' : 'home'))
@@ -166,6 +168,7 @@ function HomePage({ user }) {
   }
   if (isAdmin && current === 'equipment') page = <EquipmentPage key={pageKey} />
   if (isAdmin && current === 'exports') page = <ExportsPage key={pageKey} />
+  if (isAdmin && current === 'pay') page = <PayRunsPage key={pageKey} role={profile.role} />
   if (isSiteManager && (current === 'new-report' || current === 'my-reports')) {
     page = (
       <MyReportsPage

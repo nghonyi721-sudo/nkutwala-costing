@@ -16,7 +16,7 @@ import {
   addTableSheet,
   call,
   createWorkbook,
-  excelDate,
+  datesBetween,
   exportFilename,
   isFiltered,
   num,
@@ -48,15 +48,6 @@ export async function fetchPayrollHours(client, { projects, from, to }) {
   const args = { p_project_ids: projectIdsOf(projects), p_from: from, p_to: to }
   const [people, days] = await Promise.all([call(client, 'export_payroll', args), call(client, 'export_daily_hours', args)])
   return { people, days }
-}
-
-// Every date from..to, "YYYY-MM-DD" (the grid's columns).
-function datesBetween(from, to) {
-  const dates = []
-  for (let day = excelDate(from); day <= excelDate(to); day = new Date(day.getTime() + 86400000)) {
-    dates.push(day.toISOString().slice(0, 10))
-  }
-  return dates
 }
 
 const describe = (person) => ({

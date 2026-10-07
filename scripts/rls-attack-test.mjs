@@ -50,6 +50,7 @@ import {
 import { buildProjectCost, fetchProjectCost } from '../src/lib/exports/projectCost.js'
 import { buildPayrollHours, fetchPayrollHours } from '../src/lib/exports/payrollHours.js'
 import { ALLOCATION_TITLE, PAY_ONLY_UNFILTERED, PAY_TITLE, exportLogFilters } from '../src/lib/exports/workbook.js'
+import { SUPERSEDED_NOTE, buildPayRun, fetchPayRun } from '../src/lib/exports/payRun.js'
 
 process.loadEnvFile(fileURLToPath(new URL('../.env', import.meta.url)))
 
@@ -4172,6 +4173,397 @@ let payRun2 = null
   if (failed) console.log(`          (note: tidy-up incomplete: ${failed.error.message})`)
 }
 
+// =============================================================================
+// Pay run screens and the pay-run Excel (phase 8B-2)
+// =============================================================================
+// Its own period in the 2001+ test window (after 8B-1's) and its own two
+// projects. One person works 6 h on A + 4 h on B on one day at R100: R1,100
+// (8 h + 2 h overtime), split A R660 / B R440. A pending person's 2 h on A
+// are left out (excluded).
+console.log('\nPay run screens and the pay-run Excel…\n')
+
+let screenStart
+{
+  const { data, error } = await owner.client
+    .from('pay_periods')
+    .select('end_date')
+    .lt('end_date', PAY_WINDOW_END)
+    .order('end_date', { ascending: false })
+    .limit(1)
+  if (error) stop(`the pay run screen checks could not read pay_periods: ${error.message}`)
+  screenStart = data.length ? shiftDate(data[0].end_date, 1) : '2001-01-01'
+}
+const screenEnd = shiftDate(screenStart, 13)
+const SCREEN_DAY = shiftDate(screenStart, 1)
+const screenA = { name: `${PAY_PREFIX} Screens A ${RUN_TAG}` }
+const screenB = { name: `${PAY_PREFIX} Screens B ${RUN_TAG}` }
+screenA.id = await ownerInsert('projects', { name: screenA.name, status: 'active' }, 'pay run screens project A')
+screenB.id = await ownerInsert('projects', { name: screenB.name, status: 'active' }, 'pay run screens project B')
+const screenSplitName = `ZZ Pay Split ${RUN_TAG}`
+const screenSplit = await createTestPerson(screenSplitName, { rate: { hourly_rate: 100, effective_from: screenStart } })
+let screenPending = null
+try {
+  screenPending = await addEmployee(site.client, { fullName: `ZZ Pay Pending ${RUN_TAG}`, category: 'general_worker' })
+} catch (error) {
+  stop(`site manager 1 could not add the pending pay run screens person: ${error.message}`)
+}
+
+// A submitted report by site manager 1 on SCREEN_DAY.
+async function screenReport(projectId, crew) {
+  const { data: reportId, error } = await site.client.rpc('save_report_draft', {
+    p_report: { project_id: projectId, report_date: SCREEN_DAY, activities: `RLS pay run screens test ${RUN_TAG}` },
+    p_crew: crew,
+    p_equipment: [],
+  })
+  if (error) stop(`site manager 1 could not save a pay run screens test report: ${error.message}`)
+  const { data, error: submitError } = await site.client
+    .from('daily_reports')
+    .update({ status: 'submitted' })
+    .eq('id', reportId)
+    .select('id')
+  if (submitError || data.length !== 1) stop(`site manager 1 could not submit a pay run screens test report: ${submitError?.message}`)
+}
+await screenReport(screenA.id, [
+  { employee_id: screenSplit, hours: 6 },
+  { employee_id: screenPending.id, hours: 2 },
+])
+await screenReport(screenB.id, [{ employee_id: screenSplit, hours: 4 }])
+
+let screenPeriod = null
+{
+  const { data, error } = await owner.client
+    .from('pay_periods')
+    .insert({ start_date: screenStart, end_date: screenEnd, notes: `RLS test ${RUN_TAG} (screens)` })
+    .select('id')
+    .single()
+  if (error) stop(`owner could not create the pay run screens test period: ${error.message}`)
+  screenPeriod = data.id
+}
+
+// --- The preview, then the close: they must be the same ---------------------------
+let screenPreview = []
+{
+  const name = '8B-2 preview: R1,100 for the split person (8 h + 2 h overtime); the pending person left out with 2 h'
+  const { data, error } = await owner.client.rpc('pay_period_preview', { p_period_id: screenPeriod })
+  screenPreview = data ?? []
+  const split = screenPreview.find((row) => row.employee_id === screenSplit)
+  const pending = screenPreview.find((row) => row.employee_id === screenPending.id)
+  const ok =
+    !error &&
+    split?.included === true &&
+    Number(split.hours) === 10 &&
+    Number(split.ot_hours) === 2 &&
+    Number(split.gross) === 1100 &&
+    pending?.included === false &&
+    Number(pending.hours) === 2 &&
+    pending.gross === null
+  record(name, ok, ok ? 'Split person: 10 h (2 h overtime), R1,100. Pending person: excluded, 2 h, no pay.' : `Error ${error?.message}; split ${JSON.stringify(split)}; pending ${JSON.stringify(pending)}`)
+  covers('pay_period_preview', 'pay_period_close_days')
+}
+
+let screenRun = null
+{
+  const name = '8B-2 closing saves exactly the preview: every person, their hours, pay and rates'
+  const close = await owner.client.rpc('close_pay_period', { p_period_id: screenPeriod })
+  screenRun = close.data ?? null
+  const { data: lines } = await owner.client
+    .from('pay_run_lines')
+    .select('employee_id, included, days, hours, late_hours, ordinary_hours, ot_hours, premium_hours, rates, ordinary_pay, ot_pay, premium_pay, gross')
+    .eq('run_id', screenRun ?? randomUUID())
+  const KEYS = ['days', 'hours', 'late_hours', 'ordinary_hours', 'ot_hours', 'premium_hours', 'ordinary_pay', 'ot_pay', 'premium_pay', 'gross']
+  const value = (row, key) => (row[key] === null ? null : Number(row[key]))
+  const same = (preview, line) => KEYS.every((key) => value(preview, key) === value(line, key)) && JSON.stringify(preview.rates) === JSON.stringify(line.rates)
+  const ok =
+    !close.error &&
+    screenPreview.length > 0 &&
+    lines?.length === screenPreview.length &&
+    screenPreview.every((preview) => {
+      const line = lines.find((one) => one.employee_id === preview.employee_id && one.included === preview.included)
+      return line && same(preview, line)
+    })
+  record(name, ok, ok ? `${lines.length} lines, each identical to the preview.` : `Error ${close.error?.message}; preview ${JSON.stringify(screenPreview).slice(0, 300)}; lines ${JSON.stringify(lines).slice(0, 300)}`)
+  covers('close_pay_period', 'pay_period_close_days', 'pay_run_lines')
+}
+if (!screenRun) stop('the pay run screen checks need the closed test run')
+
+// --- The frozen project split ------------------------------------------------------
+async function runPeople(projects) {
+  const { data, error } = await owner.client.rpc('pay_run_people', {
+    p_run_id: screenRun,
+    p_project_ids: projects ? projects.map((project) => project.id) : null,
+  })
+  if (error) throw error
+  return data
+}
+{
+  const name = '8B-2 pay run split: all projects R1,100; filtered to A R660, to B R440; A + B = all projects'
+  try {
+    const [all, a, b, ab] = await Promise.all([runPeople(null), runPeople([screenA]), runPeople([screenB]), runPeople([screenA, screenB])])
+    const split = (rows, projectId) => rows.find((row) => row.employee_id === screenSplit && (projectId === undefined || row.project_id === projectId))
+    const allRow = split(all)
+    const aRow = split(a, screenA.id)
+    const bRow = split(b, screenB.id)
+    const abA = ab.find((row) => row.project_id === screenA.id)
+    const abB = ab.find((row) => row.project_id === screenB.id)
+    const pendingA = a.find((row) => row.employee_id === screenPending.id)
+    const ok =
+      Number(allRow?.gross) === 1100 &&
+      allRow.project_id === null &&
+      allRow.project_name === `${screenA.name}, ${screenB.name}` &&
+      Number(aRow?.gross) === 660 &&
+      Number(aRow.ot_pay) === 180 &&
+      Number(bRow?.gross) === 440 &&
+      Number(bRow.ot_pay) === 120 &&
+      Number(aRow.gross) + Number(bRow.gross) === Number(allRow.gross) &&
+      Number(abA?.project_total_gross) === 660 &&
+      Number(abB?.project_total_gross) === 440 &&
+      Number(ab[0].total_gross) === 1100 &&
+      Number(ab[0].total_people) === 1 &&
+      pendingA?.included === false &&
+      Number(pendingA.hours) === 2 &&
+      Number(pendingA.project_excluded_hours) === 2
+    record(
+      name,
+      ok,
+      ok
+        ? 'All projects: R1,100 on one row, both projects named. A: R660 (R180 overtime), B: R440 (R120 overtime); subtotals A R660 / B R440, total R1,100, 1 person. Pending: 2 h excluded on A.'
+        : `All ${JSON.stringify(allRow)}; A ${JSON.stringify(aRow)}; B ${JSON.stringify(bRow)}; A+B ${JSON.stringify(ab).slice(0, 300)}`,
+    )
+  } catch (error) {
+    record(name, false, `Error: ${error.message}`)
+  }
+  covers('pay_run_people', 'pay_run_allocations')
+}
+{
+  const name = "8B-2 the run's frozen project split adds up to the run's pay, day by day"
+  const [allocations, days] = await Promise.all([
+    owner.client.from('pay_run_allocations').select('employee_id, day, amount, hours, included').eq('run_id', screenRun),
+    owner.client.from('pay_run_days').select('employee_id, day, total_pay, total_hours, included').eq('run_id', screenRun),
+  ])
+  const cents = (value) => Math.round(Number(value ?? 0) * 100)
+  const ok =
+    !allocations.error &&
+    !days.error &&
+    days.data.length > 0 &&
+    days.data.every((day) => {
+      const parts = allocations.data.filter((part) => part.employee_id === day.employee_id && part.day === day.day)
+      const amount = parts.reduce((sum, part) => sum + cents(part.amount), 0)
+      const hours = parts.reduce((sum, part) => sum + cents(part.hours), 0)
+      return parts.length > 0 && hours === cents(day.total_hours) && (!day.included || amount === cents(day.total_pay))
+    })
+  record(name, ok, ok ? `${days.data.length} days; every day's project parts add up to its hours and pay.` : `Allocations ${JSON.stringify(allocations.data).slice(0, 300)}; days ${JSON.stringify(days.data).slice(0, 300)}`)
+  covers('pay_run_allocations', 'pay_run_days', 'close_pay_period')
+}
+{
+  const name = '8B-2 daily grid and project list come from the snapshot'
+  const [all, onA, projects] = await Promise.all([
+    owner.client.rpc('pay_run_grid', { p_run_id: screenRun, p_project_ids: null }),
+    owner.client.rpc('pay_run_grid', { p_run_id: screenRun, p_project_ids: [screenA.id] }),
+    owner.client.rpc('pay_run_projects', { p_run_id: screenRun }),
+  ])
+  const allDay = all.data?.find((row) => row.employee_id === screenSplit && row.day === SCREEN_DAY)
+  const aDay = onA.data?.find((row) => row.employee_id === screenSplit && row.day === SCREEN_DAY)
+  const names = (projects.data ?? []).map((row) => row.project_name)
+  const ok =
+    !all.error &&
+    !onA.error &&
+    !projects.error &&
+    Number(allDay?.hours) === 10 &&
+    Number(aDay?.hours) === 6 &&
+    onA.data.every((row) => row.project_id === screenA.id) &&
+    names.includes(screenA.name) &&
+    names.includes(screenB.name)
+  record(name, ok, ok ? `${SCREEN_DAY}: 10 h (all projects), 6 h on A; both projects offered in the filter.` : `All ${JSON.stringify(allDay)}; A ${JSON.stringify(aDay)}; projects ${JSON.stringify(names)}`)
+  covers('pay_run_grid', 'pay_run_projects')
+}
+
+// --- The lists ------------------------------------------------------------------------
+let screenVersions = []
+{
+  const name = "8B-2 overview and versions: the run's figures equal the preview's"
+  const [overview, versions] = await Promise.all([
+    owner.client.from('pay_period_overview').select('*').eq('id', screenPeriod).single(),
+    owner.client.rpc('pay_run_versions', { p_period_id: screenPeriod }),
+  ])
+  screenVersions = versions.data ?? []
+  const totals = screenPreview[0] ?? {}
+  const row = overview.data
+  const ok =
+    !overview.error &&
+    !versions.error &&
+    row?.status === 'closed' &&
+    row.run_id === screenRun &&
+    row.version === 1 &&
+    Number(row.gross) === Number(totals.total_gross) &&
+    Number(row.people) === Number(totals.total_people) &&
+    Number(row.excluded_people) === Number(totals.excluded_people) &&
+    screenVersions.length === 1 &&
+    screenVersions[0].status === 'active' &&
+    screenVersions[0].has_split === true &&
+    Number(screenVersions[0].gross) === Number(totals.total_gross) &&
+    screenVersions[0].closed_by_name !== null
+  record(name, ok, ok ? `Closed, version 1: ${row.people} people, R${row.gross} - the preview's figures; the split was saved.` : `Overview ${JSON.stringify(row)}; versions ${JSON.stringify(screenVersions)}`)
+  covers('pay_period_overview', 'pay_run_versions')
+}
+{
+  const name = '8B-2 Outstanding: the pending person\'s 2 h are still to be paid (unpriced); the paid person is not listed'
+  const { data, error } = await owner.client.rpc('pay_outstanding_people')
+  const pending = data?.find((row) => row.employee_id === screenPending.id)
+  const ok =
+    !error &&
+    Number(pending?.hours) === 2 &&
+    Number(pending.unpriced_hours) === 2 &&
+    pending.pay === null &&
+    Number(pending.days_in_closed) === 1 &&
+    !data.some((row) => row.employee_id === screenSplit)
+  record(name, ok, ok ? `Pending: 2 h unpriced, 1 day in a closed period. The split person is paid, so not listed.` : `Error ${error?.message}; pending ${JSON.stringify(pending)}`)
+  covers('pay_outstanding_people', 'pay_outstanding')
+}
+
+// --- The app's own pay-run files ------------------------------------------------------
+const screenMeta = (run, projects) => ({
+  company: 'RLS test company',
+  generatedBy: 'RLS test',
+  generatedAt: new Date(),
+  projects,
+  from: screenStart,
+  to: screenEnd,
+  run,
+})
+{
+  const name = "8B-2 pay-run file, all projects (the app's own): GROSS BEFORE DEDUCTIONS — NOT A PAYSLIP, R1,100"
+  try {
+    const run = screenVersions[0]
+    const data = await fetchPayRun(owner.client, { runId: screenRun, projects: null })
+    const { workbook, filename } = buildPayRun(data, screenMeta(run, null))
+    const lines = firstColumn(workbook, 'Pay run')
+    const problems = [
+      lines[0] === PAY_TITLE ? null : `Top line: ${lines[0]}`,
+      lines.includes(PAY_ONLY_UNFILTERED) ? null : 'No "pay only from the unfiltered pay run" note',
+      workbook.worksheets.map((sheet) => sheet.name).join(', ') === 'Summary, Pay run, Daily grid, Excluded' ? null : 'Sheets',
+      cellAt(workbook, 'Pay run', screenSplitName, 'Gross').value === 1100 ? null : 'Split person gross is not R1,100',
+      cellAt(workbook, 'Daily grid', screenSplitName, 'Total hours').value === 10 ? null : 'Daily grid total is not 10 h',
+      firstColumn(workbook, 'Excluded').includes(`ZZ Pay Pending ${RUN_TAG}`) ? null : 'Pending person not on Excluded',
+      filename === `nkutwala_pay-run-v1_all-projects_${screenStart}_${screenEnd}.xlsx` ? null : `File name ${filename}`,
+    ].filter(Boolean)
+    record(name, problems.length === 0, problems.length ? problems.join('; ') : 'Full-pay title and the payment note; R1,100; 10 h on the grid; the pending person on Excluded.')
+  } catch (error) {
+    record(name, false, `Could not build it: ${error.message}`)
+  }
+  covers('pay_run_people', 'pay_run_grid')
+}
+{
+  const name = "8B-2 pay-run file, A + B (the app's own): PROJECT LABOUR COST ALLOCATION, subtotals R660 / R440, total R1,100"
+  try {
+    const run = screenVersions[0]
+    const projects = [screenA, screenB]
+    const data = await fetchPayRun(owner.client, { runId: screenRun, projects })
+    const { workbook, filename } = buildPayRun(data, screenMeta(run, projects))
+    const SHEET = 'Labour allocation'
+    const MONEY = 'Allocated labour cost'
+    const subA = cellAt(workbook, SHEET, `Subtotal: ${screenA.name}`, MONEY)
+    const subB = cellAt(workbook, SHEET, `Subtotal: ${screenB.name}`, MONEY)
+    const total = cellAt(workbook, SHEET, 'Total', MONEY)
+    const problems = [
+      firstColumn(workbook, SHEET)[0] === ALLOCATION_TITLE ? null : 'Top line is not the allocation title',
+      firstColumn(workbook, SHEET).includes(PAY_ONLY_UNFILTERED) ? null : 'No payment note',
+      subA.value === 660 && subA.formula?.startsWith('SUM(') ? null : `Subtotal A: ${JSON.stringify(subA)}`,
+      subB.value === 440 ? null : `Subtotal B: ${JSON.stringify(subB)}`,
+      total.value === 1100 && total.formula?.includes('+') ? null : `Total: ${JSON.stringify(total)}`,
+      filename === `nkutwala_pay-run-v1-labour-allocation_${fileSlug(screenA.name)}+${fileSlug(screenB.name)}_${screenStart}_${screenEnd}.xlsx`
+        ? null
+        : `File name ${filename}`,
+    ].filter(Boolean)
+    record(name, problems.length === 0, problems.length ? problems.join('; ') : 'Allocation title and payment note; A R660, B R440, total R1,100 (subtotal rows added up).')
+  } catch (error) {
+    record(name, false, `Could not build it: ${error.message}`)
+  }
+  covers('pay_run_people', 'pay_run_grid', 'pay_run_allocations')
+}
+
+// --- Reopen: version 1 is kept (superseded), its file says so; then paid --------------
+{
+  const name = '8B-2 after a reopen, version 1 is superseded and its file says SUPERSEDED — DO NOT PAY; version 2 is active, then paid'
+  try {
+    const reopen = await admin.client.rpc('reopen_pay_period', { p_period_id: screenPeriod, p_reason: `RLS screens test ${RUN_TAG}` })
+    if (reopen.error) throw reopen.error
+    const close = await owner.client.rpc('close_pay_period', { p_period_id: screenPeriod })
+    if (close.error) throw close.error
+    const paid = await owner.client.rpc('mark_pay_period_paid', { p_period_id: screenPeriod, p_paid_on: screenEnd })
+    if (paid.error) throw paid.error
+    const [{ data: versions }, { data: overview }] = await Promise.all([
+      owner.client.rpc('pay_run_versions', { p_period_id: screenPeriod }),
+      owner.client.from('pay_period_overview').select('status, version, paid_on, versions').eq('id', screenPeriod).single(),
+    ])
+    const v1 = versions.find((run) => run.version === 1)
+    const v2 = versions.find((run) => run.version === 2)
+    const data = await fetchPayRun(owner.client, { runId: v1.run_id, projects: null })
+    const { workbook } = buildPayRun(data, screenMeta(v1, null))
+    const superseded = firstColumn(workbook, 'Pay run').some((line) => String(line).startsWith(SUPERSEDED_NOTE))
+    const ok =
+      v1?.status === 'superseded' &&
+      v1.superseded_reason === `RLS screens test ${RUN_TAG}` &&
+      v2?.status === 'active' &&
+      v2.has_split === true &&
+      v2.paid_on === screenEnd &&
+      overview?.status === 'paid' &&
+      overview.version === 2 &&
+      Number(overview.versions) === 2 &&
+      superseded
+    record(name, ok, ok ? 'v1 superseded (with the reason) and its file is marked; v2 active with its split, paid; the list shows Paid, version 2.' : `Versions ${JSON.stringify(versions)}; overview ${JSON.stringify(overview)}; superseded line ${superseded}`)
+  } catch (error) {
+    record(name, false, `Error: ${error.message}`)
+  }
+  covers('pay_run_versions', 'pay_period_overview', 'close_pay_period', 'pay_run_allocations')
+}
+{
+  const name = '8B-2 the export log accepts a pay run, with its projects, version and allocation'
+  const marker = `rls-payrun-${RUN_TAG}`
+  const filters = {
+    ...exportLogFilters({ projects: [screenA, screenB], from: screenStart, to: screenEnd, allocation: true, version: 1 }),
+    marker,
+  }
+  const { error } = await owner.client.from('export_log').insert({ report_type: 'pay_run', filters })
+  const { data } = await owner.client.from('export_log').select('report_type, filters').eq('filters->>marker', marker)
+  const got = data?.[0]
+  const ok = !error && got?.report_type === 'pay_run' && got.filters.allocation === true && got.filters.version === 1 && got.filters.project_ids?.length === 2
+  record(name, ok, ok ? 'Logged as a pay run: version 1, an allocation, both projects.' : `Error ${error?.message}; got ${JSON.stringify(got)}`)
+  covers('export_log')
+}
+
+// --- Site manager: nothing at all -------------------------------------------------------
+await attackReadNothing('Site manager reads pay_run_allocations', site.client, 'pay_run_allocations')
+await attackReadNothing('Site manager reads pay_period_overview', site.client, 'pay_period_overview')
+covers('pay_run_allocations', 'pay_period_overview')
+for (const [fn, args, note] of [
+  ['pay_period_close_days', { p_period_id: screenPeriod }, ''],
+  ['pay_period_preview', { p_period_id: screenPeriod }, ''],
+  ['pay_run_versions', { p_period_id: screenPeriod }, ''],
+  ['pay_run_people', { p_run_id: screenRun, p_project_ids: null }, ' for all projects'],
+  ['pay_run_people', { p_run_id: screenRun, p_project_ids: [screenA.id] }, ' for project A'],
+  ['pay_run_grid', { p_run_id: screenRun, p_project_ids: null }, ''],
+  ['pay_run_projects', { p_run_id: screenRun }, ''],
+  ['pay_outstanding_people', {}, ''],
+]) {
+  const name = `Site manager calls ${fn}()${note} (their own reports are in it)`
+  const { data, error } = await site.client.rpc(fn, args)
+  const empty = Array.isArray(data) ? data.length === 0 : data === null
+  if (error?.code === PERMISSION_DENIED) record(name, true, 'Server refused (permission denied).')
+  else if (error) record(name, false, `Unexpected error: ${error.message}`)
+  else record(name, empty, empty ? 'Nothing came back.' : `LEAK: ${JSON.stringify(data).slice(0, 200)}`)
+  covers(fn)
+}
+
+// --- Finish off this run's pay run screens test data (nothing can be deleted) --------
+{
+  const outcomes = await Promise.all([
+    owner.client.from('projects').update({ status: 'complete' }).in('id', [screenA.id, screenB.id]).select('id'),
+    owner.client.from('employees').update({ status: 'inactive' }).eq('id', screenPending.id).select('id'),
+  ])
+  const failed = outcomes.find((outcome) => outcome.error)
+  if (failed) console.log(`          (note: tidy-up incomplete: ${failed.error.message})`)
+}
+
 // --- Every object created in phases 5 and 6 (and since) must be attacked ------
 // (Rework A's file is left out: everything it created was undone by the
 // undo-rework-A file, which is checked here instead.)
@@ -4185,6 +4577,8 @@ for (const [phase, file] of [
   ['7a (exports)', '20261008090000_phase7a_exports.sql'],
   ['8A-1 (overtime)', '20261009090000_phase8a1_overtime.sql'],
   ['8B-1 (pay runs)', '20261010090000_phase8b1_pay_runs.sql'],
+  ['8B-2 (pay run screens)', '20261012090000_phase8b2_pay_run_screens.sql'],
+  ['the labour speed fix', '20261012100000_labour_lines_speed.sql'],
   ['export filter', '20261011090000_export_project_filter.sql'],
 ]) {
   const sql = readFileSync(fileURLToPath(new URL(`../supabase/migrations/${file}`, import.meta.url)), 'utf8')

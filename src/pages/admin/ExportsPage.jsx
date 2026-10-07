@@ -24,6 +24,13 @@ const COST_PERIODS = {
 const PAYROLL_PERIODS = { this_month: 'This month', last_month: 'Last month', custom: 'Dates' }
 const ALLOCATION_NAME = 'Project labour cost allocation'
 
+// An export log row's name: the report, and whether it was an allocation.
+function logTitle(row) {
+  const name = EXPORT_LABELS[row.report_type] ?? row.report_type
+  if (!row.filters?.allocation) return name
+  return row.report_type === 'payroll_hours' ? ALLOCATION_NAME : `${name}: ${ALLOCATION_NAME.toLowerCase()}`
+}
+
 // The dates of a chosen period: a preset (worked out by the database, like
 // the dashboard's) or the dates picked. Returns { from, to } or a problem.
 async function resolvePeriod(preset, projects, custom) {
@@ -232,9 +239,10 @@ function ExportsPage() {
         {log?.map((row) => (
           <Row
             key={row.id}
-            title={row.filters?.allocation ? ALLOCATION_NAME : (EXPORT_LABELS[row.report_type] ?? row.report_type)}
+            title={logTitle(row)}
             subtitle={
               [
+                row.filters?.version ? `Version ${row.filters.version}` : null,
                 row.filters?.projects ?? row.filters?.project_name,
                 row.filters?.from ? `${formatDate(row.filters.from)} – ${formatDate(row.filters.to)}` : null,
                 `${row.user?.full_name ?? 'Unknown'} · ${formatDateTime(row.created_at)}`,

@@ -1,4 +1,4 @@
-import { BulldozerIcon, DownloadSimpleIcon, UsersThreeIcon } from '../../components/icons'
+import { BulldozerIcon, CoinsIcon, DownloadSimpleIcon, UsersThreeIcon } from '../../components/icons'
 import Page from '../../components/Page'
 import { Row } from '../../components/Row'
 import Section from '../../components/Section'
@@ -29,6 +29,13 @@ function MorePage({ pendingEmployees = 0, onNavigate }) {
           subtitle="Machines, and rates for owned plant"
           chevron
           onClick={() => onNavigate('equipment')}
+        />
+        <Row
+          icon={CoinsIcon}
+          title="Pay runs"
+          subtitle="Pay periods: close, mark paid, and what's still to be paid"
+          chevron
+          onClick={() => onNavigate('pay')}
         />
         <Row
           icon={DownloadSimpleIcon}

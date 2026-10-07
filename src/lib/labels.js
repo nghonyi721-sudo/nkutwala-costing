@@ -32,6 +32,22 @@ export const EXPORT_LABELS = {
   annual_earnings: 'Annual earnings summary',
   my_daily_report: 'My daily report (PDF)',
   my_labour_return: 'My labour return',
+  pay_run: 'Pay run',
+}
+
+// A pay period: open -> closed -> paid; reopened only by a system admin.
+export const PAY_PERIOD_STATUS_LABELS = {
+  open: 'Open',
+  closed: 'Closed',
+  paid: 'Paid',
+  reopened: 'Reopened',
+}
+
+export const PAY_PERIOD_STATUS_TONES = {
+  open: 'grey',
+  closed: 'blue',
+  paid: 'blue',
+  reopened: 'red',
 }
 
 // Where a person stands: added by a site manager (pending), approved by the
