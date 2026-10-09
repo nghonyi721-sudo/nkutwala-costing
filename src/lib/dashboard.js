@@ -29,9 +29,11 @@ export async function fetchPeriod(preset, projectId) {
 // Everything that depends on the project and date range, in one go.
 //   cumulative: spend vs budget over the whole job (ignores the date range)
 //   projects:   the health board - only needed for "All projects"
+//   warnings:   overtime over the pay rule's limits (warn only); null when
+//               they couldn't be checked - the rest still loads
 export async function fetchDashboard(projectId, from, to) {
   const args = { p_project_id: projectId, p_from: from, p_to: to }
-  const [summary, categories, weeklyMix, mix, vendors, cumulative, projects] = await Promise.all([
+  const [summary, categories, weeklyMix, mix, vendors, cumulative, projects, warnings] = await Promise.all([
     call('dashboard_summary', args),
     call('dashboard_categories', args),
     call('dashboard_weekly_mix', args),
@@ -39,8 +41,9 @@ export async function fetchDashboard(projectId, from, to) {
     call('dashboard_top_vendors', args),
     call('dashboard_cumulative', { p_project_id: projectId }),
     projectId ? [] : call('dashboard_projects', { p_from: from, p_to: to }),
+    call('overtime_warnings', { ...args, p_employee_id: null }).catch(() => null),
   ])
-  return { summary: summary[0] ?? null, categories, weeklyMix, mix, vendors, cumulative, projects }
+  return { summary: summary[0] ?? null, categories, weeklyMix, mix, vendors, cumulative, projects, warnings }
 }
 
 // What's waiting, across all projects.

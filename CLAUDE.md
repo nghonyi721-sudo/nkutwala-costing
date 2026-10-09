@@ -80,6 +80,16 @@ If you are about to send a rand value to a site_manager, STOP and flag it.
   (project_cost_lines, dashboard, drill-down, exports) comes from these.
   Overtime is shown as its own figures. "Before deductions", provisional.
 - Owned plant has no overtime. Pending/unpriced hours stay unpriced.
+- 8A-2 screens (More -> Pay rules and holidays, also from Pay runs;
+  src/pages/admin/payRules/, lazy): the rule in force today, "change the
+  rules from a date" (a NEW rule - steppers and switches), history with
+  void (reason), public holidays by year (add, void). The first live rule
+  can never be voided (trigger pay_rules_00_keep_first, runs before the
+  8B-1 lock).
+- Overtime WARNINGS (overtime_warnings, warn only): a day over
+  warn_daily_hours (all projects) or a Mon-Sun week over
+  warn_weekly_ot_hours of overtime, limits from the rule in force. Shown
+  on the dashboard ("Overtime limits" card) and a person's days.
 - SPEED: labour_lines reads labour_days through a MATERIALIZED step (and
   its lines too). Without it, functions (dates/project unknown at plan
   time) recomputed every day's pay per report line: ~2 s each and the

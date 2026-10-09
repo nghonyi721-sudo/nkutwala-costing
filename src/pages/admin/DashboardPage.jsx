@@ -8,6 +8,7 @@ import {
   CaretRightIcon,
   ChartBarIcon,
   ChartDonutIcon,
+  ClockIcon,
   CoinsIcon,
   MapPinIcon,
   RankingIcon,
@@ -22,7 +23,7 @@ import { Row } from '../../components/Row'
 import Section from '../../components/Section'
 import SegmentedControl from '../../components/SegmentedControl'
 import { PickSheet } from '../../components/Sheet'
-import { BudgetRing, DashboardCard, MixBar, ProjectHealth, Tile } from './DashboardCard'
+import { BudgetRing, DashboardCard, MixBar, OvertimeWarnings, ProjectHealth, Tile } from './DashboardCard'
 import { CumulativeChart, Sparkline, WeeklyMixChart } from './LazyCharts'
 import DrillDown from './DrillDown'
 import ExportButton from './ExportButton'
@@ -32,6 +33,7 @@ import ReportView from './ReportView'
 import {
   allReceiptsLevel,
   categoryLevel,
+  employeeLevel,
   spendingLevel,
   unpricedLevel,
   vendorLevel,
@@ -234,7 +236,7 @@ function Overview({
   onOpen,
   onNavigate,
 }) {
-  const { summary, categories, weeklyMix, mix, vendors, cumulative, projects } = data
+  const { summary, categories, weeklyMix, mix, vendors, cumulative, projects, warnings } = data
   const periodName = PERIODS[preset]
   // The period on screen, for levels opened from figures in it.
   const period = { from: data.period.from_date, to: data.period.to_date, name: periodName }
@@ -445,8 +447,29 @@ function Overview({
           )}
         </DashboardCard>
 
+        {/* Overtime over the pay rule's limits (warn only) */}
+        <DashboardCard
+          index={9}
+          flush={warnings?.length > 0}
+          icon={ClockIcon}
+          tone={warnings?.length > 0 ? 'red' : 'blue'}
+          title="Overtime limits"
+          meta={`${periodName} · warnings only`}
+        >
+          {warnings === null && (
+            <p className={s.cardEmpty}>Couldn't check the overtime limits. Check your signal and try again.</p>
+          )}
+          {warnings?.length === 0 && <p className={s.cardEmpty}>Nobody over the overtime limits in this period.</p>}
+          {warnings?.length > 0 && (
+            <OvertimeWarnings
+              warnings={warnings}
+              onPick={(warning) => onDrill(employeeLevel(warning.employee_id, warning.employee_name, projectId, period))}
+            />
+          )}
+        </DashboardCard>
+
         {/* Employee hours */}
-        <DashboardCard index={9} wide flush icon={UserIcon} title="Employee hours" meta="Submitted reports">
+        <DashboardCard index={10} wide flush icon={UserIcon} title="Employee hours" meta="Submitted reports">
           <EmployeeCalendar
             projectId={projectId}
             onOpenReport={(reportId) => onOpen({ screen: 'report', reportId })}

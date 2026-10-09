@@ -3,7 +3,7 @@ import { fetchOutstanding, fetchPeriods } from '../../../lib/payRuns'
 import { PAY_PERIOD_STATUS_LABELS, PAY_PERIOD_STATUS_TONES, formatDate, formatRand } from '../../../lib/labels'
 import Button from '../../../components/Button'
 import EmptyState from '../../../components/EmptyState'
-import { CoinsIcon, HourglassIcon, PlusIcon } from '../../../components/icons'
+import { ClockIcon, CoinsIcon, HourglassIcon, PlusIcon } from '../../../components/icons'
 import Notice from '../../../components/Notice'
 import Page from '../../../components/Page'
 import { Row } from '../../../components/Row'
@@ -11,6 +11,7 @@ import Section from '../../../components/Section'
 import Skeleton from '../../../components/Skeleton'
 import StatusBadge from '../../../components/StatusBadge'
 import { LOAD_ERROR, hoursText } from '../drill/drillText'
+import PayRulesPage from '../payRules/PayRulesPage'
 import OutstandingScreen from './OutstandingScreen'
 import PayPeriodScreen from './PayPeriodScreen'
 import { PeriodSheet } from './PeriodSheets'
@@ -49,6 +50,7 @@ function PayRunsPage({ role }) {
 
   if (open?.kind === 'period') return <PayPeriodScreen periodId={open.id} role={role} onBack={() => setOpen(null)} />
   if (open?.kind === 'outstanding') return <OutstandingScreen onBack={() => setOpen(null)} />
+  if (open?.kind === 'rules') return <PayRulesPage onBack={() => setOpen(null)} />
 
   const owed = outstanding?.[0]
 
@@ -77,6 +79,16 @@ function PayRunsPage({ role }) {
           />
         </Section>
       )}
+
+      <Section>
+        <Row
+          icon={ClockIcon}
+          title="Pay rules and holidays"
+          subtitle="Overtime, Sunday and holiday rates, warning limits"
+          chevron
+          onClick={() => setOpen({ kind: 'rules' })}
+        />
+      </Section>
 
       {periods?.length === 0 && (
         <EmptyState

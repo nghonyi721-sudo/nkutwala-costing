@@ -57,3 +57,9 @@ export function fetchUnpriced(projectId, period) {
 export function fetchEmployeeDays(employeeId, projectId, period) {
   return call('drill_employee_days', { p_employee_id: employeeId, ...range(projectId, period) })
 }
+
+// One person's overtime warnings in the period (warn only): days over the
+// day limit and weeks over the weekly overtime limit.
+export function fetchEmployeeWarnings(employeeId, projectId, period) {
+  return call('overtime_warnings', { ...range(projectId, period), p_employee_id: employeeId })
+}

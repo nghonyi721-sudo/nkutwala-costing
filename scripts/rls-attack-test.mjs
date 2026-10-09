@@ -3780,6 +3780,129 @@ for (const fn of ['export_payroll', 'export_labour', 'export_cost_summary', 'exp
   covers(fn)
 }
 
+// =============================================================================
+// Overtime warnings and the first pay rule (phase 8A-2)
+// =============================================================================
+// Warn only, never block: a day over the day limit (12 h, all projects) or a
+// Monday-Sunday week over the weekly overtime limit (10 h). Its own week in
+// 2098 (no real dates, no pay periods), on project A, at R100/h.
+console.log('\nOvertime warnings…\n')
+
+const WARN_MON = '2098-03-03' // a Monday
+const WARN_TUE = '2098-03-04'
+const WARN_WED = '2098-03-05'
+const WARN_THU = '2098-03-06'
+const WARN_SUN = '2098-03-09'
+const warnPerson = await createTestPerson(`ZZ OT Warn ${RUN_TAG}`, { rate: R100 })
+const edgePerson = await createTestPerson(`ZZ OT Edge ${RUN_TAG}`, { rate: R100 })
+// Warn: 13 + 11 + 11 + 12 h = 5 + 3 + 3 + 4 = 15 h overtime; Monday over 12 h.
+// Edge: 12 + 12 + 10 h = 4 + 4 + 2 = 10 h overtime - exactly the limits.
+await otReport(otProjectA, WARN_MON, [
+  { employee_id: warnPerson, hours: 13 },
+  { employee_id: edgePerson, hours: 12 },
+])
+await otReport(otProjectA, WARN_TUE, [
+  { employee_id: warnPerson, hours: 11 },
+  { employee_id: edgePerson, hours: 12 },
+])
+await otReport(otProjectA, WARN_WED, [
+  { employee_id: warnPerson, hours: 11 },
+  { employee_id: edgePerson, hours: 10 },
+])
+await otReport(otProjectA, WARN_THU, [{ employee_id: warnPerson, hours: 12 }])
+
+const warnWeek = (projectId, employeeId = null) => ({
+  p_project_id: projectId,
+  p_from: WARN_MON,
+  p_to: WARN_SUN,
+  p_employee_id: employeeId,
+})
+const ofTestPeople = (rows) => (rows ?? []).filter((row) => row.employee_id === warnPerson || row.employee_id === edgePerson)
+{
+  const name = '8A-2 overtime warnings: Monday 13 h (over 12 h), the week 15 h overtime (over 10 h); exactly 12 h / 10 h is no warning'
+  try {
+    const { data: rule } = await owner.client
+      .from('pay_rules')
+      .select('warn_daily_hours, warn_weekly_ot_hours')
+      .is('voided_at', null)
+      .lte('effective_from', WARN_MON)
+      .order('effective_from', { ascending: false })
+      .limit(1)
+      .single()
+    if (Number(rule?.warn_daily_hours) !== 12 || Number(rule?.warn_weekly_ot_hours) !== 10) {
+      throw new Error(`the pay rule in force in 2098 has limits ${rule?.warn_daily_hours} h / ${rule?.warn_weekly_ot_hours} h; this check expects 12 h / 10 h`)
+    }
+    const { data, error } = await owner.client.rpc('overtime_warnings', warnWeek(otProjectA))
+    if (error) throw error
+    const rows = ofTestPeople(data)
+    const day = rows.find((row) => row.kind === 'day')
+    const week = rows.find((row) => row.kind === 'week')
+    const ok =
+      rows.length === 2 &&
+      day?.employee_id === warnPerson &&
+      day.day === WARN_MON &&
+      Number(day.hours) === 13 &&
+      Number(day.limit_hours) === 12 &&
+      week?.employee_id === warnPerson &&
+      week.day === WARN_MON &&
+      Number(week.hours) === 15 &&
+      Number(week.limit_hours) === 10
+    record(name, ok, ok ? 'Warn person: Monday 13 h (limit 12) and 15 h overtime that week (limit 10). Thursday (12 h) and the edge person (12 h days, 10 h overtime): no warning.' : `Got: ${JSON.stringify(rows)}`)
+  } catch (error) {
+    record(name, false, `Error: ${error.message}`)
+  }
+  covers('overtime_warnings')
+}
+{
+  const name = '8A-2 overtime warnings for one person, and for a project they did not work on'
+  const [onePerson, otherProject] = await Promise.all([
+    owner.client.rpc('overtime_warnings', warnWeek(null, warnPerson)),
+    owner.client.rpc('overtime_warnings', warnWeek(otProjectB)),
+  ])
+  const ok =
+    !onePerson.error &&
+    !otherProject.error &&
+    onePerson.data.length === 2 &&
+    onePerson.data.every((row) => row.employee_id === warnPerson) &&
+    ofTestPeople(otherProject.data).length === 0
+  record(name, ok, ok ? 'One person: their two warnings only. Project B (they didn\'t work on it): none.' : `One person ${JSON.stringify(onePerson.data)}; project B ${JSON.stringify(otherProject.data)}`)
+  covers('overtime_warnings')
+}
+for (const [args, note] of [
+  [warnWeek(otProjectA), ' for project A (their own reports)'],
+  [warnWeek(null), ' for all projects'],
+]) {
+  const name = `Site manager calls overtime_warnings()${note}`
+  const { data, error } = await site.client.rpc('overtime_warnings', args)
+  if (error?.code === PERMISSION_DENIED) record(name, true, 'Server refused (permission denied).')
+  else if (error) record(name, false, `Unexpected error: ${error.message}`)
+  else record(name, data.length === 0, data.length === 0 ? 'Nothing came back.' : `LEAK: ${JSON.stringify(data).slice(0, 200)}`)
+  covers('overtime_warnings')
+}
+{
+  // A blank reason, so even if the check were missing the rule could not be
+  // voided (the reason check would refuse it) - but the message must be the
+  // first-rule one.
+  const name = '8A-2 the first pay rule can never be voided - every day needs a rule'
+  const { data: first } = await owner.client
+    .from('pay_rules')
+    .select('id, effective_from')
+    .is('voided_at', null)
+    .order('effective_from')
+    .limit(1)
+    .single()
+  const { error } = await owner.client.from('pay_rules').update({ void_reason: ' ' }).eq('id', first?.id ?? randomUUID()).select('id')
+  const ok = error?.code === '23514' && String(error.message).includes('first pay rule')
+  record(name, ok, ok ? `Refused: ${error.message}` : `Got: ${error ? error.message : 'no error'}`)
+  covers('pay_rules_keep_first', 'pay_rules')
+}
+{
+  const name = 'Site manager calls the trigger function pay_rules_keep_first() directly'
+  const { error } = await site.client.rpc('pay_rules_keep_first', {})
+  record(name, Boolean(error), error ? `Refused: ${error.message}` : 'BREACH: it ran.')
+  covers('pay_rules_keep_first')
+}
+
 // --- Finish off this run's overtime test data (nothing can be deleted) ---------
 {
   const outcomes = await Promise.all([
@@ -4579,6 +4702,7 @@ for (const [phase, file] of [
   ['8B-1 (pay runs)', '20261010090000_phase8b1_pay_runs.sql'],
   ['8B-2 (pay run screens)', '20261012090000_phase8b2_pay_run_screens.sql'],
   ['the labour speed fix', '20261012100000_labour_lines_speed.sql'],
+  ['8A-2 (pay rule screens)', '20261013090000_phase8a2_pay_rule_screens.sql'],
   ['export filter', '20261011090000_export_project_filter.sql'],
 ]) {
   const sql = readFileSync(fileURLToPath(new URL(`../supabase/migrations/${file}`, import.meta.url)), 'utf8')

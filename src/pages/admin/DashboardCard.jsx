@@ -1,4 +1,4 @@
-import { formatRand } from '../../lib/labels'
+import { formatDate, formatRand } from '../../lib/labels'
 import { CaretRightIcon } from '../../components/icons'
 import s from './Dashboard.module.css'
 
@@ -137,6 +137,31 @@ export function HealthPill({ health }) {
 // spend to date.
 //   projects: from dashboard_projects
 //   onPick(project): a row was tapped
+// Overtime over the pay rule's limits (warn only): one line per person per
+// day or week, from the database. Tap a line to see the person's days.
+//   warnings: rows of overtime_warnings
+export function OvertimeWarnings({ warnings, onPick }) {
+  return (
+    <ul className={s.healthList}>
+      {warnings.map((warning) => (
+        <li key={`${warning.employee_id}-${warning.kind}-${warning.day}`}>
+          <button type="button" className={s.healthRow} onClick={() => onPick(warning)}>
+            <span className={s.healthTop}>
+              <span className={s.healthName}>{warning.employee_name}</span>
+              <span className={s.healthUnpriced}>{warning.kind === 'week' ? 'Week' : 'Day'}</span>
+            </span>
+            <span className={`${s.healthFigures} num`}>
+              {warning.kind === 'week'
+                ? `${Number(warning.hours).toFixed(1)} h overtime in the week of ${formatDate(warning.day)} (limit ${Number(warning.limit_hours)} h)`
+                : `${Number(warning.hours).toFixed(1)} h on ${formatDate(warning.day)} (limit ${Number(warning.limit_hours)} h a day)`}
+            </span>
+          </button>
+        </li>
+      ))}
+    </ul>
+  )
+}
+
 export function ProjectHealth({ projects, onPick }) {
   return (
     <ul className={s.healthList}>

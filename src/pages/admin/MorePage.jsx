@@ -1,4 +1,4 @@
-import { BulldozerIcon, CoinsIcon, DownloadSimpleIcon, UsersThreeIcon } from '../../components/icons'
+import { BulldozerIcon, ClockIcon, CoinsIcon, DownloadSimpleIcon, UsersThreeIcon } from '../../components/icons'
 import Page from '../../components/Page'
 import { Row } from '../../components/Row'
 import Section from '../../components/Section'
@@ -36,6 +36,13 @@ function MorePage({ pendingEmployees = 0, onNavigate }) {
           subtitle="Pay periods: close, mark paid, and what's still to be paid"
           chevron
           onClick={() => onNavigate('pay')}
+        />
+        <Row
+          icon={ClockIcon}
+          title="Pay rules and holidays"
+          subtitle="Overtime, Sunday and holiday rates, warning limits"
+          chevron
+          onClick={() => onNavigate('pay-rules')}
         />
         <Row
           icon={DownloadSimpleIcon}
