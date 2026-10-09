@@ -16,6 +16,7 @@ import { Row } from '../../components/Row'
 import Section from '../../components/Section'
 import Skeleton from '../../components/Skeleton'
 import StatusBadge from '../../components/StatusBadge'
+import { resetScrollLock } from '../../components/scrollLock'
 import AddReceiptPage from './AddReceiptPage'
 import ReceiptDetail from './ReceiptDetail'
 import s from './Receipts.module.css'
@@ -28,7 +29,13 @@ function MyReceiptsPage({ user }) {
   const [receipts, setReceipts] = useState(undefined)
   const [error, setError] = useState('')
   // null = the list, { photo } = adding a receipt, { id } = one receipt
-  const [open, setOpen] = useState(null)
+  const [open, setOpenState] = useState(null)
+  // Switching between the list, adding and a receipt is a new screen: the
+  // page always scrolls again, whatever popup state the last one left.
+  const setOpen = (next) => {
+    resetScrollLock()
+    setOpenState(next)
+  }
   const [flash, setFlash] = useState('')
   const [reloadCount, setReloadCount] = useState(0)
 

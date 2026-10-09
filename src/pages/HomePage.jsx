@@ -6,6 +6,7 @@ import LoadError from '../components/LoadError'
 import Notice from '../components/Notice'
 import Page from '../components/Page'
 import Skeleton from '../components/Skeleton'
+import { resetScrollLock } from '../components/scrollLock'
 // Site-manager screens: part of the app's first download, so they open fast.
 import MyReceiptsPage from './receipts/MyReceiptsPage'
 import MyReportsPage from './reports/MyReportsPage'
@@ -133,6 +134,8 @@ function HomePage({ user }) {
 
   // Tapping a tab always starts that section fresh at its main list.
   function navigate(next) {
+    // A new screen always scrolls: whatever popup state the old one left.
+    resetScrollLock()
     setScreen(next)
     setVisit((count) => count + 1)
   }

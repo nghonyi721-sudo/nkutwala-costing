@@ -10,6 +10,7 @@ import { Row } from '../../components/Row'
 import Section from '../../components/Section'
 import Skeleton from '../../components/Skeleton'
 import StatusBadge from '../../components/StatusBadge'
+import { resetScrollLock } from '../../components/scrollLock'
 import ReportForm from './ReportForm'
 
 // Site manager: their own reports, newest first. The database only ever
@@ -21,8 +22,14 @@ function MyReportsPage({ user, startNew, onShowList }) {
   const [reports, setReports] = useState(undefined)
   const [error, setError] = useState('')
   // null = show the list, 'new' = new report, a report id = open it
-  const [open, setOpen] = useState(startNew ? 'new' : null)
+  const [open, setOpenState] = useState(startNew ? 'new' : null)
   const [reloadCount, setReloadCount] = useState(0)
+  // Switching between the list and a report is a new screen: the page always
+  // scrolls again, whatever popup state the last one left.
+  const setOpen = (next) => {
+    resetScrollLock()
+    setOpenState(next)
+  }
 
   useEffect(() => {
     let cancelled = false

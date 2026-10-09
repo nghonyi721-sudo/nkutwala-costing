@@ -4,6 +4,7 @@ import LoginPage from './pages/LoginPage'
 import HomePage from './pages/HomePage'
 import Logo from './components/Logo'
 import Notice from './components/Notice'
+import { resetScrollLock } from './components/scrollLock'
 import Spinner from './components/Spinner'
 import s from './App.module.css'
 
@@ -25,6 +26,12 @@ function App() {
     })
     return () => subscription.unsubscribe()
   }, [])
+
+  // Logging in or out is a new screen: the page always scrolls again.
+  const userId = session?.user?.id ?? null
+  useEffect(() => {
+    resetScrollLock()
+  }, [userId])
 
   if (!isSupabaseConfigured) {
     return (

@@ -146,7 +146,12 @@ function AppShell({ profile, screen, onNavigate, onLogout, badges = {}, children
               icon={SignOutIcon}
               title="Log out"
               tone="danger"
-              onClick={() => setConfirmingLogout(true)}
+              onClick={() => {
+                // One popup at a time: the Account sheet closes before
+                // "Log out?" opens.
+                setAccountOpen(false)
+                setConfirmingLogout(true)
+              }}
             />
           </SheetGroup>
         </Sheet>
@@ -158,7 +163,11 @@ function AppShell({ profile, screen, onNavigate, onLogout, badges = {}, children
           message="You'll need your email and password to log in again."
           actionLabel="Log out"
           destructive
-          onConfirm={onLogout}
+          onConfirm={() => {
+            // Close the dialog before leaving the app's screens.
+            setConfirmingLogout(false)
+            onLogout()
+          }}
           onCancel={() => setConfirmingLogout(false)}
         />
       )}

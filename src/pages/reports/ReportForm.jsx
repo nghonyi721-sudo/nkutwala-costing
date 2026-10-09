@@ -398,12 +398,20 @@ function ReportForm({ user, reportId, onDone }) {
     setError('')
     setMessage('')
     setBusy(true)
-    const { data, error: saveError } = await supabase.rpc('save_report_draft', {
-      p_report: { ...form, id, fuel_litres: fuel },
-      p_crew: crew.map((line) => ({ employee_id: line.employee_id, hours: hoursOf(line) })),
-      p_equipment: equipmentLines,
-    })
-    setBusy(false)
+    let result
+    try {
+      result = await supabase.rpc('save_report_draft', {
+        p_report: { ...form, id, fuel_litres: fuel },
+        p_crew: crew.map((line) => ({ employee_id: line.employee_id, hours: hoursOf(line) })),
+        p_equipment: equipmentLines,
+      })
+    } catch (networkError) {
+      result = { data: null, error: networkError }
+    } finally {
+      // Never left "Saving…": the buttons always come back.
+      setBusy(false)
+    }
+    const { data, error: saveError } = result
 
     if (saveError) {
       setError(saveErrorMessage(saveError))
@@ -416,33 +424,36 @@ function ReportForm({ user, reportId, onDone }) {
     return data
   }
 
+  // The "Submit report?" dialog ALWAYS closes (finally), and on success it
+  // closes before the report is shown as submitted.
   async function submit() {
-    const savedId = await save()
-    if (!savedId) {
-      setConfirming(false)
-      return
-    }
+    try {
+      const savedId = await save()
+      if (!savedId) return
 
-    setBusy(true)
-    const { data, error: submitError } = await supabase
-      .from('daily_reports')
-      .update({ status: 'submitted' })
-      .eq('id', savedId)
-      .eq('status', 'draft')
-      .select('id')
-    if (submitError || data.length === 0) {
+      setBusy(true)
+      const { data, error: submitError } = await supabase
+        .from('daily_reports')
+        .update({ status: 'submitted' })
+        .eq('id', savedId)
+        .eq('status', 'draft')
+        .select('id')
+      if (submitError || data.length === 0) {
+        setError(
+          isPeriodClosed(submitError) ? PERIOD_CLOSED : 'Saved as a draft, but could not submit. Check your signal and try again.',
+        )
+        return
+      }
+
+      setConfirming(false)
+      const { data: report } = await fetchReport(savedId)
+      if (report) applyReport(report)
+    } catch {
+      setError('Could not submit. Check your signal, then open the report again to see if it went through.')
+    } finally {
       setBusy(false)
       setConfirming(false)
-      setError(
-        isPeriodClosed(submitError) ? PERIOD_CLOSED : 'Saved as a draft, but could not submit. Check your signal and try again.',
-      )
-      return
     }
-
-    const { data: report } = await fetchReport(savedId)
-    setBusy(false)
-    setConfirming(false)
-    if (report) applyReport(report)
   }
 
   // --- Rendering -------------------------------------------------------------

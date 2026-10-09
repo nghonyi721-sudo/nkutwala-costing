@@ -137,6 +137,8 @@ function ReceiptDetail({ receiptId, onBack }) {
     setBusy('submit')
     try {
       await submitDraft(receiptId)
+      // Close the warning before leaving the page.
+      setDuplicates(null)
       onBack(SUBMITTED)
     } catch (err) {
       setDuplicates(null)
@@ -150,6 +152,9 @@ function ReceiptDetail({ receiptId, onBack }) {
     setBusy('discard')
     try {
       await discardDraft(receiptId)
+      // Close the dialogs before leaving the page.
+      setDuplicates(null)
+      setConfirmingDiscard(false)
       onBack("Receipt discarded. It won't be counted.")
     } catch (err) {
       setDuplicates(null)

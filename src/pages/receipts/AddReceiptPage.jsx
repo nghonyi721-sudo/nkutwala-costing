@@ -265,6 +265,8 @@ function AddReceiptPage({ user, photo: firstPhoto, onDone }) {
     setBusy('submit')
     try {
       await submitDraft(receiptId)
+      // Close the warning before leaving the page.
+      setDuplicates(null)
       onDone(SUBMITTED)
     } catch (err) {
       setDuplicates(null)
@@ -278,6 +280,8 @@ function AddReceiptPage({ user, photo: firstPhoto, onDone }) {
     setBusy('discard')
     try {
       await discardDraft(receiptId)
+      // Close the warning before leaving the page.
+      setDuplicates(null)
       onDone("Receipt discarded. It won't be counted.")
     } catch (err) {
       setDuplicates(null)
