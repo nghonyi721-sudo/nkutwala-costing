@@ -5,7 +5,7 @@ import HomePage from './pages/HomePage'
 import Logo from './components/Logo'
 import Notice from './components/Notice'
 import { resetScrollLock } from './components/scrollLock'
-import Spinner from './components/Spinner'
+import { hideSplash } from './lib/splash'
 import s from './App.module.css'
 
 function App() {
@@ -33,6 +33,13 @@ function App() {
     resetScrollLock()
   }, [userId])
 
+  // The launch screen (index.html) covers everything until the first screen
+  // is ready. Logged out (or no Supabase keys): that's now. Logged in:
+  // HomePage hides it once the person's role is known.
+  useEffect(() => {
+    if (!isSupabaseConfigured || session === null) hideSplash()
+  }, [session])
+
   if (!isSupabaseConfigured) {
     return (
       <div className={s.stage}>
@@ -44,16 +51,8 @@ function App() {
     )
   }
 
-  if (session === undefined) {
-    return (
-      <div className={s.stage} role="status" aria-label="Loading">
-        <span className={s.logoTile}>
-          <Logo width={120} />
-        </span>
-        <Spinner size={24} className={s.spinner} />
-      </div>
-    )
-  }
+  // Still reading the saved login: the launch screen is showing.
+  if (session === undefined) return null
 
   // Logged in: HomePage draws the app shell (navigation, tabs, screens).
   if (session) return <HomePage user={session.user} />

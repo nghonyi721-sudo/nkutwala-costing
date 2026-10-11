@@ -1,6 +1,7 @@
 import { lazy, Suspense, useEffect, useState } from 'react'
 import { supabase } from '../lib/supabaseClient'
 import { isOwnerOrAdmin } from '../lib/labels'
+import { hideSplash } from '../lib/splash'
 import AppShell from '../components/AppShell'
 import LoadError from '../components/LoadError'
 import Notice from '../components/Notice'
@@ -80,6 +81,13 @@ function HomePage({ user }) {
       cancelled = true
     }
   }, [user.id])
+
+  // The launch screen stays up until the role is known, so the app opens
+  // straight on the right screen (Dashboard / My reports) - or on the
+  // message if the profile can't be loaded.
+  useEffect(() => {
+    if (profile !== undefined || error) hideSplash()
+  }, [profile, error])
 
   // Hiding screens from site managers is only tidiness - the database refuses
   // them anyway (see the RLS policies and scripts/rls-attack-test.mjs).

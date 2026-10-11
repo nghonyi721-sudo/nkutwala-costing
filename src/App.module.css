@@ -1,5 +1,5 @@
-/* Shown before login is known (loading) or when Supabase isn't set up:
-   the logo on a white app-icon tile, centred, like an iOS launch screen. */
+/* Shown when Supabase isn't set up: the logo on a white app-icon tile,
+   centred. (While the app starts, index.html's launch screen shows.) */
 .stage {
   display: flex;
   flex-direction: column;
@@ -20,8 +20,4 @@
   padding: 18px 20px;
   border-radius: 24px;
   background: #fff;
-}
-
-.spinner {
-  color: var(--label-2);
 }

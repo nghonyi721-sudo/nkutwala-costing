@@ -20,6 +20,27 @@ function appVersion() {
   return commit ? `${version} · ${commit}` : version
 }
 
+// The launch screen (index.html, #splash) must appear as soon as the page
+// arrives. Stylesheets in <head> hold back ALL drawing until they've
+// downloaded, so the app's own stylesheets are moved to the end of <body>,
+// after the launch screen. The app's code still waits for them before it
+// runs, so the app never appears unstyled.
+function stylesAfterSplash() {
+  return {
+    name: 'styles-after-splash',
+    apply: 'build',
+    transformIndexHtml: {
+      order: 'post',
+      handler(html) {
+        const links = html.match(/<link rel="stylesheet"[^>]*>/g) ?? []
+        if (links.length === 0) return html
+        const rest = links.reduce((page, link) => page.replace(link, ''), html)
+        return rest.replace('</body>', `  ${links.join('\n    ')}\n  </body>`)
+      },
+    },
+  }
+}
+
 // The files the start page loads - the entry chunk, every chunk it imports
 // directly, and their CSS - read from the build itself. Only these (plus
 // index.html and the icons) are saved on the phone when the app installs:
@@ -55,6 +76,7 @@ export default defineConfig({
   plugins: [
     react(),
     recordStartPageFiles(),
+    stylesAfterSplash(),
     // Installable app (PWA). NEVER caches Supabase: its API, login, storage
     // and photo links are on Supabase's own address and no rule below
     // matches it - those requests always go straight to the network.
@@ -70,8 +92,10 @@ export default defineConfig({
         name: 'Nkutwala Site Reports',
         short_name: 'Nkutwala',
         description: 'Daily site reports and job costing for Nkutwala Construction.',
-        theme_color: '#1F4FBF',
-        background_color: '#FFFFFF',
+        // The same near-white as the launch screen (index.html, #splash) and the
+        // app's background, so opening the installed app has no colour flash.
+        theme_color: '#F2F2F7',
+        background_color: '#F2F2F7',
         display: 'standalone',
         start_url: '/',
         scope: '/',

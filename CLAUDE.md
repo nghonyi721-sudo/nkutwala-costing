@@ -209,6 +209,38 @@ If you are about to send a rand value to a site_manager, STOP and flag it.
 - Version on the card: VITE_APP_VERSION = package.json version + commit,
   set in vite.config.js at build time.
 
+## Launch screen (splash)
+- Plain HTML + inline CSS + inline SVG in index.html (#splash), so it shows
+  before any JavaScript - never move it into React. Design "Turning gear":
+  the logo redrawn as vector shapes (the N's blue and red interlocking
+  blades; the gear = left half of an 8-tooth gear, open towards the words,
+  with its dot) - the gear + dot turn as one piece, 4 s a turn (the one
+  animation; stops on the slow message; Reduce Motion: still, "Loading…",
+  no fade). Under it "Nkutwala" / "Construction" exactly as the logo, then
+  "SITE REPORTS".
+- Logo fonts (matched by overlaying on logo.jpeg): "Nkutwala" = Fira Sans
+  Extra Condensed Bold squeezed to 93.8% width; "Construction" = Fira Sans
+  Italic, +0.052 em spacing; "SITE REPORTS" = Fira Sans Extra Condensed
+  SemiBold, +0.32 em. All SIL Open Font License. They are SVG OUTLINES in
+  index.html (made with opentype.js from the Google Fonts files) - no font
+  file is downloaded. The slow/offline message and Try again use the
+  system font. If the logo changes, remake the outlines the same way.
+- vite.config.js stylesAfterSplash(): the build moves the app's stylesheet
+  links to the end of <body> so they don't hold back drawing the splash
+  (the app's code still waits for them - no unstyled flash).
+- hideSplash() (src/lib/splash.js) fades it 0.2 s then REMOVES it from the
+  page - never just hidden, no fixed full-screen layer left behind. Called
+  when the first screen is ready: App (logged out / no Supabase keys) and
+  HomePage (once the profile/role has loaded or failed). App renders
+  nothing while the session is still being read.
+- index.html's own inline script: after 10 s still there -> "Taking longer
+  than usual — check your signal" (or the offline message) + Try again
+  (reload). Must work without the app's JavaScript.
+- Never overflow:hidden / 100vh / scroll locking on html or body.
+- Colours: #F2F2F7 light / #000 dark (the app's background). The manifest
+  background_color and theme_color are #F2F2F7 to match - change them
+  together. No iPhone startup images (iOS's own launch screen is white).
+
 ## Out of scope for v1 — do NOT build these
 Payroll deductions (PAYE/UIF), offline sync, receipt OCR, multi-tenancy,
 invoicing, variations. If I ask for one, remind me it was cut.
