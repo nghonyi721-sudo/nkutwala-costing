@@ -233,6 +233,10 @@ If you are about to send a rand value to a site_manager, STOP and flag it.
   when the first screen is ready: App (logged out / no Supabase keys) and
   HomePage (once the profile/role has loaded or failed). App renders
   nothing while the session is still being read.
+- Before the LOGIN page it stays at least 3 s from page start
+  (LOGIN_SPLASH_MS in App.jsx, hideSplash({ atLeast })) - the owner's
+  choice. Signed-in launches have no minimum (site managers on weak
+  signal); a slow start never adds the 3 s on top.
 - index.html's own inline script: after 10 s still there -> "Taking longer
   than usual — check your signal" (or the offline message) + Try again
   (reload). Must work without the app's JavaScript.

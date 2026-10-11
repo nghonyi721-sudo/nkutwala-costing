@@ -8,6 +8,10 @@ import { resetScrollLock } from './components/scrollLock'
 import { hideSplash } from './lib/splash'
 import s from './App.module.css'
 
+// Before the login page the launch screen stays at least this long, counted
+// from when the page started loading.
+const LOGIN_SPLASH_MS = 3000
+
 function App() {
   // undefined = still checking, null = logged out, object = logged in
   const [session, setSession] = useState(undefined)
@@ -34,10 +38,12 @@ function App() {
   }, [userId])
 
   // The launch screen (index.html) covers everything until the first screen
-  // is ready. Logged out (or no Supabase keys): that's now. Logged in:
-  // HomePage hides it once the person's role is known.
+  // is ready. Logged out: shown for at least 3 s before the login page. No
+  // Supabase keys: hidden now. Logged in: HomePage hides it once the
+  // person's role is known (no wait).
   useEffect(() => {
-    if (!isSupabaseConfigured || session === null) hideSplash()
+    if (!isSupabaseConfigured) hideSplash()
+    else if (session === null) hideSplash({ atLeast: LOGIN_SPLASH_MS })
   }, [session])
 
   if (!isSupabaseConfigured) {

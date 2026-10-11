@@ -4,12 +4,27 @@
 // person's role known). It fades out and is then REMOVED from the page -
 // never just hidden - so no full-screen layer is ever left over the app.
 // Safe to call more than once.
+//
+//   atLeast: keep it up until this many ms after the page started loading
+//            (the login page uses 3 s). A slow start doesn't add to it.
 
-let hidden = false
+let gone = false
+let timer
 
-export function hideSplash() {
-  if (hidden) return
-  hidden = true
+export function hideSplash({ atLeast = 0 } = {}) {
+  if (gone) return
+  window.clearTimeout(timer)
+  const wait = atLeast - performance.now()
+  if (wait > 0) {
+    timer = window.setTimeout(leave, wait)
+    return
+  }
+  leave()
+}
+
+function leave() {
+  if (gone) return
+  gone = true
 
   const splash = document.getElementById('splash')
   if (!splash) return
