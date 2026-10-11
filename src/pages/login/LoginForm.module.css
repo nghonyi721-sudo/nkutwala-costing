@@ -1,0 +1,106 @@
+/* The sign-in form. No fixed heights, no overflow:hidden, no scroll locking:
+   it can always grow. --keyboard (set by useKeyboardSafe while the on-screen
+   keyboard is up) adds room under it so the page can scroll Sign in into
+   view. */
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding-bottom: var(--keyboard, 0px);
+}
+
+.fields {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+/* Label above, a soft filled field below. */
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.label {
+  font-size: var(--text-footnote);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--label-2);
+}
+
+/* The field and (for the password) the show/hide button, side by side. */
+.control {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  padding: 0 var(--space-4);
+  border: 2px solid transparent;
+  border-radius: 12px;
+  background: var(--surface-2);
+}
+
+.control:focus-within {
+  border-color: var(--tint);
+  background: var(--surface);
+}
+
+/* 17px text: iPhones don't zoom in on fields of 16px or more. */
+.input {
+  flex: 1;
+  min-width: 0;
+  min-height: 52px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  font-size: var(--text-body);
+  color: var(--label);
+}
+
+.input::placeholder {
+  color: var(--label-3);
+}
+
+.input:focus {
+  outline: none;
+}
+
+.reveal {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  margin-right: -12px;
+  padding: 0;
+  border: 0;
+  border-radius: 24px;
+  background: none;
+  color: var(--label-2);
+  cursor: pointer;
+}
+
+.reveal:focus-visible {
+  outline: 2px solid var(--tint);
+}
+
+.error {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  margin: 0;
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-control);
+  background: var(--destructive-fill);
+  font-size: var(--text-callout);
+  font-weight: 600;
+  line-height: 1.35;
+  color: var(--destructive);
+}
+
+.error svg {
+  flex: none;
+  margin-top: 1px;
+}

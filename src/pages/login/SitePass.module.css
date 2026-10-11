@@ -1,0 +1,264 @@
+/* --- Colours -------------------------------------------------------------
+   "Soft blue": the logo blue, toned down, on this page only. It redefines
+   the app's colour tokens here, so the fields and the Sign in button follow.
+   Text contrast is 5.5:1 or more (placeholders excepted, as in the rest of
+   the app). Grey text and lines stay the app's, so the phone's "Increase
+   Contrast" still works. */
+.screen {
+  --bg: #f2f3f7;
+  --surface: #ffffff;
+  --surface-2: #f1f2f6;
+  --label: #15171c;
+  --tint: #2d3eaa;
+  --tint-solid: #2d3eaa;
+  --tint-pressed: #24328a;
+  --tint-fill: #e6e8f6;
+  --on-tint: #ffffff;
+  --pass-top: #2d3eaa;
+  --band: #2d3eaa;
+}
+
+@media (prefers-color-scheme: dark) {
+  .screen {
+    --bg: #0d0f15;
+    --surface: #191c25;
+    --surface-2: #252935;
+    --label: #eef0f6;
+    --tint: #97a3ee;
+    --tint-solid: #3b4cc0;
+    --tint-pressed: #3040a6;
+    --tint-fill: #1d2240;
+    --pass-top: #2f3d9c;
+    --band: #24318a;
+  }
+}
+
+/* The page colour also behind the phone's overscroll (where :has works). */
+:global(body):has(.screen) {
+  --bg: #f2f3f7;
+}
+
+@media (prefers-color-scheme: dark) {
+  :global(body):has(.screen) {
+    --bg: #0d0f15;
+  }
+}
+
+/* --- Layout --------------------------------------------------------------
+   min-height only (never height / 100vh / overflow:hidden): the page can
+   always grow and scroll. */
+.screen {
+  display: flex;
+  flex-direction: column;
+  min-height: 100svh;
+  background: var(--bg);
+  color: var(--label);
+}
+
+.page {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--space-5);
+  width: 100%;
+  max-width: 480px;
+  margin: 0 auto;
+  padding: 0 var(--gutter) calc(env(safe-area-inset-bottom) + var(--space-4));
+}
+
+/* The date and greeting on a soft blue band, the logo's gear faint in its
+   corner. Full width on phones: the band reaches past the page's side
+   margins to the screen edges (#root clips any sideways overflow). */
+.band {
+  position: relative;
+  isolation: isolate;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-inline: calc(50% - 50vw);
+  padding: calc(env(safe-area-inset-top) + var(--space-6)) calc(50vw - 50%) var(--space-6);
+  border-radius: 0 0 28px 28px;
+  background: var(--band);
+  color: #fff;
+}
+
+.date {
+  font-size: var(--text-subhead);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #c9cff7;
+}
+
+.hello {
+  font-size: clamp(2.2rem, 11vw, 3rem);
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: -0.03em;
+}
+
+/* A little room so the greeting's g never touches this line. */
+.sub {
+  margin-top: 6px;
+  font-size: var(--text-callout);
+  color: #e2e5fb;
+}
+
+.gear {
+  position: absolute;
+  top: 0;
+  right: 0;
+  z-index: -1;
+  width: 150px;
+  height: 150px;
+  color: rgb(255 255 255 / 0.1);
+}
+
+/* The access card, low down in thumb reach. A hard, flat shadow - no blur. */
+.pass {
+  margin-top: auto;
+  border-radius: 20px;
+  background: var(--surface);
+  box-shadow:
+    0 0 0 1px rgb(0 0 0 / 0.05),
+    0 6px 0 rgb(0 0 0 / 0.06);
+  animation: deal var(--medium) var(--ease) both;
+}
+
+.passTop {
+  position: relative;
+  padding: var(--space-6) var(--space-4) var(--space-4);
+  border-radius: 20px 20px 0 0;
+  background: var(--pass-top);
+  color: #fff;
+}
+
+/* The lanyard slot, punched through the top of the card. */
+.slot {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  width: 56px;
+  height: 10px;
+  margin-left: -28px;
+  border-radius: 5px;
+  background: var(--bg);
+}
+
+.passRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.passLabel {
+  display: flex;
+  flex-direction: column;
+  font-size: var(--text-caption);
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.passName {
+  margin-top: 2px;
+  font-size: var(--text-title2);
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  text-transform: none;
+}
+
+.logoTile {
+  display: grid;
+  flex: none;
+  place-items: center;
+  padding: 8px 10px;
+  border-radius: 12px;
+  background: #fff;
+}
+
+.passBody {
+  padding: var(--space-4);
+}
+
+.passFoot {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4) var(--space-4);
+  border-top: 1px dashed var(--separator);
+}
+
+.barcode {
+  width: 120px;
+  height: 28px;
+  fill: var(--label);
+}
+
+.passNo {
+  font-size: var(--text-caption);
+  font-variant-numeric: tabular-nums;
+  color: var(--label-2);
+}
+
+.help {
+  font-size: var(--text-subhead);
+  color: var(--label-2);
+  text-align: center;
+}
+
+@keyframes deal {
+  from {
+    opacity: 0;
+    transform: translateY(24px) rotate(-1.5deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pass {
+    animation: none;
+  }
+}
+
+/* Laptop: the band becomes a blue panel on the left, as tall as the card on
+   the right. */
+@media (min-width: 900px) {
+  .page {
+    display: grid;
+    grid-template-columns: 1fr 420px;
+    grid-template-rows: 1fr auto auto 1fr;
+    column-gap: clamp(48px, 8vw, 128px);
+    max-width: 1080px;
+    padding: 0 var(--space-6) var(--space-6);
+  }
+
+  .band {
+    grid-row: 2 / 4;
+    grid-column: 1;
+    justify-content: center;
+    margin: 0;
+    padding: var(--space-6) clamp(32px, 4vw, 56px);
+    border-radius: 24px;
+  }
+
+  .hello {
+    font-size: clamp(3rem, 4.4vw, 4.5rem);
+  }
+
+  .gear {
+    width: 240px;
+    height: 240px;
+  }
+
+  .pass {
+    grid-row: 2;
+    grid-column: 2;
+    margin-top: 0;
+  }
+
+  .help {
+    grid-row: 3;
+    grid-column: 2;
+  }
+}

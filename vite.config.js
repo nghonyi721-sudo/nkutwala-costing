@@ -1,6 +1,24 @@
+import { execSync } from 'node:child_process'
+import { readFileSync } from 'node:fs'
 import react from '@vitejs/plugin-react'
 import { defineConfig } from 'vite'
 import { VitePWA } from 'vite-plugin-pwa'
+
+// The version shown on the login page: package.json's version and the
+// commit it was built from (Vercel's, or the local git checkout's), e.g.
+// "1.0.0 · f86889e".
+function appVersion() {
+  const { version } = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8'))
+  let commit = process.env.VERCEL_GIT_COMMIT_SHA?.slice(0, 7) ?? ''
+  if (!commit) {
+    try {
+      commit = execSync('git rev-parse --short HEAD', { stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim()
+    } catch {
+      commit = ''
+    }
+  }
+  return commit ? `${version} · ${commit}` : version
+}
 
 // The files the start page loads - the entry chunk, every chunk it imports
 // directly, and their CSS - read from the build itself. Only these (plus
@@ -31,6 +49,9 @@ function recordStartPageFiles() {
 
 // https://vite.dev/config/
 export default defineConfig({
+  define: {
+    'import.meta.env.VITE_APP_VERSION': JSON.stringify(appVersion()),
+  },
   plugins: [
     react(),
     recordStartPageFiles(),

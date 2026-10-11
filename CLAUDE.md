@@ -192,6 +192,23 @@ If you are about to send a rand value to a site_manager, STOP and flag it.
   the app is opened - never reload mid-form (unsaved reports).
 - iPhone: status bar "default" (light header), apple-touch-icon.png.
 
+## Sign-in page
+- LoginPage.jsx -> src/pages/login/: SitePass (the look: soft blue band
+  with date + greeting, SITE ACCESS card), LoginForm, useSignIn (messages),
+  useKeyboardSafe, today.js. Sign-in itself is plain Supabase
+  signInWithPassword - no sign-up, no reset email ("Contact the office").
+- ONE message for every refusal: "Email or password is incorrect." Never
+  say which was wrong or whether an account exists. Offline / too many
+  tries / server down have their own messages (useSignIn.js).
+- Fields: autocomplete username / current-password in one <form>, 17px
+  text (no iPhone zoom), show/hide password 48px. useKeyboardSafe keeps
+  Sign in above the on-screen keyboard. Never height/100vh/overflow:hidden
+  or scroll locking on this page (min-height: 100svh only).
+- Colours: "soft blue" set in SitePass.module.css, redefining the tokens
+  on this page only (the rest of the app keeps the logo blue).
+- Version on the card: VITE_APP_VERSION = package.json version + commit,
+  set in vite.config.js at build time.
+
 ## Out of scope for v1 — do NOT build these
 Payroll deductions (PAYE/UIF), offline sync, receipt OCR, multi-tenancy,
 invoicing, variations. If I ask for one, remind me it was cut.
