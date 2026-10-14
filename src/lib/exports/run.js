@@ -37,43 +37,26 @@ export async function exportProjectCost({ projects, from, to }) {
   await saveExport(supabase, { type: PROJECT_COST.type, filters: exportLogFilters({ projects, from, to }), ...built })
 }
 
-// The pay-run Excel: one version of a closed pay period, from its snapshot.
-//   period: { id, start_date, end_date }; run: a row of pay_run_versions
-export async function exportPayRun({ period, run, projects }) {
-  const [{ PAY_RUN, buildPayRun, fetchPayRun }, { exportLogFilters, isFiltered }, { saveExport }] = await Promise.all([
-    import('./payRun.js'),
+// The payroll (Payroll screen). project: { id, name }; from/to: "YYYY-MM-DD"
+export async function exportPayroll({ project, from, to }) {
+  const [{ PAYROLL, buildPayroll, fetchPayroll }, { exportLogFilters }, { saveExport }] = await Promise.all([
+    import('./payroll.js'),
     import('./workbook.js'),
     import('./download.js'),
   ])
-  const from = period.start_date
-  const to = period.end_date
-  const [data, meta] = await Promise.all([fetchPayRun(supabase, { runId: run.run_id, projects }), who()])
-  const built = buildPayRun(data, { ...meta, projects, from, to, run, generatedAt: new Date() })
-  await saveExport(supabase, {
-    type: PAY_RUN.type,
-    filters: exportLogFilters({
-      projects,
-      from,
-      to,
-      allocation: isFiltered(projects),
-      period_id: period.id,
-      run_id: run.run_id,
-      version: run.version,
-    }),
-    ...built,
-  })
+  const [data, meta] = await Promise.all([fetchPayroll(supabase, { project, from, to }), who()])
+  const built = buildPayroll(data, { ...meta, project, from, to, generatedAt: new Date() })
+  await saveExport(supabase, { type: PAYROLL.type, filters: exportLogFilters({ projects: [project], from, to }), ...built })
 }
 
-// Export 2. All projects: full pay. Chosen projects: a labour cost
-// allocation (logged as such).
-export async function exportPayrollHours({ projects, from, to }) {
-  const [{ PAYROLL_HOURS, buildPayrollHours, fetchPayrollHours }, { exportLogFilters, isFiltered }, { saveExport }] =
-    await Promise.all([import('./payrollHours.js'), import('./workbook.js'), import('./download.js')])
-  const [data, meta] = await Promise.all([fetchPayrollHours(supabase, { projects, from, to }), who()])
-  const built = buildPayrollHours(data, { ...meta, projects, from, to, generatedAt: new Date() })
-  await saveExport(supabase, {
-    type: PAYROLL_HOURS.type,
-    filters: exportLogFilters({ projects, from, to, allocation: isFiltered(projects) }),
-    ...built,
-  })
+// The expenses statement (Payroll screen): the same project and dates.
+export async function exportExpenses({ project, from, to }) {
+  const [{ EXPENSES, buildExpenses, fetchExpenses }, { exportLogFilters }, { saveExport }] = await Promise.all([
+    import('./expenses.js'),
+    import('./workbook.js'),
+    import('./download.js'),
+  ])
+  const [data, meta] = await Promise.all([fetchExpenses(supabase, { project, from, to }), who()])
+  const built = buildExpenses(data, { ...meta, project, from, to, generatedAt: new Date() })
+  await saveExport(supabase, { type: EXPENSES.type, filters: exportLogFilters({ projects: [project], from, to }), ...built })
 }

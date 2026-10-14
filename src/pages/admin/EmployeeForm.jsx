@@ -1,13 +1,13 @@
 import { useState } from 'react'
 import { supabase } from '../../lib/supabaseClient'
-import { addEmployee, approveEmployee } from '../../lib/employeeSteps'
+import { addEmployee, approveEmployee, fullNameOf, nameParts } from '../../lib/employeeSteps'
 import { EMPLOYEE_CATEGORY_LABELS, formatDate, localDateOf, todayLocal } from '../../lib/labels'
 import ActionBar from '../../components/ActionBar'
 import Button from '../../components/Button'
-import { PhoneIcon, TagIcon, UserCircleIcon } from '../../components/icons'
+import { IdentificationCardIcon, PhoneIcon, TagIcon, UserCircleIcon, UserIcon } from '../../components/icons'
 import Notice from '../../components/Notice'
 import Page from '../../components/Page'
-import { FieldRow, Row } from '../../components/Row'
+import { FieldRow, Row, SwitchRow } from '../../components/Row'
 import Section from '../../components/Section'
 import SegmentedControl from '../../components/SegmentedControl'
 import { PickSheet } from '../../components/Sheet'
@@ -21,11 +21,15 @@ const STATUS_OPTIONS = { approved: 'Active', inactive: 'Inactive' }
 // Owner/admin: add an employee (employee = null) or edit one.
 // Adding asks for their hourly rate too: saving adds them AND approves them
 // with that rate, in one go (nobody is approved without a rate).
-// Editing: details, phone, Active/Inactive, and their rates below. Employees
-// are never deleted: mark them Inactive instead.
+// Editing: name (first name(s) + surname, as the payroll shows them),
+// category, phone, UIF registered, Active/Inactive, and their rates below.
+// Employees are never deleted: mark them Inactive instead.
+//   employee:  read with OWNER_EMPLOYEE_COLUMNS (includes uif_registered)
 //   backLabel: where Back goes (e.g. "Missing rates" when opened from there)
 function EmployeeForm({ employee, onDone, backLabel = 'Employees' }) {
-  const [fullName, setFullName] = useState(employee?.full_name ?? '')
+  const [firstNames, setFirstNames] = useState(() => nameParts(employee).firstNames)
+  const [surname, setSurname] = useState(() => nameParts(employee).surname)
+  const [uifRegistered, setUifRegistered] = useState(Boolean(employee?.uif_registered))
   const [category, setCategory] = useState(employee?.category ?? '')
   const [phone, setPhone] = useState(employee?.phone ?? '')
   const [status, setStatus] = useState(employee?.status ?? 'approved')
@@ -39,7 +43,7 @@ function EmployeeForm({ employee, onDone, backLabel = 'Employees' }) {
   const [pickingCategory, setPickingCategory] = useState(false)
 
   function problem() {
-    if (!fullName.trim()) return "Enter the employee's full name."
+    if (!firstNames.trim()) return "Enter the employee's first name."
     if (!category) return 'Choose a category.'
     if (phone.trim() && !/^[0-9+() -]{6,20}$/.test(phone.trim())) {
       return 'Enter a phone number with digits only, e.g. 082 123 4567.'
@@ -58,7 +62,13 @@ function EmployeeForm({ employee, onDone, backLabel = 'Employees' }) {
     setBusy(true)
 
     if (employee) {
-      const values = { full_name: fullName.trim(), category, phone: phone.trim() || null }
+      const values = {
+        full_name: fullNameOf({ firstNames, surname }),
+        surname: fullNameOf({ surname }) || null,
+        uif_registered: uifRegistered,
+        category,
+        phone: phone.trim() || null,
+      }
       if (employee.status !== 'pending') values.status = status
       const { data, error: saveError } = await supabase
         .from('employees')
@@ -81,7 +91,7 @@ function EmployeeForm({ employee, onDone, backLabel = 'Employees' }) {
     let personId = addedId
     if (!personId) {
       try {
-        personId = (await addEmployee(supabase, { fullName, category, phone })).id
+        personId = (await addEmployee(supabase, { firstNames, surname, category, phone, uifRegistered })).id
         setAddedId(personId)
       } catch {
         setBusy(false)
@@ -132,12 +142,20 @@ function EmployeeForm({ employee, onDone, backLabel = 'Employees' }) {
         <Section title="Details">
           <FieldRow
             icon={UserCircleIcon}
-            label="Full name"
-            placeholder="Name and surname"
+            label="First name(s)"
+            placeholder="e.g. Johannes"
             required
             disabled={Boolean(addedId)}
-            value={fullName}
-            onChange={(e) => setFullName(e.target.value)}
+            value={firstNames}
+            onChange={(e) => setFirstNames(e.target.value)}
+          />
+          <FieldRow
+            icon={UserIcon}
+            label="Surname"
+            placeholder="Optional"
+            disabled={Boolean(addedId)}
+            value={surname}
+            onChange={(e) => setSurname(e.target.value)}
           />
           <Row
             icon={TagIcon}
@@ -155,6 +173,14 @@ function EmployeeForm({ employee, onDone, backLabel = 'Employees' }) {
             disabled={Boolean(addedId)}
             value={phone}
             onChange={(e) => setPhone(e.target.value)}
+          />
+          <SwitchRow
+            icon={IdentificationCardIcon}
+            title="UIF registered"
+            subtitle="The payroll deducts 1% UIF only for registered people"
+            checked={uifRegistered}
+            disabled={Boolean(addedId)}
+            onChange={setUifRegistered}
           />
         </Section>
 

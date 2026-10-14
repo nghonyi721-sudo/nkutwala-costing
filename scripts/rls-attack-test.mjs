@@ -25,6 +25,9 @@
 // For new employees and project teams, each run creates its own "ZZ Pending
 // Test <run>" project and "ZZ Pending" people (added by site manager 1 the
 // app's way); at the end the people are inactive and the project complete.
+// For the payroll and expenses exports, each run creates its own "ZZ Payroll
+// Test <run>" projects and "ZZ Payroll" people (reports dated 2097); its
+// receipts end reversed or rejected and the projects complete.
 
 import { createHash, randomUUID } from 'node:crypto'
 import { readFileSync } from 'node:fs'
@@ -48,9 +51,9 @@ import {
 } from '../src/lib/employeeSteps.js'
 // The app's own export code (the same Excel files the app saves).
 import { buildProjectCost, fetchProjectCost } from '../src/lib/exports/projectCost.js'
-import { buildPayrollHours, fetchPayrollHours } from '../src/lib/exports/payrollHours.js'
-import { ALLOCATION_TITLE, PAY_ONLY_UNFILTERED, PAY_TITLE, exportLogFilters } from '../src/lib/exports/workbook.js'
-import { SUPERSEDED_NOTE, buildPayRun, fetchPayRun } from '../src/lib/exports/payRun.js'
+import { buildPayroll, fetchPayroll } from '../src/lib/exports/payroll.js'
+import { buildExpenses, fetchExpenses } from '../src/lib/exports/expenses.js'
+import { exportLogFilters } from '../src/lib/exports/workbook.js'
 
 process.loadEnvFile(fileURLToPath(new URL('../.env', import.meta.url)))
 
@@ -83,6 +86,7 @@ const ALLOWED_COLUMNS = {
   employees: [
     'id', 'company_id', 'full_name', 'category', 'active', 'created_at', 'phone', 'status',
     'created_by', 'approved_at', 'approved_by', 'rejected_at', 'rejected_by', 'reject_reason',
+    'surname', 'uif_registered', 'first_names',
   ],
   project_employees: ['id', 'company_id', 'project_id', 'employee_id', 'assigned_by', 'assigned_at', 'active'],
   equipment: ['id', 'company_id', 'name', 'ownership', 'active', 'created_at'],
@@ -91,7 +95,7 @@ const ALLOWED_COLUMNS = {
     'start_time', 'end_time', 'rain_percent', 'delay_hours', 'fuel_litres',
     'dsti_done', 'internal_audit', 'near_miss', 'safety_moment', 'activities',
     'status', 'submitted_at', 'reopened_at', 'reopened_by', 'reopen_reason',
-    'created_at', 'updated_at',
+    'created_at', 'updated_at', 'all_overtime',
   ],
   report_crew: ['id', 'report_id', 'employee_id', 'hours', 'created_at'],
   report_equipment: ['id', 'report_id', 'equipment_id', 'hours', 'created_at'],
@@ -207,7 +211,7 @@ async function findOrCreate(client, table, nameColumn, values) {
 // anyone's pick lists. Returns their id.
 async function createTestPerson(name, { rate, reject = false }) {
   try {
-    const person = await addEmployee(owner.client, { fullName: name, category: 'general_worker' })
+    const person = await addEmployee(owner.client, { firstNames: name, category: 'general_worker' })
     if (reject) {
       await rejectEmployee(owner.client, person.id, 'RLS test person')
       return person.id
@@ -2405,30 +2409,27 @@ const unratedName = `ZZ Costing Unrated ${RUN_TAG}`
 }
 
 {
-  const name = "Export 2 (the app's own file): payroll lists the rated person at R1,100 gross incl. overtime; unpriced hours shown"
-  try {
-    const data = await fetchPayrollHours(owner.client, { projects: null, from: COST_DAY_1, to: COST_DAY_3 })
-    const { workbook } = buildPayrollHours(data, { ...exportMeta, projects: null, from: COST_DAY_1, to: COST_DAY_3 })
-    const rated = data.people.find((person) => person.employee_id === ratedEmployeeId)
-    const unrated = data.people.find((person) => person.employee_id === unratedEmployeeId)
-    const sheets = workbook.worksheets.map((sheet) => sheet.name).join(', ')
-    const warning = workbook.getWorksheet('Payroll hours').getRow(1).getCell(1).value
-    const problems = [
-      rated?.included && Number(rated.hours) === 10 && Number(rated.gross) === 1100 && Number(rated.ot_pay) === 300
-        ? null
-        : `Rated: ${JSON.stringify(rated)}`,
-      unrated?.included && Number(unrated.unpriced_hours) === 2 && Number(unrated.gross) === 0 ? null : `Unrated: ${JSON.stringify(unrated)}`,
-      personValue(workbook, 'Payroll hours', ratedName, 'Gross (provisional)') === 1100 ? null : 'Rated gross not on the sheet',
-      personValue(workbook, 'Payroll hours', ratedName, 'Overtime hours') === 2 ? null : 'Rated overtime hours not on the sheet',
-      personValue(workbook, 'Payroll hours', unratedName, 'Unpriced hours (no rate on the day)') === 2 ? null : 'Unpriced hours not on the sheet',
-      sheets === 'Payroll hours, Daily grid, Excluded' ? null : `Sheets: ${sheets}`,
-      warning === PAY_TITLE && !String(warning).includes('OVERTIME') ? null : `Title: ${warning}`,
-    ].filter(Boolean)
-    record(name, problems.length === 0, problems.length ? problems.join('; ') : 'Rated: 10 h (2 h overtime), R1,100 gross. Unrated: 2 h unpriced, R0. Three sheets; "NOT A PAYSLIP" in the title, no "overtime not applied".')
-  } catch (error) {
-    record(name, false, `Could not build it: ${error.message}`)
-  }
-  covers('export_payroll', 'export_labour', 'export_daily_hours')
+  // The person with no rate on their day has 2 h here: the payroll is never
+  // made with them silently left out or at R0.
+  const name = 'Payroll for the costing project: refused while someone has hours but no rate - and it names them'
+  const [lines, checks] = await Promise.all([
+    owner.client.rpc('payroll_lines', { p_project_id: costProjectId, p_from: COST_DAY_1, p_to: COST_DAY_3 }),
+    owner.client.rpc('payroll_checks', { p_project_id: costProjectId, p_from: COST_DAY_1, p_to: COST_DAY_3 }),
+  ])
+  const unpriced = checks.data?.[0]?.unpriced ?? []
+  const ok =
+    lines.error?.code === '23514' &&
+    String(lines.error.message).includes(unratedName) &&
+    !checks.error &&
+    unpriced.length === 1 &&
+    unpriced[0].employee_id === unratedEmployeeId &&
+    Number(unpriced[0].hours) === 2
+  record(
+    name,
+    ok,
+    ok ? `Refused: ${lines.error.message} The Payroll screen's check lists them with 2 h.` : `Lines: ${lines.error?.message ?? JSON.stringify(lines.data)}; checks: ${JSON.stringify(checks.data ?? checks.error)}`,
+  )
+  covers('payroll_lines', 'payroll_checks', 'payroll_check_inputs')
 }
 
 // --- The export log ------------------------------------------------------------
@@ -2473,10 +2474,6 @@ for (const [fn, args, note] of [
   ['export_cost_summary', allExportArgs, ' for all projects'],
   ['export_labour', exportArgs, ''],
   ['export_labour', allExportArgs, ' for all projects'],
-  ['export_payroll', exportArgs, ''],
-  ['export_payroll', allExportArgs, ' for all projects'],
-  ['export_daily_hours', exportArgs, ''],
-  ['export_daily_hours', allExportArgs, ' for all projects'],
   ['export_receipts', exportArgs, ''],
   ['export_receipts', allExportArgs, ' for all projects'],
   ['export_weekly', exportArgs, ''],
@@ -2733,18 +2730,24 @@ async function pendingProjectCosts() {
 const pendingName = `ZZ Pending Person ${RUN_TAG}`
 let pendingPerson = null
 {
-  const name = "Site manager adds a new person (the app's way): Pending, added by them"
+  const name = "Site manager adds a new person (the app's way): Pending, added by them, first name(s) and surname"
   try {
+    // Full name "ZZ Pending Person <run>": first names "ZZ Pending Person",
+    // surname the run tag.
     pendingPerson = await addEmployee(site.client, {
-      fullName: pendingName,
+      firstNames: 'ZZ Pending Person',
+      surname: RUN_TAG,
       category: 'general_worker',
       phone: '082 000 0000',
     })
     const ok =
       pendingPerson.status === 'pending' &&
       pendingPerson.created_by === site.userId &&
-      pendingPerson.approved_at === null
-    record(name, ok, ok ? 'Saved as Pending; the database recorded who added them.' : `Got: ${JSON.stringify(pendingPerson)}`)
+      pendingPerson.approved_at === null &&
+      pendingPerson.full_name === pendingName &&
+      pendingPerson.first_names === 'ZZ Pending Person' &&
+      pendingPerson.surname === RUN_TAG
+    record(name, ok, ok ? 'Saved as Pending; the database recorded who added them; full name built from first name(s) + surname.' : `Got: ${JSON.stringify(pendingPerson)}`)
   } catch (error) {
     record(name, false, `Could not add them: ${error.message}`)
   }
@@ -2756,16 +2759,49 @@ if (!pendingPerson) stop('the new-employee checks need the person site manager 1
   const name = 'Site manager fixes the details of the pending person they added'
   try {
     const updated = await updateEmployeeDetails(site.client, pendingPerson.id, {
-      fullName: pendingName,
+      firstNames: 'ZZ Pending Person',
+      surname: RUN_TAG,
       category: 'semi_skilled',
       phone: '',
     })
-    const ok = updated.category === 'semi_skilled' && updated.phone === null && updated.status === 'pending'
-    record(name, ok, ok ? 'Category and phone changed; still Pending.' : `Got: ${JSON.stringify(updated)}`)
+    const ok =
+      updated.category === 'semi_skilled' &&
+      updated.phone === null &&
+      updated.status === 'pending' &&
+      updated.surname === RUN_TAG
+    record(name, ok, ok ? 'Category and phone changed; surname kept; still Pending.' : `Got: ${JSON.stringify(updated)}`)
   } catch (error) {
     record(name, false, `Could not change them: ${error.message}`)
   }
   covers('employees_before_write')
+}
+
+await attackUpdate(
+  'Site manager marks the person they added as UIF registered',
+  site,
+  owner,
+  'employees',
+  pendingPerson.id,
+  { uif_registered: true },
+  'uif_registered',
+)
+await attackInsert(
+  'Site manager adds someone already marked UIF registered',
+  site.client,
+  'employees',
+  { full_name: `ZZ Pending UIF ${RUN_TAG}`, category: 'general_worker', uif_registered: true },
+)
+{
+  const name = "A surname that isn't the end of the full name is refused"
+  const { error } = await site.client
+    .from('employees')
+    .update({ surname: 'Nobody' })
+    .eq('id', pendingPerson.id)
+    .select('id')
+  const after = await readPerson(pendingPerson.id)
+  const ok = error?.code === '23514' && after?.full_name === pendingName
+  record(name, ok, ok ? `Refused: ${error.message}` : `Error: ${error?.message ?? 'none'}; full name ${after?.full_name}`)
+  covers('employees')
 }
 
 for (const [label, changes] of [
@@ -3025,20 +3061,13 @@ if (!pendingReportId) stop('the pending-hours checks need site manager 1\'s repo
   covers('pending_employees')
 }
 
+const pendingPayrollArgs = { p_project_id: pendingProjectId, p_from: PENDING_DAY, p_to: PENDING_DAY }
 {
-  const name = 'Export 2 before approval: the pending person is only on the Excluded sheet, with their 4 h'
-  try {
-    const data = await fetchPayrollHours(owner.client, { projects: null, from: PENDING_DAY, to: PENDING_DAY })
-    const { workbook } = buildPayrollHours(data, { ...exportMeta, projects: null, from: PENDING_DAY, to: PENDING_DAY })
-    const row = data.people.find((person) => person.employee_id === pendingPerson.id)
-    const onPayroll = personValue(workbook, 'Payroll hours', pendingName, 'Hours')
-    const onExcluded = personValue(workbook, 'Excluded', pendingName, 'Hours')
-    const ok = row && row.included === false && Number(row.hours) === 4 && onPayroll === undefined && onExcluded === 4
-    record(name, ok, ok ? 'Not on the payroll sheet; on Excluded with 4 h - nothing silently dropped.' : `Row: ${JSON.stringify(row)}; payroll ${onPayroll}; excluded ${onExcluded}`)
-  } catch (error) {
-    record(name, false, `Could not build it: ${error.message}`)
-  }
-  covers('export_payroll')
+  const name = 'Payroll before approval: refused, naming the pending person (never left out silently, never R0)'
+  const { error } = await owner.client.rpc('payroll_blocks', pendingPayrollArgs)
+  const ok = error?.code === '23514' && String(error.message).includes(pendingName)
+  record(name, ok, ok ? `Refused: ${error.message}` : `Got: ${error?.message ?? 'no error - the payroll was made'}`)
+  covers('payroll_blocks', 'payroll_lines')
 }
 
 // --- The owner decides ---------------------------------------------------------------
@@ -3093,6 +3122,21 @@ if (!pendingReportId) stop('the pending-hours checks need site manager 1\'s repo
   covers('approve_employee', 'rate_on', 'employees_before_write')
 }
 
+{
+  const name = 'Payroll after approval: the person is on it - name and surname apart, 4 h at R100 = R400'
+  const { data, error } = await owner.client.rpc('payroll_lines', pendingPayrollArgs)
+  const row = data?.find((line) => line.employee_id === pendingPerson.id)
+  const ok =
+    !error &&
+    row?.first_names === 'ZZ Pending Person' &&
+    row.surname === RUN_TAG &&
+    Number(row.normal_hours) === 4 &&
+    Number(row.total_salary) === 400 &&
+    row.uif === null
+  record(name, ok, ok ? 'NAME "ZZ Pending Person", SURNAME the run tag; R400; UIF blank (not registered).' : `Got: ${error?.message ?? JSON.stringify(data)}`)
+  covers('payroll_lines')
+}
+
 await attackUpdate(
   'Site manager renames the person after they were approved',
   site,
@@ -3107,7 +3151,7 @@ covers('employees_before_write')
 {
   const name = "Owner rejects a new person with a reason (the app's way)"
   try {
-    const second = await addEmployee(site.client, { fullName: `ZZ Pending Reject ${RUN_TAG}`, category: 'general_worker' })
+    const second = await addEmployee(site.client, { firstNames: `ZZ Pending Reject ${RUN_TAG}`, category: 'general_worker' })
     await rejectEmployee(owner.client, second.id, 'RLS test: duplicate')
     const after = await readPerson(second.id)
     const ok =
@@ -3137,69 +3181,33 @@ covers('employees_before_write')
 // =============================================================================
 // Pay is worked out per person per DAY across all reports and projects:
 // up to 8 h ordinary, the rest overtime at x1.5, at the rate on that day,
-// then shared between projects by their share of the day's hours. Its own
-// projects, people and dates. The switched-off rules (weekly, Sunday,
-// public holiday) are proven in a 2099 test week with a temporary rule that
-// is voided afterwards - real dates are never touched.
+// then shared between projects by their share of the day's hours. A report
+// marked "Sunday or public holiday" (all_overtime) is all overtime. The rule
+// is fixed (there are no pay rule settings). Its own projects, people and
+// dates.
 console.log('\nOvertime attacks and sums…\n')
 
 const OT_PREFIX = 'ZZ Overtime Test'
 const OT_MON = '2026-05-04' // a Monday
 const OT_WED = '2026-05-06'
 const OT_THU = '2026-05-07'
-const TEST_RULE_FROM = '2099-01-01'
-const WEEK_2099 = ['2099-03-02', '2099-03-03', '2099-03-04', '2099-03-05', '2099-03-06', '2099-03-07'] // Mon-Sat
-const HOLIDAY_2099 = '2099-03-10' // a Tuesday
-const SUNDAY_2099 = '2099-03-15'
+const OT_SUN = '2026-05-10'
 const R100 = { hourly_rate: 100, effective_from: '2026-01-01' }
 
-// Finish off what an interrupted run left behind: projects, and a live 2099
-// test rule or test holiday.
+// Finish off projects an interrupted run left behind.
 {
-  const results = await Promise.all([
-    owner.client.from('projects').update({ status: 'complete' }).like('name', `${OT_PREFIX}%`).eq('status', 'active'),
-    owner.client
-      .from('pay_rules')
-      .update({ void_reason: 'RLS test: tidy-up' })
-      .eq('effective_from', TEST_RULE_FROM)
-      .is('voided_at', null),
-    owner.client
-      .from('public_holidays')
-      .update({ void_reason: 'RLS test: tidy-up' })
-      .eq('holiday_date', HOLIDAY_2099)
-      .is('voided_at', null),
-  ])
-  const failed = results.find((result) => result.error)
-  if (failed) stop(`owner could not tidy up old overtime test data: ${failed.error.message}`)
+  const { error } = await owner.client
+    .from('projects')
+    .update({ status: 'complete' })
+    .like('name', `${OT_PREFIX}%`)
+    .eq('status', 'active')
+  if (error) stop(`owner could not tidy up old overtime test data: ${error.message}`)
 }
 
-// --- Site manager: pay rules and the overtime views are owner-only ------------
-await attackReadNothing('Site manager reads pay_rules', site.client, 'pay_rules')
-await attackReadNothing('Site manager reads public_holidays', site.client, 'public_holidays')
+// --- Site manager: the overtime views are owner-only ----------------------------
 await attackReadNothing('Site manager reads labour_days (pay per person per day)', site.client, 'labour_days')
 await attackReadNothing('Site manager reads labour_lines (pay per report line)', site.client, 'labour_lines')
-covers('pay_rules', 'public_holidays', 'labour_days', 'labour_lines')
-await attackInsert('Site manager adds a pay rule', site.client, 'pay_rules', { effective_from: '2030-01-01', ot_multiplier: 3 })
-await attackInsert('Site manager adds a public holiday', site.client, 'public_holidays', { holiday_date: '2030-01-02', name: 'Attack' })
-covers('pay_rules', 'public_holidays')
-{
-  const { data: seed } = await owner.client
-    .from('pay_rules')
-    .select('id')
-    .eq('effective_from', '2000-01-01')
-    .is('voided_at', null)
-    .maybeSingle()
-  if (!seed) stop('the overtime checks need the first pay rule (from 1 Jan 2000) - run the 8A-1 migration first.')
-  await attackUpdate('Site manager voids the pay rule in force', site, owner, 'pay_rules', seed.id, { void_reason: 'attack' }, 'void_reason')
-  await attackUpdate('Owner edits a pay rule (rules are never edited)', owner, owner, 'pay_rules', seed.id, { ot_multiplier: 3 }, 'ot_multiplier')
-  covers('pay_rules', 'pay_rules_before_write')
-}
-for (const fn of ['pay_rules_before_write', 'public_holidays_before_write']) {
-  const name = `Site manager calls the trigger function ${fn}() directly`
-  const { error } = await site.client.rpc(fn, {})
-  record(name, Boolean(error), error ? `Refused: ${error.message}` : 'BREACH: it ran.')
-  covers(fn)
-}
+covers('labour_days', 'labour_lines')
 
 // --- Owner, at R100/h ------------------------------------------------------------
 const otProjectA = await ownerInsert('projects', { name: `${OT_PREFIX} A ${RUN_TAG}`, status: 'active' }, 'overtime test project A')
@@ -3208,13 +3216,13 @@ const splitPerson = await createTestPerson(`ZZ OT Split ${RUN_TAG}`, { rate: R10
 const eightPerson = await createTestPerson(`ZZ OT Eight ${RUN_TAG}`, { rate: R100 })
 const raisePerson = await createTestPerson(`ZZ OT Raise ${RUN_TAG}`, { rate: R100 })
 await ownerInsert('employee_rates', { employee_id: raisePerson, hourly_rate: 120, effective_from: OT_THU }, 'the R120 rate from Thursday')
-const weekPerson = await createTestPerson(`ZZ OT Week ${RUN_TAG}`, { rate: R100 })
-const premiumPerson = await createTestPerson(`ZZ OT Premium ${RUN_TAG}`, { rate: R100 })
+const sundayPerson = await createTestPerson(`ZZ OT Sunday ${RUN_TAG}`, { rate: R100 })
 
-// A submitted report by site manager 1.
-async function otReport(projectId, date, crew) {
+// A submitted report by site manager 1. allOvertime: "Sunday or public
+// holiday - all hours are overtime".
+async function otReport(projectId, date, crew, { allOvertime = false } = {}) {
   const { data: reportId, error } = await site.client.rpc('save_report_draft', {
-    p_report: { project_id: projectId, report_date: date, activities: `RLS overtime test ${RUN_TAG}` },
+    p_report: { project_id: projectId, report_date: date, activities: `RLS overtime test ${RUN_TAG}`, all_overtime: allOvertime },
     p_crew: crew,
     p_equipment: [],
   })
@@ -3322,113 +3330,69 @@ async function projectCharge(projectId, employeeId, day) {
   covers('labour_days', 'rate_on')
 }
 
-// --- The switched-off rules, in a 2099 test week -------------------------------
-let testRuleId = null
-let testHolidayId = null
+// --- "Sunday or public holiday": every hour on the report is overtime -----------
+// 5 h on a Sunday report on project B + 3 h on an ordinary report on project
+// A the same day: 3 h normal (A), 5 h overtime (B).
+const sundayReport = await otReport(otProjectB, OT_SUN, [{ employee_id: sundayPerson, hours: 5 }], { allOvertime: true })
+await otReport(otProjectA, OT_SUN, [{ employee_id: sundayPerson, hours: 3 }])
+
 {
-  const name = 'Owner adds a dated pay rule and a public holiday (2099 test week)'
-  const rule = await owner.client
-    .from('pay_rules')
-    .insert({ effective_from: TEST_RULE_FROM, weekly_ot_enabled: true, sunday_enabled: true, public_holiday_enabled: true })
-    .select('id, created_by')
-    .single()
-  const holiday = await owner.client
-    .from('public_holidays')
-    .insert({ holiday_date: HOLIDAY_2099, name: `RLS test holiday ${RUN_TAG}` })
+  const name = 'Sunday / public holiday report: its 5 h are all overtime (R750); the 3 h on an ordinary report stay normal (R300)'
+  try {
+    const day = await payDay(sundayPerson, OT_SUN)
+    const [a] = await projectCharge(otProjectA, sundayPerson, OT_SUN)
+    const [b] = await projectCharge(otProjectB, sundayPerson, OT_SUN)
+    const ok =
+      Number(day?.total_hours) === 8 &&
+      Number(day.ordinary_hours) === 3 &&
+      Number(day.ot_hours) === 5 &&
+      Number(day.total_pay) === 1050 &&
+      Number(a?.ordinary_hours) === 3 &&
+      Number(a.amount) === 300 &&
+      Number(b?.ot_hours) === 5 &&
+      Number(b.ordinary_hours) === 0 &&
+      Number(b.amount) === 750
+    record(
+      name,
+      ok,
+      ok ? 'Day: 3 h x R100 + 5 h x R150 = R1,050. Project A R300 (normal), project B R750 (all overtime).' : `Day: ${JSON.stringify(day)}; A: ${JSON.stringify(a)}; B: ${JSON.stringify(b)}`,
+    )
+  } catch (error) {
+    record(name, false, `Error: ${error.message}`)
+  }
+  covers('labour_days', 'labour_lines', 'project_cost_lines', 'save_report_draft')
+}
+
+{
+  // Reopening is the only change an owner may make to a submitted report.
+  const name = 'Owner reopens the Sunday report but also switches off "all overtime" in the same step'
+  const { error } = await owner.client
+    .from('daily_reports')
+    .update({ status: 'draft', reopen_reason: 'RLS test', all_overtime: false })
+    .eq('id', sundayReport)
     .select('id')
-    .single()
-  testRuleId = rule.data?.id ?? null
-  testHolidayId = holiday.data?.id ?? null
-  const failed = rule.error ?? holiday.error
-  if (failed) record(name, false, `Error: ${failed.message}`)
-  else record(name, rule.data.created_by === owner.userId, 'Added; the rule records who added it.')
-  covers('pay_rules', 'public_holidays', 'pay_rules_before_write', 'public_holidays_before_write')
+  const { data: after } = await owner.client.from('daily_reports').select('status, all_overtime').eq('id', sundayReport).single()
+  const ok = Boolean(error) && after?.status === 'submitted' && after.all_overtime === true
+  record(name, ok, ok ? `Refused: ${error.message}` : `Error: ${error?.message ?? 'none'}; now ${JSON.stringify(after)}`)
+  covers('daily_reports', 'daily_reports_before_update')
 }
-if (!testRuleId || !testHolidayId) stop('the 2099 checks need the test rule and holiday')
-
-for (const day of WEEK_2099) await otReport(otProjectA, day, [{ employee_id: weekPerson, hours: 8 }])
-await otReport(otProjectA, HOLIDAY_2099, [{ employee_id: premiumPerson, hours: 8 }])
-await otReport(otProjectA, SUNDAY_2099, [{ employee_id: premiumPerson, hours: 5 }])
-
-{
-  const name = 'Public holiday rule (when ON): 8 h on a holiday at x2.0 = R1,600'
-  try {
-    const day = await payDay(premiumPerson, HOLIDAY_2099)
-    const ok = day?.premium_kind === 'public_holiday' && Number(day.premium_hours) === 8 && Number(day.total_pay) === 1600 && Number(day.ot_hours) === 0
-    record(name, ok, ok ? '8 h x R100 x 2.0 = R1,600.' : `Got: ${JSON.stringify(day)}`)
-  } catch (error) {
-    record(name, false, `Error: ${error.message}`)
-  }
-  covers('labour_days', 'public_holidays')
-}
-
-{
-  const name = 'Sunday rule (when ON): 5 h on a Sunday at x2.0 = R1,000'
-  try {
-    const day = await payDay(premiumPerson, SUNDAY_2099)
-    const ok = day?.premium_kind === 'sunday' && Number(day.premium_hours) === 5 && Number(day.total_pay) === 1000
-    record(name, ok, ok ? '5 h x R100 x 2.0 = R1,000.' : `Got: ${JSON.stringify(day)}`)
-  } catch (error) {
-    record(name, false, `Error: ${error.message}`)
-  }
-  covers('labour_days', 'pay_rules')
-}
-
-{
-  const name = 'Weekly rule (when ON): 8 h Mon-Sat = 48 h; 3 h over 45 become overtime on Saturday (R950)'
-  try {
-    const days = await Promise.all(WEEK_2099.map((day) => payDay(weekPerson, day)))
-    const saturday = days.at(-1)
-    const weekdays = days.slice(0, -1)
-    const ok =
-      weekdays.every((day) => Number(day?.total_pay) === 800 && Number(day.ot_hours) === 0) &&
-      Number(saturday?.ordinary_hours) === 5 &&
-      Number(saturday.ot_hours) === 3 &&
-      Number(saturday.total_pay) === 950
-    record(name, ok, ok ? 'Mon-Fri R800 each; Saturday 5 h x R100 + 3 h x R150 = R950.' : `Got: ${JSON.stringify(days)}`)
-  } catch (error) {
-    record(name, false, `Error: ${error.message}`)
-  }
-  covers('labour_days', 'pay_rules')
-}
-
-{
-  const name = 'Owner voids a pay rule without a reason'
-  const { error } = await owner.client.from('pay_rules').update({ void_reason: ' ' }).eq('id', testRuleId).select('id')
-  record(name, error?.code === '23514', error ? `Refused: ${error.message}` : 'BREACH: voided without a reason.')
-  covers('pay_rules_before_write')
-}
-
-{
-  const name = 'Voiding the 2099 rule and holiday puts those days back on the rule in force (Saturday R800)'
-  const results = await Promise.all([
-    owner.client.from('pay_rules').update({ void_reason: 'RLS test: done' }).eq('id', testRuleId).select('voided_at'),
-    owner.client.from('public_holidays').update({ void_reason: 'RLS test: done' }).eq('id', testHolidayId).select('voided_at'),
-  ])
-  const failed = results.find((result) => result.error)
-  try {
-    if (failed) throw failed.error
-    const saturday = await payDay(weekPerson, WEEK_2099.at(-1))
-    const holiday = await payDay(premiumPerson, HOLIDAY_2099)
-    const ok =
-      results.every((result) => result.data?.[0]?.voided_at) &&
-      Number(saturday?.total_pay) === 800 &&
-      holiday?.premium_kind === null &&
-      Number(holiday.total_pay) === 800
-    record(name, ok, ok ? 'Voided (kept in history); Saturday back to R800, the holiday back to a normal R800 day.' : `Saturday: ${JSON.stringify(saturday)}; holiday: ${JSON.stringify(holiday)}`)
-  } catch (error) {
-    record(name, false, `Error: ${error.message}`)
-  }
-  covers('pay_rules', 'public_holidays', 'labour_days')
-}
+await attackUpdate(
+  'Site manager switches "all overtime" off on their submitted Sunday report',
+  site,
+  owner,
+  'daily_reports',
+  sundayReport,
+  { all_overtime: false },
+  'all_overtime',
+)
 
 // =============================================================================
 // Exports: the project filter
 // =============================================================================
 // 8A's split person worked 6 h on project A + 4 h on project B on OT_MON at
 // R100/h: R1,100 for the day (8 h + 2 h overtime). Filtered to projects,
-// the pay exports give only those projects' share - a PROJECT LABOUR COST
-// ALLOCATION: A R660, B R440. The 8-hour person is on A only (R800).
+// the cost exports give only those projects' share: A R660, B R440. The
+// 8-hour person is on A only (R800).
 console.log('\nExport project filter…\n')
 
 const otA = { id: otProjectA, name: `${OT_PREFIX} A ${RUN_TAG}` }
@@ -3436,13 +3400,6 @@ const otB = { id: otProjectB, name: `${OT_PREFIX} B ${RUN_TAG}` }
 const splitName = `ZZ OT Split ${RUN_TAG}`
 const fileSlug = (text) => text.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')
 const otDayArgs = (projects) => ({ p_project_ids: projects ? projects.map((p) => p.id) : null, p_from: OT_MON, p_to: OT_MON })
-
-// The owner's payroll rows for OT_MON (projects null = all projects).
-async function payrollRows(projects) {
-  const { data, error } = await owner.client.rpc('export_payroll', otDayArgs(projects))
-  if (error) throw error
-  return data
-}
 const splitRowOf = (rows) => rows.find((row) => row.employee_id === splitPerson)
 
 // A cell on a built sheet: the row whose first cell is `label` (and whose
@@ -3473,51 +3430,32 @@ function cellAt(workbook, sheetName, label, header, project) {
     formula: value?.formula ?? null,
   }
 }
-// Every line of text in a sheet's first column.
-const firstColumn = (workbook, sheetName) => {
-  const lines = []
-  workbook.getWorksheet(sheetName)?.eachRow((row) => lines.push(row.getCell(1).value))
-  return lines
-}
-
-let filteredA = []
-let filteredB = []
 {
-  const name = 'Export filter: payroll filtered to A = R660, to B = R440, all projects = R1,100; A + B = all projects'
+  // The payroll is per project: the 8-hour limit counts the whole day (all
+  // sites), each project's payroll shows its share.
+  const name = 'Payroll per project: the split day is shared - A 4.8 h + 1.2 h overtime = R660, B 3.2 h + 0.8 h = R440; together the day\'s R1,100'
   try {
-    let unfiltered
-    ;[filteredA, filteredB, unfiltered] = await Promise.all([payrollRows([otA]), payrollRows([otB]), payrollRows(null)])
-    const a = splitRowOf(filteredA)
-    const b = splitRowOf(filteredB)
-    const all = splitRowOf(unfiltered)
+    const payrollOf = async (project) => {
+      const { data, error } = await owner.client.rpc('payroll_lines', { p_project_id: project.id, p_from: OT_MON, p_to: OT_MON })
+      if (error) throw error
+      return splitRowOf(data)
+    }
+    const [a, b] = await Promise.all([payrollOf(otA), payrollOf(otB)])
     const ok =
-      Number(a?.gross) === 660 &&
-      Number(a.ordinary_pay) === 480 &&
+      Number(a?.normal_hours) === 4.8 &&
       Number(a.ot_hours) === 1.2 &&
-      Number(a.ot_pay) === 180 &&
-      a.project_id === otProjectA &&
-      Number(b?.gross) === 440 &&
+      Number(a.gross) === 480 &&
+      Number(a.overtime) === 180 &&
+      Number(a.total_salary) === 660 &&
+      Number(b?.normal_hours) === 3.2 &&
       Number(b.ot_hours) === 0.8 &&
-      Number(b.ot_pay) === 120 &&
-      b.project_id === otProjectB &&
-      Number(all?.gross) === 1100 &&
-      Number(all.ot_pay) === 300 &&
-      all.project_id === null &&
-      all.project_name === `${otA.name}, ${otB.name}` &&
-      Number(a.gross) + Number(b.gross) === Number(all.gross) &&
-      filteredA.every((row) => row.project_id === otProjectA) &&
-      filteredB.every((row) => row.project_id === otProjectB)
-    record(
-      name,
-      ok,
-      ok
-        ? 'A: R660 (4.8 h R480 + 1.2 h overtime R180). B: R440 (0.8 h overtime R120). All projects: R1,100 on one row, both projects named. R660 + R440 = R1,100.'
-        : `A: ${JSON.stringify(a)}; B: ${JSON.stringify(b)}; all: ${JSON.stringify(all)}`,
-    )
+      Number(b.total_salary) === 440 &&
+      Number(a.total_salary) + Number(b.total_salary) === 1100
+    record(name, ok, ok ? 'A R660 (R480 + R180 overtime), B R440 (R320 + R120); R660 + R440 = R1,100.' : `A: ${JSON.stringify(a)}; B: ${JSON.stringify(b)}`)
   } catch (error) {
     record(name, false, `Error: ${error.message}`)
   }
-  covers('export_payroll', 'export_labour')
+  covers('payroll_lines', 'round_half_even')
 }
 
 {
@@ -3560,78 +3498,6 @@ let filteredB = []
     record(name, false, `Error: ${error.message}`)
   }
   covers('export_labour', 'drill_hours')
-}
-
-{
-  const name = "Export filter (the app's own file): A + B = PROJECT LABOUR COST ALLOCATION, a subtotal per project, then the grand total"
-  try {
-    const projects = [otA, otB]
-    const data = await fetchPayrollHours(owner.client, { projects, from: OT_MON, to: OT_MON })
-    const { workbook, filename } = buildPayrollHours(data, { ...exportMeta, projects, from: OT_MON, to: OT_MON })
-    const SHEET = 'Labour allocation'
-    const MONEY_COLUMN = 'Allocated labour cost'
-    const lines = firstColumn(workbook, SHEET)
-    const subA = cellAt(workbook, SHEET, `Subtotal: ${otA.name}`, MONEY_COLUMN)
-    const subB = cellAt(workbook, SHEET, `Subtotal: ${otB.name}`, MONEY_COLUMN)
-    const total = cellAt(workbook, SHEET, 'Total', MONEY_COLUMN)
-    const dbTotal = Number(data.people[0]?.total_gross)
-    const aOnlyTotal = Number(filteredA[0]?.total_gross)
-    const bOnlyTotal = Number(filteredB[0]?.total_gross)
-    const expectedName = `nkutwala_labour-allocation_${fileSlug(otA.name)}+${fileSlug(otB.name)}_${OT_MON}_${OT_MON}.xlsx`
-    const problems = [
-      lines[0] === ALLOCATION_TITLE ? null : `Top line: ${lines[0]}`,
-      lines.includes(PAY_ONLY_UNFILTERED) ? null : 'No "pay only from the unfiltered pay run" note',
-      workbook.worksheets.map((sheet) => sheet.name).join(', ') === 'Labour allocation, Daily grid, Excluded' ? null : 'Sheets',
-      cellAt(workbook, SHEET, splitName, MONEY_COLUMN, otA.name).value === 660 ? null : 'Split person on A is not R660',
-      cellAt(workbook, SHEET, splitName, MONEY_COLUMN, otB.name).value === 440 ? null : 'Split person on B is not R440',
-      cellAt(workbook, SHEET, splitName, 'Overtime pay', otA.name).value === 180 ? null : 'A overtime is not R180',
-      subA.value === 1460 && subA.formula?.startsWith('SUM(') ? null : `Subtotal A: ${JSON.stringify(subA)}`,
-      subB.value === 440 && subB.formula?.startsWith('SUM(') ? null : `Subtotal B: ${JSON.stringify(subB)}`,
-      total.value === 1900 && total.formula?.includes('+') ? null : `Total: ${JSON.stringify(total)}`,
-      dbTotal === 1900 && dbTotal === aOnlyTotal + bOnlyTotal ? null : `Database totals: A+B ${dbTotal}, A ${aOnlyTotal}, B ${bOnlyTotal}`,
-      cellAt(workbook, 'Daily grid', `Subtotal: ${otA.name}`, 'Total hours').value === 14 ? null : 'Daily grid subtotal A is not 14 h',
-      filename === expectedName ? null : `File name ${filename}`,
-    ].filter(Boolean)
-    record(
-      name,
-      problems.length === 0,
-      problems.length
-        ? problems.join('; ')
-        : 'Allocation title and "pay only from the unfiltered pay run"; split person A R660 / B R440; subtotals A R1,460, B R440; total R1,900 = the database = A alone + B alone.',
-    )
-  } catch (error) {
-    record(name, false, `Could not build it: ${error.message}`)
-  }
-  covers('export_payroll', 'export_daily_hours')
-}
-
-{
-  const name = "Export filter (the app's own file): all projects = GROSS BEFORE DEDUCTIONS — NOT A PAYSLIP, the split person on one row at R1,100"
-  try {
-    const data = await fetchPayrollHours(owner.client, { projects: null, from: OT_MON, to: OT_MON })
-    const { workbook, filename } = buildPayrollHours(data, { ...exportMeta, projects: null, from: OT_MON, to: OT_MON })
-    const lines = firstColumn(workbook, 'Payroll hours')
-    const projectsWorked = (() => {
-      const sheet = workbook.getWorksheet('Payroll hours')
-      let found = null
-      sheet.eachRow((row) => {
-        if (row.getCell(1).value === splitName) found = row.getCell(2).value
-      })
-      return found
-    })()
-    const problems = [
-      lines[0] === PAY_TITLE ? null : `Top line: ${lines[0]}`,
-      lines.includes(PAY_ONLY_UNFILTERED) ? null : 'No "pay only from the unfiltered pay run" note',
-      lines.filter((line) => line === splitName).length === 1 ? null : 'The split person is not on exactly one row',
-      cellAt(workbook, 'Payroll hours', splitName, 'Gross (provisional)').value === 1100 ? null : 'Split person gross is not R1,100',
-      projectsWorked === `${otA.name}, ${otB.name}` ? null : `Projects worked: ${projectsWorked}`,
-      filename === `nkutwala_payroll-hours_all-projects_${OT_MON}_${OT_MON}.xlsx` ? null : `File name ${filename}`,
-    ].filter(Boolean)
-    record(name, problems.length === 0, problems.length ? problems.join('; ') : 'Full-pay title, the payment note; R1,100 on one row with both projects listed; all-projects file name.')
-  } catch (error) {
-    record(name, false, `Could not build it: ${error.message}`)
-  }
-  covers('export_payroll', 'export_daily_hours')
 }
 
 {
@@ -3681,10 +3547,10 @@ let filteredB = []
 }
 
 {
-  const name = 'Export log records the projects chosen (ids and names) and that it was an allocation'
+  const name = 'Export log records the projects chosen (ids and names) and any extra detail'
   const marker = `rls-filter-${RUN_TAG}`
   const filters = { ...exportLogFilters({ projects: [otA, otB], from: OT_MON, to: OT_MON, allocation: true }), marker }
-  const { error } = await owner.client.from('export_log').insert({ report_type: 'payroll_hours', filters })
+  const { error } = await owner.client.from('export_log').insert({ report_type: 'project_cost', filters })
   const { data } = await owner.client.from('export_log').select('user_id, filters').eq('filters->>marker', marker)
   const got = data?.[0]?.filters
   const all = exportLogFilters({ projects: null, from: OT_MON, to: OT_MON })
@@ -3698,7 +3564,7 @@ let filteredB = []
     got.allocation === true &&
     all.project_ids === null &&
     all.projects === 'All projects'
-  record(name, ok, ok ? 'Logged: both project ids and names, "allocation"; all projects logged as "All projects".' : `Error: ${error?.message}; got ${JSON.stringify(data)}`)
+  record(name, ok, ok ? 'Logged: both project ids and names and the extra detail; all projects logged as "All projects".' : `Error: ${error?.message}; got ${JSON.stringify(data)}`)
   covers('export_log')
 }
 
@@ -3770,7 +3636,7 @@ let filteredB = []
 }
 // Site manager 1 asks the OWNER's export functions about projects A and B
 // (their own reports): nothing.
-for (const fn of ['export_payroll', 'export_labour', 'export_cost_summary', 'export_daily_hours', 'export_receipts', 'export_weekly']) {
+for (const fn of ['export_labour', 'export_cost_summary', 'export_receipts', 'export_weekly']) {
   const name = `Site manager calls ${fn}() for projects A + B (their own reports)`
   const { data, error } = await site.client.rpc(fn, otDayArgs([otA, otB]))
   if (error?.code === PERMISSION_DENIED) record(name, true, 'Server refused (permission denied).')
@@ -3781,11 +3647,11 @@ for (const fn of ['export_payroll', 'export_labour', 'export_cost_summary', 'exp
 }
 
 // =============================================================================
-// Overtime warnings and the first pay rule (phase 8A-2)
+// Overtime warnings (phase 8A-2; limits fixed since the payroll exports)
 // =============================================================================
-// Warn only, never block: a day over the day limit (12 h, all projects) or a
-// Monday-Sunday week over the weekly overtime limit (10 h). Its own week in
-// 2098 (no real dates, no pay periods), on project A, at R100/h.
+// Warn only, never block: a day over 12 h (all projects) or a Monday-Sunday
+// week over 10 overtime hours. Its own week in 2098 (no real dates), on
+// project A, at R100/h.
 console.log('\nOvertime warnings…\n')
 
 const WARN_MON = '2098-03-03' // a Monday
@@ -3821,17 +3687,6 @@ const ofTestPeople = (rows) => (rows ?? []).filter((row) => row.employee_id === 
 {
   const name = '8A-2 overtime warnings: Monday 13 h (over 12 h), the week 15 h overtime (over 10 h); exactly 12 h / 10 h is no warning'
   try {
-    const { data: rule } = await owner.client
-      .from('pay_rules')
-      .select('warn_daily_hours, warn_weekly_ot_hours')
-      .is('voided_at', null)
-      .lte('effective_from', WARN_MON)
-      .order('effective_from', { ascending: false })
-      .limit(1)
-      .single()
-    if (Number(rule?.warn_daily_hours) !== 12 || Number(rule?.warn_weekly_ot_hours) !== 10) {
-      throw new Error(`the pay rule in force in 2098 has limits ${rule?.warn_daily_hours} h / ${rule?.warn_weekly_ot_hours} h; this check expects 12 h / 10 h`)
-    }
     const { data, error } = await owner.client.rpc('overtime_warnings', warnWeek(otProjectA))
     if (error) throw error
     const rows = ofTestPeople(data)
@@ -3879,30 +3734,6 @@ for (const [args, note] of [
   else record(name, data.length === 0, data.length === 0 ? 'Nothing came back.' : `LEAK: ${JSON.stringify(data).slice(0, 200)}`)
   covers('overtime_warnings')
 }
-{
-  // A blank reason, so even if the check were missing the rule could not be
-  // voided (the reason check would refuse it) - but the message must be the
-  // first-rule one.
-  const name = '8A-2 the first pay rule can never be voided - every day needs a rule'
-  const { data: first } = await owner.client
-    .from('pay_rules')
-    .select('id, effective_from')
-    .is('voided_at', null)
-    .order('effective_from')
-    .limit(1)
-    .single()
-  const { error } = await owner.client.from('pay_rules').update({ void_reason: ' ' }).eq('id', first?.id ?? randomUUID()).select('id')
-  const ok = error?.code === '23514' && String(error.message).includes('first pay rule')
-  record(name, ok, ok ? `Refused: ${error.message}` : `Got: ${error ? error.message : 'no error'}`)
-  covers('pay_rules_keep_first', 'pay_rules')
-}
-{
-  const name = 'Site manager calls the trigger function pay_rules_keep_first() directly'
-  const { error } = await site.client.rpc('pay_rules_keep_first', {})
-  record(name, Boolean(error), error ? `Refused: ${error.message}` : 'BREACH: it ran.')
-  covers('pay_rules_keep_first')
-}
-
 // --- Finish off this run's overtime test data (nothing can be deleted) ---------
 {
   const outcomes = await Promise.all([
@@ -3913,775 +3744,389 @@ for (const [args, note] of [
 }
 
 // =============================================================================
-// Pay periods and pay runs (phase 8B-1)
+// Payroll and expenses exports (docs/payroll-export-format.md)
 // =============================================================================
-// Pay periods are company-wide, never deleted and can never overlap, so the
-// test uses its own 2001+ "test window": each run takes the next free 14 days
-// after the previous run's (and the 14 after that for the late-hours check).
-// Real dates and the other tests' dates (2026, 2099) are never touched.
-console.log('\nPay period and pay run attacks…\n')
+// The owner picks a project and any dates. The payroll: 14-day blocks from
+// the start date (a sheet per month, by where each block ends), up to 8 h a
+// day normal (all sites together), the rest overtime at x1.5 (a "Sunday or
+// public holiday" report all overtime), at the rate on each day, money
+// rounded half to even, UIF 1% for UIF-registered people only (blank
+// otherwise). The expenses statement: approved receipts only. Its own
+// projects and people; payroll dates in 2097 (no real dates).
+console.log('\nPayroll and expenses attacks and sums…\n')
 
-const PAY_PREFIX = 'ZZ Pay Run Test'
-const PAY_WINDOW_END = '2020-01-01'
-let payStart
-{
-  const { data, error } = await owner.client
-    .from('pay_periods')
-    .select('end_date')
-    .lt('end_date', PAY_WINDOW_END)
-    .order('end_date', { ascending: false })
-    .limit(1)
-  if (error) stop(`the pay run checks need pay_periods - run the 8B-1 migration first (${error.message})`)
-  payStart = data.length ? shiftDate(data[0].end_date, 1) : '2001-01-01'
-}
-const payEnd = shiftDate(payStart, 13)
-const PAY_D1 = shiftDate(payStart, 1)
-const PAY_D2 = shiftDate(payStart, 2)
-const PAY_D3 = shiftDate(payStart, 3)
-const PAY_D4 = shiftDate(payStart, 4)
-const fromPeriodStart = { hourly_rate: 100, effective_from: payStart }
+const PAYROLL_PREFIX = 'ZZ Payroll Test'
+const PAY_FROM = '2097-08-28'
+const PAY_TO = '2097-09-22'
+const payArgs = (projectId, from = PAY_FROM, to = PAY_TO) => ({ p_project_id: projectId, p_from: from, p_to: to })
 
-// Finish off a project an interrupted run left active.
+// Finish off projects and receipts an interrupted run left behind.
 {
   const { error } = await owner.client
     .from('projects')
     .update({ status: 'complete' })
-    .like('name', `${PAY_PREFIX}%`)
+    .like('name', `${PAYROLL_PREFIX}%`)
     .eq('status', 'active')
-  if (error) stop(`owner could not tidy up old pay run test projects: ${error.message}`)
+  if (error) stop(`owner could not tidy up old payroll test projects: ${error.message}`)
 }
 
-const payProject = await ownerInsert('projects', { name: `${PAY_PREFIX} ${RUN_TAG}`, status: 'active' }, 'the pay run test project')
-const payA = await createTestPerson(`ZZ Pay A ${RUN_TAG}`, { rate: fromPeriodStart })
-const payB = await createTestPerson(`ZZ Pay B ${RUN_TAG}`, { rate: fromPeriodStart })
-// Approved, but the rate only starts after the hours below: unpriced.
-const payC = await createTestPerson(`ZZ Pay C ${RUN_TAG}`, { rate: { hourly_rate: 100, effective_from: shiftDate(payStart, 20) } })
-// Added by site manager 1: pending (no rate) - left out, paid later.
-let payD = null
-try {
-  payD = await addEmployee(site.client, { fullName: `ZZ Pay D ${RUN_TAG}`, category: 'general_worker' })
-} catch (error) {
-  stop(`site manager 1 could not add the pending pay run test person: ${error.message}`)
+const payrollProject = { id: null, name: `${PAYROLL_PREFIX} ${RUN_TAG}` }
+payrollProject.id = await ownerInsert('projects', { name: payrollProject.name, status: 'active' }, 'the payroll test project')
+const payrollOther = await ownerInsert('projects', { name: `${PAYROLL_PREFIX} Other ${RUN_TAG}`, status: 'active' }, 'the second payroll test project')
+const from2097 = (rate) => ({ rate: { hourly_rate: rate, effective_from: '2097-01-01' } })
+const molefi = await createTestPerson(`ZZ Payroll Molefi ${RUN_TAG}`, from2097(62.5))
+const johannes = await createTestPerson(`ZZ Payroll Johannes ${RUN_TAG}`, from2097(75))
+const amkhitha = await createTestPerson(`ZZ Payroll Amkhitha ${RUN_TAG}`, from2097(53))
+await ownerInsert('employee_rates', { employee_id: amkhitha, hourly_rate: 60, effective_from: '2097-09-04' }, 'the R60 rate from 4 Sept 2097')
+const kuux = await createTestPerson(`ZZ Payroll Kuux ${RUN_TAG}`, from2097(37.5))
+
+{
+  // As the app's Employee form does: the full name ends with the surname.
+  const name = 'Owner gives a person a surname and ticks UIF registered'
+  const { error } = await owner.client
+    .from('employees')
+    .update({ full_name: `ZZ Payroll Johannes ${RUN_TAG} Tsoeute`, surname: 'Tsoeute', uif_registered: true })
+    .eq('id', johannes)
+    .select('id')
+  record(name, !error, error ? `Could not: ${error.message}` : 'Saved.')
+  covers('employees', 'employees_before_write')
 }
 
-// A report by site manager 1 (submitted unless asked not to).
-async function payReport(date, crew, { submit = true } = {}) {
-  const { data: reportId, error } = await site.client.rpc('save_report_draft', {
-    p_report: { project_id: payProject, report_date: date, activities: `RLS pay run test ${RUN_TAG}` },
-    p_crew: crew,
+// Site manager 1's reports. Block 1 (28 Aug - 10 Sept 2097):
+//   Molefi R62.50: 8 days x 8 h + 10.3 h + 1 h = 73 h normal + 2.3 h overtime
+//     -> the spec's own example: R4,562.50 + R215.62 (215.625 half to even) = R4,778.12
+//   Johannes R75 (UIF): 8 h + 9 h + 6 h here / 4 h on another project the same
+//     day -> 8 + 8 + 4.8 = 20.8 h normal, 1 + 1.2 = 2.2 h overtime
+//     -> R1,560 + R247.50 = R1,807.50; UIF 18.075 -> R18.08; net R1,789.42
+//   Amkhitha: 8 h at R53 (3 Sept), 8 h at R60 (4 Sept) -> two rows, R424 and R480
+//   Kuux R37.50: 8 days x 8 h = 64 h -> R2,400
+// Block 2 (11 - 22 Sept 2097): Kuux 5 h on a Sunday report (all overtime,
+//   R281.25) + 8 h (R300); a DRAFT report that must not count.
+const PAY_DAYS = ['2097-08-28', '2097-08-29', '2097-08-30', '2097-08-31', '2097-09-01', '2097-09-02', '2097-09-03', '2097-09-04']
+for (const day of PAY_DAYS) {
+  const crew = [
+    { employee_id: molefi, hours: 8 },
+    { employee_id: kuux, hours: 8 },
+  ]
+  if (day === '2097-08-28') crew.push({ employee_id: johannes, hours: 8 })
+  if (day === '2097-08-29') crew.push({ employee_id: johannes, hours: 9 })
+  if (day === '2097-09-03' || day === '2097-09-04') crew.push({ employee_id: amkhitha, hours: 8 })
+  await otReport(payrollProject.id, day, crew)
+}
+await otReport(payrollProject.id, '2097-09-05', [{ employee_id: molefi, hours: 10.3 }])
+await otReport(payrollProject.id, '2097-09-06', [{ employee_id: molefi, hours: 1 }])
+await otReport(payrollProject.id, '2097-09-07', [{ employee_id: johannes, hours: 6 }])
+await otReport(payrollOther, '2097-09-07', [{ employee_id: johannes, hours: 4 }])
+await otReport(payrollProject.id, '2097-09-15', [{ employee_id: kuux, hours: 5 }], { allOvertime: true })
+await otReport(payrollProject.id, '2097-09-16', [{ employee_id: kuux, hours: 8 }])
+{
+  const { error } = await site.client.rpc('save_report_draft', {
+    p_report: { project_id: payrollProject.id, report_date: '2097-09-17', activities: `RLS payroll draft ${RUN_TAG}` },
+    p_crew: [{ employee_id: molefi, hours: 8 }],
     p_equipment: [],
   })
-  if (error) stop(`site manager 1 could not save a pay run test report: ${error.message}`)
-  if (submit) {
-    const { data, error: submitError } = await site.client
-      .from('daily_reports')
-      .update({ status: 'submitted' })
-      .eq('id', reportId)
-      .select('id')
-    if (submitError || data.length !== 1) stop(`site manager 1 could not submit a pay run test report: ${submitError?.message}`)
+  if (error) stop(`site manager 1 could not save the payroll test draft: ${error.message}`)
+}
+
+// Receipts on the payroll project, the app's way, dated today (receipts
+// can't be in the future): three approved, one left waiting.
+async function payrollReceipt(category, amount, tag, notes) {
+  const photo = testPhoto(`payroll-${tag}`)
+  const values = {
+    id: randomUUID(),
+    project_id: payrollProject.id,
+    receipt_date: saToday,
+    vendor: `${TEST_VENDOR_PREFIX} ${RUN_TAG} payroll ${tag}`,
+    category,
+    amount,
+    notes,
+    image_hash: sha256(photo),
   }
-  return reportId
+  try {
+    const saved = await saveDraft(site.client, values)
+    await uploadPhoto(site.client, saved.image_path, photo)
+    await submitDraft(site.client, values.id)
+  } catch (error) {
+    stop(`site manager 1 could not send a payroll test receipt: ${error.message}`)
+  }
+  return values.id
+}
+const expMaterials = await payrollReceipt('materials', 1200.5, 'materials', 'Cement')
+const expFuel = await payrollReceipt('fuel', 800, 'fuel', '')
+const expFood = await payrollReceipt('food', 150.25, 'food', 'Lunch')
+const expWaiting = await payrollReceipt('consumables', 999, 'waiting', 'Not approved yet')
+for (const id of [expMaterials, expFuel, expFood]) {
+  const { error } = await changeReceipt(owner, id, { status: 'approved', duplicate_checked: true })
+  if (error) stop(`owner could not approve a payroll test receipt: ${error.message}`)
 }
 
-const payR1 = await payReport(PAY_D1, [
-  { employee_id: payA, hours: 10 },
-  { employee_id: payB, hours: 8 },
-])
-const payR2 = await payReport(PAY_D2, [{ employee_id: payA, hours: 4 }], { submit: false })
-await payReport(PAY_D3, [
-  { employee_id: payC, hours: 2 },
-  { employee_id: payD.id, hours: 3 },
-])
-
-// --- Periods: create, no overlaps ---------------------------------------------------
-let payPeriod = null
-{
-  const name = 'Owner creates a pay period (starts open)'
-  const { data, error } = await owner.client
-    .from('pay_periods')
-    .insert({ start_date: payStart, end_date: payEnd, notes: `RLS test ${RUN_TAG}` })
-    .select('id, status, created_by')
-    .single()
-  payPeriod = data?.id ?? null
-  if (error) record(name, false, `Error: ${error.message}`)
-  else record(name, data.status === 'open' && data.created_by === owner.userId, `${payStart} to ${payEnd}: ${data.status}.`)
-  covers('pay_periods', 'pay_periods_before_write')
+// --- Site managers get nothing ---------------------------------------------------
+for (const fn of ['payroll_check_inputs', 'payroll_checks', 'payroll_lines', 'payroll_blocks', 'expense_lines', 'expense_totals']) {
+  for (const [who, label] of [
+    [site, 'Site manager 1 (their own reports and receipts)'],
+    [site2, 'Site manager 2'],
+  ]) {
+    const name = `${label} calls ${fn}()`
+    const { data, error } = await who.client.rpc(fn, payArgs(payrollProject.id, fn.startsWith('expense') ? saToday : PAY_FROM, fn.startsWith('expense') ? saToday : PAY_TO))
+    if (error?.code === PERMISSION_DENIED) record(name, true, `Refused: ${error.message}`)
+    else if (error) record(name, false, `Refused for the wrong reason (${error.code}): ${error.message}`)
+    else record(name, false, `LEAK: ${JSON.stringify(data).slice(0, 200)}`)
+    covers(fn)
+  }
 }
-if (!payPeriod) stop('the pay run checks need the test pay period')
-
-await attackInsert(
-  'Owner creates a pay period that overlaps another',
-  owner.client,
-  'pay_periods',
-  { start_date: shiftDate(payStart, 5), end_date: shiftDate(payStart, 20) },
-  '23P01',
-  'Refused: periods can never overlap.',
-)
-covers('pay_periods')
-
 {
-  const name = 'Suggested next period and gap check (owner)'
-  const [next, gap] = await Promise.all([
-    owner.client.rpc('next_pay_period_dates'),
-    owner.client.rpc('pay_period_gap', { p_start: shiftDate(payEnd, 3) }),
+  const name = 'Anyone may use round_half_even() - plain arithmetic, no data: 215.625 -> 215.62, 309.375 -> 309.38'
+  const [a, b] = await Promise.all([
+    site.client.rpc('round_half_even', { p_value: 215.625 }),
+    site.client.rpc('round_half_even', { p_value: 309.375 }),
   ])
-  const row = next.data?.[0]
-  const ok = !next.error && !gap.error && Boolean(row?.start_date) && Number(gap.data) === 2
-  record(name, ok, ok ? `Suggests ${row.start_date} to ${row.end_date}; a start 3 days after this period shows a 2-day gap.` : `Got: ${JSON.stringify({ next, gap })}`)
-  covers('next_pay_period_dates', 'pay_period_gap')
+  const ok = !a.error && !b.error && Number(a.data) === 215.62 && Number(b.data) === 309.38
+  record(name, ok, ok ? 'Half a cent goes to the even cent.' : `Got ${a.data ?? a.error?.message}, ${b.data ?? b.error?.message}`)
+  covers('round_half_even')
+}
+{
+  const name = 'Owner asks for a payroll with the end date before the start date'
+  const { error } = await owner.client.rpc('payroll_lines', payArgs(payrollProject.id, PAY_TO, PAY_FROM))
+  record(name, error?.code === '22023', error ? `Refused: ${error.message}` : 'BREACH: it ran.')
+  covers('payroll_check_inputs')
 }
 
-// --- Closing is blocked by a draft report and by unpriced hours ------------------
+// --- Owner: the figures -----------------------------------------------------------
 {
-  const name = 'Close is blocked by a draft report and by unpriced hours - and says which'
-  const blockers = await owner.client.rpc('pay_period_blockers', { p_period_id: payPeriod })
-  const close = await owner.client.rpc('close_pay_period', { p_period_id: payPeriod })
-  const rows = blockers.data ?? []
-  const draft = rows.find((row) => row.kind === 'draft_report' && row.report_id === payR2)
-  const unpriced = rows.find((row) => row.kind === 'unpriced_hours' && row.person_id === payC && row.report_date === PAY_D3)
-  const pendingBlocks = rows.some((row) => row.person_id === payD.id)
-  const ok = Boolean(draft) && Boolean(unpriced) && Number(unpriced.hours) === 2 && !pendingBlocks && close.error?.code === '23514'
+  const name = 'Payroll checks: one draft report in the dates, nobody without a rate'
+  const { data, error } = await owner.client.rpc('payroll_checks', payArgs(payrollProject.id))
+  const row = data?.[0]
+  const ok = !error && Number(row?.draft_reports) === 1 && Number(row.submitted_reports) === 13 && row.unpriced.length === 0
+  record(name, ok, ok ? '13 submitted, 1 draft (left out), no unpriced people.' : `Got: ${error?.message ?? JSON.stringify(row)}`)
+  covers('payroll_checks')
+}
+
+let payLines = []
+{
+  const name = "Payroll rows: the spec's example (R215.62 overtime, R4,778.12), UIF, two sites, a rate change, a Sunday report"
+  const { data, error } = await owner.client.rpc('payroll_lines', payArgs(payrollProject.id))
+  payLines = data ?? []
+  const row = (employeeId, block, rate) =>
+    payLines.find((line) => line.employee_id === employeeId && line.block_no === block && (rate === undefined || Number(line.rate) === rate))
+  const m = row(molefi, 0)
+  const j = row(johannes, 0)
+  const a53 = row(amkhitha, 0, 53)
+  const a60 = row(amkhitha, 0, 60)
+  const k0 = row(kuux, 0)
+  const k1 = row(kuux, 1)
+  const problems = error
+    ? [error.message]
+    : [
+        m && Number(m.normal_hours) === 73 && Number(m.ot_hours) === 2.3 && Number(m.gross) === 4562.5 &&
+        Number(m.overtime) === 215.62 && Number(m.total_salary) === 4778.12 && m.uif === null && Number(m.net) === 4778.12
+          ? null
+          : `Molefi: ${JSON.stringify(m)}`,
+        j && j.surname === 'Tsoeute' && j.first_names === `ZZ Payroll Johannes ${RUN_TAG}` && Number(j.normal_hours) === 20.8 &&
+        Number(j.ot_hours) === 2.2 && Number(j.total_salary) === 1807.5 && Number(j.uif) === 18.08 && Number(j.net) === 1789.42
+          ? null
+          : `Johannes: ${JSON.stringify(j)}`,
+        a53 && a60 && Number(a53.total_salary) === 424 && Number(a60.total_salary) === 480 ? null : `Amkhitha: ${JSON.stringify([a53, a60])}`,
+        k0 && Number(k0.normal_hours) === 64 && Number(k0.total_salary) === 2400 ? null : `Kuux block 1: ${JSON.stringify(k0)}`,
+        k1 && Number(k1.normal_hours) === 8 && Number(k1.ot_hours) === 5 && Number(k1.overtime) === 281.25 && Number(k1.total_salary) === 581.25
+          ? null
+          : `Kuux block 2: ${JSON.stringify(k1)}`,
+        payLines.filter((line) => line.block_no === 0).map((line) => Number(line.rate)).join() === '75,62.5,60,53,37.5' ? null : 'Not highest rate first',
+        payLines.length === 6 ? null : `${payLines.length} rows (the draft must not count)`,
+      ].filter(Boolean)
+  record(
+    name,
+    problems.length === 0,
+    problems.length
+      ? problems.join('; ')
+      : 'Molefi 73 h + 2.3 h: R4,562.50 + R215.62 = R4,778.12, UIF blank. Johannes (UIF) 20.8 h + 2.2 h: R1,807.50, UIF R18.08, net R1,789.42. Amkhitha R53 and R60 rows. Kuux Sunday 5 h all overtime: R281.25.',
+  )
+  covers('payroll_lines', 'round_half_even', 'labour_lines', 'labour_days', 'rate_on')
+}
+
+let payBlocks = []
+{
+  const name = 'Payroll blocks: 28 Aug - 10 Sept and 11 - 22 Sept 2097, both on the September sheet; totals, month and SARS UIF x 2'
+  const { data, error } = await owner.client.rpc('payroll_blocks', payArgs(payrollProject.id))
+  payBlocks = data ?? []
+  const [b0, b1] = payBlocks
+  const ok =
+    !error &&
+    payBlocks.length === 2 &&
+    b0.block_start === PAY_FROM &&
+    b0.block_end === '2097-09-10' &&
+    b1.block_start === '2097-09-11' &&
+    b1.block_end === PAY_TO &&
+    payBlocks.every((block) => block.sheet_month === '2097-09-01' && block.blocks_in_sheet === 2) &&
+    b0.block_in_sheet === 1 &&
+    b1.block_in_sheet === 2 &&
+    Number(b0.reports) === 11 &&
+    Number(b1.reports) === 2 &&
+    Number(b0.total_salary) === 9889.62 &&
+    Number(b0.uif) === 18.08 &&
+    Number(b0.net) === 9871.54 &&
+    Number(b1.total_salary) === 581.25 &&
+    Number(b0.month_total_salary) === 10470.87 &&
+    Number(b0.month_net) === 10452.79 &&
+    Number(b0.month_uif_declaration) === 36.16
   record(
     name,
     ok,
     ok
-      ? `Blocked: the draft report of ${PAY_D2}, and 2 unpriced hours on ${PAY_D3}. The pending person does not block.`
-      : `Blockers: ${JSON.stringify(rows)}; close: ${close.error?.message ?? 'no error'}`,
+      ? 'Block 1: 11 reports, R9,889.62 (UIF R18.08, net R9,871.54). Block 2: 2 reports, R581.25. Month R10,470.87, net R10,452.79, UIF declaration R36.16.'
+      : `Got: ${error?.message ?? JSON.stringify(payBlocks)}`,
   )
-  covers('pay_period_blockers', 'close_pay_period')
+  covers('payroll_blocks')
 }
 
-// Fix both: submit the draft, give C a rate from the period start (C has no paid days).
-{
-  const { data, error } = await site.client.from('daily_reports').update({ status: 'submitted' }).eq('id', payR2).select('id')
-  if (error || data.length !== 1) stop(`site manager 1 could not submit the draft pay run test report: ${error?.message}`)
-  await ownerInsert('employee_rates', { employee_id: payC, ...fromPeriodStart }, 'the rate that prices C')
+// A cell found by its exact text (the first one).
+function cellWithText(sheet, text) {
+  let found = null
+  sheet?.eachRow((row) =>
+    row.eachCell((cell) => {
+      if (!found && cell.value === text) found = cell
+    }),
+  )
+  return found
+}
+const cellNumber = (cell) => {
+  const value = cell?.value
+  return value === null || value === undefined ? null : Number(value.result ?? value)
 }
 
-// --- Close cleanly: the snapshot equals the 8A figures ---------------------------
-let payRun1 = null
 {
-  const name = 'Owner closes the period: the snapshot equals the 8A pay figures'
+  const name = "Payroll (the app's own file): every cell, merge and header the spec fixes"
   try {
-    const close = await owner.client.rpc('close_pay_period', { p_period_id: payPeriod })
-    if (close.error) throw close.error
-    payRun1 = close.data
-    const [{ data: lines, error: linesError }, { data: days, error: daysError }] = await Promise.all([
-      owner.client.from('pay_run_lines').select('employee_id, included, hours, ordinary_hours, ot_hours, gross, rates').eq('run_id', payRun1),
-      owner.client.from('labour_days').select('employee_id, total_pay').in('employee_id', [payA, payB, payC]).gte('day', payStart).lte('day', payEnd),
-    ])
-    if (linesError || daysError) throw linesError ?? daysError
-    const line = (id, included = true) => lines.find((row) => row.employee_id === id && row.included === included)
-    const live = (id) => days.filter((row) => row.employee_id === id).reduce((sum, row) => sum + Number(row.total_pay), 0)
-    const a = line(payA)
+    const data = await fetchPayroll(owner.client, { project: payrollProject, from: PAY_FROM, to: PAY_TO })
+    const { workbook, filename } = buildPayroll(data, { generatedBy: 'RLS test', generatedAt: new Date(), project: payrollProject, from: PAY_FROM, to: PAY_TO })
+    const sheet = workbook.getWorksheet('SEPTEMBER 2097')
+    const at = (address) => sheet?.getCell(address).value
+    const merges = sheet?.model.merges ?? []
+    const upperName = payrollProject.name.toUpperCase()
+    const headers = 'NAME,SURNAME,RATE,NORMAL HOURS,OVER TIME,TOTAL HOURS,GROSS SALARY,OVERTIME,TOTAL SALARY,UIF,NET SALARY'
+    const headerRow = (row) => 'CDEFGHIJKLM'.split('').map((letter) => at(`${letter}${row}`)).join()
+    const totals = cellWithText(sheet, 'TOTALS')
+    const totalSalary = sheet?.getCell(`K${totals?.row}`)
+    const second = cellWithText(sheet, 'SECOND FORTNIGHT — 11 – 22 SEPT 2097')
+    const uifLine = cellWithText(sheet, 'UIF (employee + employer)')
     const problems = [
-      Number(a?.gross) === 1500 && Number(a.ordinary_hours) === 12 && Number(a.ot_hours) === 2 ? null : `A: ${JSON.stringify(a)}`,
-      Number(line(payB)?.gross) === 800 ? null : `B: ${JSON.stringify(line(payB))}`,
-      Number(line(payC)?.gross) === 200 ? null : `C: ${JSON.stringify(line(payC))}`,
-      [payA, payB, payC].every((id) => Number(line(id)?.gross) === live(id)) ? null : 'Snapshot differs from labour_days',
-      Number(line(payD.id, false)?.hours) === 3 && line(payD.id, false)?.gross === null && !line(payD.id) ? null : `D: ${JSON.stringify(lines.filter((row) => row.employee_id === payD.id))}`,
-      a?.rates?.[0]?.from === payStart && Number(a.rates[0].rate) === 100 ? null : `A's rates: ${JSON.stringify(a?.rates)}`,
+      workbook.worksheets.map((ws) => ws.name).join() === 'SEPTEMBER 2097' ? null : `Sheets: ${workbook.worksheets.map((ws) => ws.name)}`,
+      at('C5') === 'NKUTWALA CONSTRUCTION — PAYROLL' ? null : `C5: ${at('C5')}`,
+      at('C6') === `${upperName}  |  SEPTEMBER 2097` ? null : `C6: ${at('C6')}`,
+      ['C5:M5', 'C6:M6', 'C8:D8', 'C13:M13'].every((range) => merges.includes(range)) ? null : `Merges: ${merges.join(' ')}`,
+      at('C8') === 'RATE ASSUMPTIONS' && at('C9') === 'Daily Rate (8 hrs)' && at('D9') === 300 ? null : 'Rate assumptions C8:D9',
+      at('C10') === 'Overtime / PH (x)' && at('D10') === 1.5 ? null : 'C10/D10',
+      at('C11') === 'UIF rate' && at('D11') === 0.01 && !String(sheet.getCell('D11').numFmt ?? '').includes('%') ? null : 'D11 is not the number 0.01',
+      at('F9') === 'View: TOTAL HOURS / GROSS / OVERTIME / TOTAL SALARY / UIF / NET SALARY.' ? null : 'F9',
+      at('F10') === 'UIF allocated only to UIF-registered individuals.' ? null : 'F10',
+      at('C13') === 'FIRST FORTNIGHT — 28 AUG – 10 SEPT 2097' ? null : `C13: ${at('C13')}`,
+      headerRow(14) === headers ? null : `Headers: ${headerRow(14)}`,
+      at('C15') === `ZZ PAYROLL JOHANNES ${RUN_TAG.toUpperCase()}` && at('D15') === 'TSOEUTE' && at('E15') === 75 ? null : `Row 15: ${at('C15')} ${at('D15')}`,
+      at('J16') === 215.62 && at('K16') === 4778.12 && at('L16') === null && at('M16') === 4778.12 ? null : `Molefi row: J ${at('J16')}, K ${at('K16')}, L ${at('L16')}`,
+      at('L15') === 18.08 ? null : `Johannes UIF ${at('L15')}`,
+      totals?.address === 'C20' && merges.includes('C20:E20') ? null : `First TOTALS at ${totals?.address}`,
+      totalSalary?.value?.formula === 'SUM(K15:K19)' && cellNumber(totalSalary) === 9889.62 ? null : `Total salary: ${JSON.stringify(totalSalary?.value)}`,
+      String(at('C21')).startsWith('Source: ') && String(at('C21')).includes('(11 reports)') ? null : `Source: ${at('C21')}`,
+      second?.address === 'C23' ? null : `Second fortnight at ${second?.address}`,
+      headerRow(24) === headers ? null : 'Second table headers',
+      cellWithText(sheet, 'SEPTEMBER 2097 — MONTH SUMMARY') ? null : 'No month summary',
+      cellNumber(sheet?.getCell(`F${cellWithText(sheet, 'TOTAL SALARY — MONTH')?.row}`)) === 10470.87 ? null : 'TOTAL SALARY — MONTH',
+      cellNumber(sheet?.getCell(`F${cellWithText(sheet, 'NET PAY — MONTH')?.row}`)) === 10452.79 ? null : 'NET PAY — MONTH',
+      cellWithText(sheet, 'Total salary — first fortnight') && cellWithText(sheet, 'Total salary — second fortnight') ? null : 'Fortnight summary lines',
+      cellWithText(sheet, 'SARS DECLARATION') ? null : 'No SARS DECLARATION',
+      cellNumber(sheet?.getCell(`F${uifLine?.row}`)) === 36.16 ? null : 'UIF (employee + employer) is not R36.16',
+      cellWithText(sheet, `Prepared by: Nkutwala Construction  |  ${upperName}`) ? null : 'No footer',
+      filename === `nkutwala_payroll_${fileSlug(payrollProject.name)}_${PAY_FROM}_${PAY_TO}.xlsx` ? null : `File name ${filename}`,
     ].filter(Boolean)
-    record(
-      name,
-      problems.length === 0,
-      problems.length
-        ? problems.join('; ')
-        : 'A: 10 h + 4 h = R1,100 + R400 = R1,500 (12 ordinary + 2 overtime); B: 8 h = R800; C: R200 - all equal to labour_days. D (pending): excluded, 3 h.',
-    )
-  } catch (error) {
-    record(name, false, `Error: ${error.message}`)
-  }
-  covers('close_pay_period', 'pay_runs', 'pay_run_lines', 'pay_run_days', 'labour_days')
-}
-if (!payRun1) stop('the lock checks need the closed pay run')
-
-// --- Locks while closed --------------------------------------------------------------
-{
-  const name = 'Site manager saves a new report dated in the closed period'
-  const { error } = await site.client.rpc('save_report_draft', {
-    p_report: { project_id: payProject, report_date: PAY_D4, activities: 'attack' },
-    p_crew: [{ employee_id: payA, hours: 8 }],
-    p_equipment: [],
-  })
-  const ok = String(error?.message ?? '').includes('This period is closed. Contact the office.')
-  record(name, ok, ok ? 'Refused: "This period is closed. Contact the office."' : `Got: ${error?.message ?? 'BREACH: it was saved'}`)
-  covers('daily_reports_period_lock', 'save_report_draft')
-}
-{
-  const name = 'Owner reopens a report dated in the closed period'
-  const { error } = await owner.client
-    .from('daily_reports')
-    .update({ status: 'draft', reopen_reason: 'attack' })
-    .eq('id', payR1)
-    .select('id')
-  const ok = String(error?.message ?? '').includes('This period is closed')
-  record(name, ok, ok ? 'Refused: the period is closed.' : `Got: ${error?.message ?? 'BREACH: it was reopened'}`)
-  covers('daily_reports_period_lock')
-}
-{
-  // (Submitted lines are already locked to everyone; the period lock is the
-  // second wall behind that.)
-  const name = 'Crew lines of a report in the closed period cannot change'
-  const { error } = await owner.client.from('report_crew').update({ hours: 1 }).eq('report_id', payR1).select('id')
-  const { data: after } = await owner.client.from('report_crew').select('hours').eq('report_id', payR1).eq('employee_id', payA).single()
-  const ok = Number(after?.hours) === 10
-  record(name, ok, ok ? `Unchanged (${error ? `refused: ${error.message}` : 'nothing changed'}).` : `BREACH: hours now ${after?.hours}`)
-  covers('report_lines_period_lock')
-}
-for (const [label, values, table] of [
-  ['adds a rate dated inside the closed period', { employee_id: payA, hourly_rate: 150, effective_from: PAY_D2 }, 'employee_rates'],
-  ['adds a pay rule dated inside the closed period', { effective_from: PAY_D2, ot_multiplier: 2 }, 'pay_rules'],
-  ['adds a back-dated pay rule (before the period) that would change paid days', { effective_from: shiftDate(payStart, -10), ot_multiplier: 2 }, 'pay_rules'],
-  ['adds a public holiday on a paid day', { holiday_date: PAY_D1, name: 'Attack' }, 'public_holidays'],
-]) {
-  await attackInsert(`Owner ${label}`, owner.client, table, values, PERMISSION_DENIED, 'Refused: it would change days already in a pay run.')
-}
-covers('employee_rates_period_lock', 'pay_rules_period_lock', 'public_holidays_period_lock')
-{
-  const name = "Owner voids the rate that priced paid days (it would change them)"
-  const { data: rate } = await owner.client
-    .from('employee_rates')
-    .select('id')
-    .eq('employee_id', payA)
-    .eq('effective_from', payStart)
-    .is('voided_at', null)
-    .single()
-  const { error } = await owner.client.from('employee_rates').update({ void_reason: 'attack' }).eq('id', rate?.id).select('id')
-  record(name, error?.code === PERMISSION_DENIED, error ? `Refused: ${error.message}` : 'BREACH: the rate was voided.')
-  covers('employee_rates_period_lock')
-}
-{
-  const name = 'Owner reopens the pay period (only a system admin may)'
-  const { error } = await owner.client.rpc('reopen_pay_period', { p_period_id: payPeriod, p_reason: 'attack' })
-  record(name, error?.code === PERMISSION_DENIED, error ? `Refused: ${error.message}` : 'BREACH: the owner reopened it.')
-  covers('reopen_pay_period')
-}
-{
-  const name = 'Outstanding: the paid days are gone; the pending person\'s day is still there'
-  const { data, error } = await owner.client
-    .from('pay_outstanding')
-    .select('employee_id, day, total_hours, period_status')
-    .in('employee_id', [payA, payB, payD.id])
-  const pending = data?.find((row) => row.employee_id === payD.id && row.day === PAY_D3)
-  const ok = !error && !data.some((row) => row.employee_id === payA || row.employee_id === payB) && Number(pending?.total_hours) === 3 && pending.period_status === 'closed'
-  record(name, ok, ok ? `A and B are paid; D's 3 h on ${PAY_D3} are still to be paid.` : `Got: ${error?.message ?? JSON.stringify(data)}`)
-  covers('pay_outstanding')
-}
-
-// --- Site manager sees nothing ---------------------------------------------------------
-for (const table of ['pay_periods', 'pay_runs', 'pay_run_lines', 'pay_run_days', 'pay_outstanding']) {
-  await attackReadNothing(`Site manager reads ${table}`, site.client, table)
-  covers(table)
-}
-for (const [fn, args] of [
-  ['close_pay_period', { p_period_id: payPeriod }],
-  ['mark_pay_period_paid', { p_period_id: payPeriod, p_paid_on: payEnd }],
-  ['reopen_pay_period', { p_period_id: payPeriod, p_reason: 'attack' }],
-]) {
-  const name = `Site manager calls ${fn}()`
-  const { error } = await site.client.rpc(fn, args)
-  record(name, error?.code === PERMISSION_DENIED, error ? `Refused: ${error.message}` : 'BREACH: it ran.')
-  covers(fn)
-}
-for (const [fn, args] of [
-  ['pay_period_blockers', { p_period_id: payPeriod }],
-  ['next_pay_period_dates', {}],
-  ['pay_period_gap', { p_start: payEnd }],
-]) {
-  const name = `Site manager calls ${fn}()`
-  const { data, error } = await site.client.rpc(fn, args)
-  const empty = Array.isArray(data) ? data.length === 0 : data === null
-  if (error?.code === PERMISSION_DENIED) record(name, true, 'Server refused (permission denied).')
-  else if (error) record(name, false, `Unexpected error: ${error.message}`)
-  else record(name, empty, empty ? 'Nothing came back.' : `LEAK: ${JSON.stringify(data)}`)
-  covers(fn)
-}
-for (const fn of [
-  'pay_periods_before_write',
-  'pay_date_locked',
-  'daily_reports_period_lock',
-  'report_lines_period_lock',
-  'employee_rates_period_lock',
-  'pay_rules_period_lock',
-  'public_holidays_period_lock',
-]) {
-  const name = `Site manager calls ${fn}() directly`
-  const { error } = await site.client.rpc(fn, fn === 'pay_date_locked' ? { p_company_id: randomUUID(), p_day: payStart } : {})
-  record(name, Boolean(error), error ? `Refused: ${error.message}` : 'BREACH: it ran.')
-  covers(fn)
-}
-
-// --- System admin reopens; the old snapshot is kept ---------------------------------------
-{
-  const name = 'System admin reopens without a reason'
-  const { error } = await admin.client.rpc('reopen_pay_period', { p_period_id: payPeriod, p_reason: ' ' })
-  record(name, error?.code === '23514', error ? `Refused: ${error.message}` : 'BREACH: reopened without a reason.')
-  covers('reopen_pay_period')
-}
-let payRun2 = null
-{
-  const name = 'System admin reopens with a reason; closing again makes version 2 and v1 is kept as superseded'
-  try {
-    const reopen = await admin.client.rpc('reopen_pay_period', { p_period_id: payPeriod, p_reason: `RLS test ${RUN_TAG}` })
-    if (reopen.error) throw reopen.error
-    const { data: period } = await owner.client.from('pay_periods').select('status, reopened_by, reopen_reason').eq('id', payPeriod).single()
-    const close = await owner.client.rpc('close_pay_period', { p_period_id: payPeriod })
-    if (close.error) throw close.error
-    payRun2 = close.data
-    const { data: runs } = await owner.client.from('pay_runs').select('id, version, status, superseded_reason').eq('period_id', payPeriod).order('version')
-    const { data: a2 } = await owner.client.from('pay_run_lines').select('gross').eq('run_id', payRun2).eq('employee_id', payA).eq('included', true).single()
-    const ok =
-      period?.status === 'reopened' &&
-      period.reopened_by === admin.userId &&
-      runs?.length === 2 &&
-      runs[0].id === payRun1 &&
-      runs[0].status === 'superseded' &&
-      runs[0].superseded_reason === `RLS test ${RUN_TAG}` &&
-      runs[1].version === 2 &&
-      runs[1].status === 'active' &&
-      Number(a2?.gross) === 1500
-    record(name, ok, ok ? 'Reopened (logged with who and why); v1 kept as superseded; v2 active with the same R1,500 for A.' : `Period ${JSON.stringify(period)}; runs ${JSON.stringify(runs)}; A ${JSON.stringify(a2)}`)
-  } catch (error) {
-    record(name, false, `Error: ${error.message}`)
-  }
-  covers('reopen_pay_period', 'close_pay_period', 'pay_runs')
-}
-{
-  const name = 'Owner marks the period paid, with the paid date'
-  const { error } = await owner.client.rpc('mark_pay_period_paid', { p_period_id: payPeriod, p_paid_on: payEnd })
-  const { data: period } = await owner.client.from('pay_periods').select('status, paid_on, paid_by').eq('id', payPeriod).single()
-  const { data: run } = await owner.client.from('pay_runs').select('paid_on').eq('id', payRun2 ?? randomUUID()).maybeSingle()
-  const ok = !error && period?.status === 'paid' && period.paid_on === payEnd && period.paid_by === owner.userId && run?.paid_on === payEnd
-  record(name, ok, ok ? `Paid on ${payEnd}; the run records it too.` : `Error: ${error?.message}; period ${JSON.stringify(period)}; run ${JSON.stringify(run)}`)
-  covers('mark_pay_period_paid')
-}
-
-// --- Late hours: the pending person, approved later, is paid in the next run ------------
-{
-  const name = 'Late hours: the pending person, approved later, is paid in the next run'
-  try {
-    // Their rate may start inside the paid period - none of their days were paid.
-    await approveEmployee(owner.client, payD.id, 100, payStart)
-    const nextStart = shiftDate(payEnd, 1)
-    const { data: next, error: nextError } = await owner.client
-      .from('pay_periods')
-      .insert({ start_date: nextStart, end_date: shiftDate(nextStart, 13), notes: `RLS test ${RUN_TAG} (late hours)` })
-      .select('id')
-      .single()
-    if (nextError) throw nextError
-    const close = await owner.client.rpc('close_pay_period', { p_period_id: next.id })
-    if (close.error) throw close.error
-    const [{ data: line }, { data: day }, { data: outstanding }] = await Promise.all([
-      owner.client.from('pay_run_lines').select('gross, late_hours').eq('run_id', close.data).eq('employee_id', payD.id).eq('included', true).maybeSingle(),
-      owner.client.from('pay_run_days').select('late, total_pay').eq('run_id', close.data).eq('employee_id', payD.id).eq('day', PAY_D3).maybeSingle(),
-      owner.client.from('pay_outstanding').select('day').eq('employee_id', payD.id),
-    ])
-    await owner.client.rpc('mark_pay_period_paid', { p_period_id: next.id, p_paid_on: shiftDate(nextStart, 13) })
-    const ok = Number(line?.gross) === 300 && Number(line.late_hours) === 3 && day?.late === true && (outstanding ?? []).length === 0
-    record(name, ok, ok ? `Approved at R100: the 3 h of ${PAY_D3} paid in the next run as late hours (R300); no longer outstanding.` : `Line ${JSON.stringify(line)}; day ${JSON.stringify(day)}; outstanding ${JSON.stringify(outstanding)}`)
-  } catch (error) {
-    record(name, false, `Error: ${error.message}`)
-  }
-  covers('close_pay_period', 'pay_run_days', 'pay_outstanding', 'employee_rates_period_lock')
-}
-
-// --- Finish off this run's pay run test data (nothing can be deleted) -----------------
-{
-  const outcomes = await Promise.all([
-    owner.client.from('projects').update({ status: 'complete' }).eq('id', payProject).select('id'),
-    owner.client.from('employees').update({ status: 'inactive' }).eq('id', payD.id).select('id'),
-  ])
-  const failed = outcomes.find((outcome) => outcome.error)
-  if (failed) console.log(`          (note: tidy-up incomplete: ${failed.error.message})`)
-}
-
-// =============================================================================
-// Pay run screens and the pay-run Excel (phase 8B-2)
-// =============================================================================
-// Its own period in the 2001+ test window (after 8B-1's) and its own two
-// projects. One person works 6 h on A + 4 h on B on one day at R100: R1,100
-// (8 h + 2 h overtime), split A R660 / B R440. A pending person's 2 h on A
-// are left out (excluded).
-console.log('\nPay run screens and the pay-run Excel…\n')
-
-let screenStart
-{
-  const { data, error } = await owner.client
-    .from('pay_periods')
-    .select('end_date')
-    .lt('end_date', PAY_WINDOW_END)
-    .order('end_date', { ascending: false })
-    .limit(1)
-  if (error) stop(`the pay run screen checks could not read pay_periods: ${error.message}`)
-  screenStart = data.length ? shiftDate(data[0].end_date, 1) : '2001-01-01'
-}
-const screenEnd = shiftDate(screenStart, 13)
-const SCREEN_DAY = shiftDate(screenStart, 1)
-const screenA = { name: `${PAY_PREFIX} Screens A ${RUN_TAG}` }
-const screenB = { name: `${PAY_PREFIX} Screens B ${RUN_TAG}` }
-screenA.id = await ownerInsert('projects', { name: screenA.name, status: 'active' }, 'pay run screens project A')
-screenB.id = await ownerInsert('projects', { name: screenB.name, status: 'active' }, 'pay run screens project B')
-const screenSplitName = `ZZ Pay Split ${RUN_TAG}`
-const screenSplit = await createTestPerson(screenSplitName, { rate: { hourly_rate: 100, effective_from: screenStart } })
-let screenPending = null
-try {
-  screenPending = await addEmployee(site.client, { fullName: `ZZ Pay Pending ${RUN_TAG}`, category: 'general_worker' })
-} catch (error) {
-  stop(`site manager 1 could not add the pending pay run screens person: ${error.message}`)
-}
-
-// A submitted report by site manager 1 on SCREEN_DAY.
-async function screenReport(projectId, crew) {
-  const { data: reportId, error } = await site.client.rpc('save_report_draft', {
-    p_report: { project_id: projectId, report_date: SCREEN_DAY, activities: `RLS pay run screens test ${RUN_TAG}` },
-    p_crew: crew,
-    p_equipment: [],
-  })
-  if (error) stop(`site manager 1 could not save a pay run screens test report: ${error.message}`)
-  const { data, error: submitError } = await site.client
-    .from('daily_reports')
-    .update({ status: 'submitted' })
-    .eq('id', reportId)
-    .select('id')
-  if (submitError || data.length !== 1) stop(`site manager 1 could not submit a pay run screens test report: ${submitError?.message}`)
-}
-await screenReport(screenA.id, [
-  { employee_id: screenSplit, hours: 6 },
-  { employee_id: screenPending.id, hours: 2 },
-])
-await screenReport(screenB.id, [{ employee_id: screenSplit, hours: 4 }])
-
-let screenPeriod = null
-{
-  const { data, error } = await owner.client
-    .from('pay_periods')
-    .insert({ start_date: screenStart, end_date: screenEnd, notes: `RLS test ${RUN_TAG} (screens)` })
-    .select('id')
-    .single()
-  if (error) stop(`owner could not create the pay run screens test period: ${error.message}`)
-  screenPeriod = data.id
-}
-
-// --- The preview, then the close: they must be the same ---------------------------
-let screenPreview = []
-{
-  const name = '8B-2 preview: R1,100 for the split person (8 h + 2 h overtime); the pending person left out with 2 h'
-  const { data, error } = await owner.client.rpc('pay_period_preview', { p_period_id: screenPeriod })
-  screenPreview = data ?? []
-  const split = screenPreview.find((row) => row.employee_id === screenSplit)
-  const pending = screenPreview.find((row) => row.employee_id === screenPending.id)
-  const ok =
-    !error &&
-    split?.included === true &&
-    Number(split.hours) === 10 &&
-    Number(split.ot_hours) === 2 &&
-    Number(split.gross) === 1100 &&
-    pending?.included === false &&
-    Number(pending.hours) === 2 &&
-    pending.gross === null
-  record(name, ok, ok ? 'Split person: 10 h (2 h overtime), R1,100. Pending person: excluded, 2 h, no pay.' : `Error ${error?.message}; split ${JSON.stringify(split)}; pending ${JSON.stringify(pending)}`)
-  covers('pay_period_preview', 'pay_period_close_days')
-}
-
-let screenRun = null
-{
-  const name = '8B-2 closing saves exactly the preview: every person, their hours, pay and rates'
-  const close = await owner.client.rpc('close_pay_period', { p_period_id: screenPeriod })
-  screenRun = close.data ?? null
-  const { data: lines } = await owner.client
-    .from('pay_run_lines')
-    .select('employee_id, included, days, hours, late_hours, ordinary_hours, ot_hours, premium_hours, rates, ordinary_pay, ot_pay, premium_pay, gross')
-    .eq('run_id', screenRun ?? randomUUID())
-  const KEYS = ['days', 'hours', 'late_hours', 'ordinary_hours', 'ot_hours', 'premium_hours', 'ordinary_pay', 'ot_pay', 'premium_pay', 'gross']
-  const value = (row, key) => (row[key] === null ? null : Number(row[key]))
-  const same = (preview, line) => KEYS.every((key) => value(preview, key) === value(line, key)) && JSON.stringify(preview.rates) === JSON.stringify(line.rates)
-  const ok =
-    !close.error &&
-    screenPreview.length > 0 &&
-    lines?.length === screenPreview.length &&
-    screenPreview.every((preview) => {
-      const line = lines.find((one) => one.employee_id === preview.employee_id && one.included === preview.included)
-      return line && same(preview, line)
-    })
-  record(name, ok, ok ? `${lines.length} lines, each identical to the preview.` : `Error ${close.error?.message}; preview ${JSON.stringify(screenPreview).slice(0, 300)}; lines ${JSON.stringify(lines).slice(0, 300)}`)
-  covers('close_pay_period', 'pay_period_close_days', 'pay_run_lines')
-}
-if (!screenRun) stop('the pay run screen checks need the closed test run')
-
-// --- The frozen project split ------------------------------------------------------
-async function runPeople(projects) {
-  const { data, error } = await owner.client.rpc('pay_run_people', {
-    p_run_id: screenRun,
-    p_project_ids: projects ? projects.map((project) => project.id) : null,
-  })
-  if (error) throw error
-  return data
-}
-{
-  const name = '8B-2 pay run split: all projects R1,100; filtered to A R660, to B R440; A + B = all projects'
-  try {
-    const [all, a, b, ab] = await Promise.all([runPeople(null), runPeople([screenA]), runPeople([screenB]), runPeople([screenA, screenB])])
-    const split = (rows, projectId) => rows.find((row) => row.employee_id === screenSplit && (projectId === undefined || row.project_id === projectId))
-    const allRow = split(all)
-    const aRow = split(a, screenA.id)
-    const bRow = split(b, screenB.id)
-    const abA = ab.find((row) => row.project_id === screenA.id)
-    const abB = ab.find((row) => row.project_id === screenB.id)
-    const pendingA = a.find((row) => row.employee_id === screenPending.id)
-    const ok =
-      Number(allRow?.gross) === 1100 &&
-      allRow.project_id === null &&
-      allRow.project_name === `${screenA.name}, ${screenB.name}` &&
-      Number(aRow?.gross) === 660 &&
-      Number(aRow.ot_pay) === 180 &&
-      Number(bRow?.gross) === 440 &&
-      Number(bRow.ot_pay) === 120 &&
-      Number(aRow.gross) + Number(bRow.gross) === Number(allRow.gross) &&
-      Number(abA?.project_total_gross) === 660 &&
-      Number(abB?.project_total_gross) === 440 &&
-      Number(ab[0].total_gross) === 1100 &&
-      Number(ab[0].total_people) === 1 &&
-      pendingA?.included === false &&
-      Number(pendingA.hours) === 2 &&
-      Number(pendingA.project_excluded_hours) === 2
-    record(
-      name,
-      ok,
-      ok
-        ? 'All projects: R1,100 on one row, both projects named. A: R660 (R180 overtime), B: R440 (R120 overtime); subtotals A R660 / B R440, total R1,100, 1 person. Pending: 2 h excluded on A.'
-        : `All ${JSON.stringify(allRow)}; A ${JSON.stringify(aRow)}; B ${JSON.stringify(bRow)}; A+B ${JSON.stringify(ab).slice(0, 300)}`,
-    )
-  } catch (error) {
-    record(name, false, `Error: ${error.message}`)
-  }
-  covers('pay_run_people', 'pay_run_allocations')
-}
-{
-  const name = "8B-2 the run's frozen project split adds up to the run's pay, day by day"
-  const [allocations, days] = await Promise.all([
-    owner.client.from('pay_run_allocations').select('employee_id, day, amount, hours, included').eq('run_id', screenRun),
-    owner.client.from('pay_run_days').select('employee_id, day, total_pay, total_hours, included').eq('run_id', screenRun),
-  ])
-  const cents = (value) => Math.round(Number(value ?? 0) * 100)
-  const ok =
-    !allocations.error &&
-    !days.error &&
-    days.data.length > 0 &&
-    days.data.every((day) => {
-      const parts = allocations.data.filter((part) => part.employee_id === day.employee_id && part.day === day.day)
-      const amount = parts.reduce((sum, part) => sum + cents(part.amount), 0)
-      const hours = parts.reduce((sum, part) => sum + cents(part.hours), 0)
-      return parts.length > 0 && hours === cents(day.total_hours) && (!day.included || amount === cents(day.total_pay))
-    })
-  record(name, ok, ok ? `${days.data.length} days; every day's project parts add up to its hours and pay.` : `Allocations ${JSON.stringify(allocations.data).slice(0, 300)}; days ${JSON.stringify(days.data).slice(0, 300)}`)
-  covers('pay_run_allocations', 'pay_run_days', 'close_pay_period')
-}
-{
-  const name = '8B-2 daily grid and project list come from the snapshot'
-  const [all, onA, projects] = await Promise.all([
-    owner.client.rpc('pay_run_grid', { p_run_id: screenRun, p_project_ids: null }),
-    owner.client.rpc('pay_run_grid', { p_run_id: screenRun, p_project_ids: [screenA.id] }),
-    owner.client.rpc('pay_run_projects', { p_run_id: screenRun }),
-  ])
-  const allDay = all.data?.find((row) => row.employee_id === screenSplit && row.day === SCREEN_DAY)
-  const aDay = onA.data?.find((row) => row.employee_id === screenSplit && row.day === SCREEN_DAY)
-  const names = (projects.data ?? []).map((row) => row.project_name)
-  const ok =
-    !all.error &&
-    !onA.error &&
-    !projects.error &&
-    Number(allDay?.hours) === 10 &&
-    Number(aDay?.hours) === 6 &&
-    onA.data.every((row) => row.project_id === screenA.id) &&
-    names.includes(screenA.name) &&
-    names.includes(screenB.name)
-  record(name, ok, ok ? `${SCREEN_DAY}: 10 h (all projects), 6 h on A; both projects offered in the filter.` : `All ${JSON.stringify(allDay)}; A ${JSON.stringify(aDay)}; projects ${JSON.stringify(names)}`)
-  covers('pay_run_grid', 'pay_run_projects')
-}
-
-// --- The lists ------------------------------------------------------------------------
-let screenVersions = []
-{
-  const name = "8B-2 overview and versions: the run's figures equal the preview's"
-  const [overview, versions] = await Promise.all([
-    owner.client.from('pay_period_overview').select('*').eq('id', screenPeriod).single(),
-    owner.client.rpc('pay_run_versions', { p_period_id: screenPeriod }),
-  ])
-  screenVersions = versions.data ?? []
-  const totals = screenPreview[0] ?? {}
-  const row = overview.data
-  const ok =
-    !overview.error &&
-    !versions.error &&
-    row?.status === 'closed' &&
-    row.run_id === screenRun &&
-    row.version === 1 &&
-    Number(row.gross) === Number(totals.total_gross) &&
-    Number(row.people) === Number(totals.total_people) &&
-    Number(row.excluded_people) === Number(totals.excluded_people) &&
-    screenVersions.length === 1 &&
-    screenVersions[0].status === 'active' &&
-    screenVersions[0].has_split === true &&
-    Number(screenVersions[0].gross) === Number(totals.total_gross) &&
-    screenVersions[0].closed_by_name !== null
-  record(name, ok, ok ? `Closed, version 1: ${row.people} people, R${row.gross} - the preview's figures; the split was saved.` : `Overview ${JSON.stringify(row)}; versions ${JSON.stringify(screenVersions)}`)
-  covers('pay_period_overview', 'pay_run_versions')
-}
-{
-  const name = '8B-2 Outstanding: the pending person\'s 2 h are still to be paid (unpriced); the paid person is not listed'
-  const { data, error } = await owner.client.rpc('pay_outstanding_people')
-  const pending = data?.find((row) => row.employee_id === screenPending.id)
-  const ok =
-    !error &&
-    Number(pending?.hours) === 2 &&
-    Number(pending.unpriced_hours) === 2 &&
-    pending.pay === null &&
-    Number(pending.days_in_closed) === 1 &&
-    !data.some((row) => row.employee_id === screenSplit)
-  record(name, ok, ok ? `Pending: 2 h unpriced, 1 day in a closed period. The split person is paid, so not listed.` : `Error ${error?.message}; pending ${JSON.stringify(pending)}`)
-  covers('pay_outstanding_people', 'pay_outstanding')
-}
-
-// --- The app's own pay-run files ------------------------------------------------------
-const screenMeta = (run, projects) => ({
-  company: 'RLS test company',
-  generatedBy: 'RLS test',
-  generatedAt: new Date(),
-  projects,
-  from: screenStart,
-  to: screenEnd,
-  run,
-})
-{
-  const name = "8B-2 pay-run file, all projects (the app's own): GROSS BEFORE DEDUCTIONS — NOT A PAYSLIP, R1,100"
-  try {
-    const run = screenVersions[0]
-    const data = await fetchPayRun(owner.client, { runId: screenRun, projects: null })
-    const { workbook, filename } = buildPayRun(data, screenMeta(run, null))
-    const lines = firstColumn(workbook, 'Pay run')
-    const problems = [
-      lines[0] === PAY_TITLE ? null : `Top line: ${lines[0]}`,
-      lines.includes(PAY_ONLY_UNFILTERED) ? null : 'No "pay only from the unfiltered pay run" note',
-      workbook.worksheets.map((sheet) => sheet.name).join(', ') === 'Summary, Pay run, Daily grid, Excluded' ? null : 'Sheets',
-      cellAt(workbook, 'Pay run', screenSplitName, 'Gross').value === 1100 ? null : 'Split person gross is not R1,100',
-      cellAt(workbook, 'Daily grid', screenSplitName, 'Total hours').value === 10 ? null : 'Daily grid total is not 10 h',
-      firstColumn(workbook, 'Excluded').includes(`ZZ Pay Pending ${RUN_TAG}`) ? null : 'Pending person not on Excluded',
-      filename === `nkutwala_pay-run-v1_all-projects_${screenStart}_${screenEnd}.xlsx` ? null : `File name ${filename}`,
-    ].filter(Boolean)
-    record(name, problems.length === 0, problems.length ? problems.join('; ') : 'Full-pay title and the payment note; R1,100; 10 h on the grid; the pending person on Excluded.')
+    record(name, problems.length === 0, problems.length ? problems.join('; ') : 'Title bars, rate assumptions, both fortnight tables, TOTALS (SUM formulas carrying the database), Source, month summary, SARS UIF x 2, footer, file name.')
   } catch (error) {
     record(name, false, `Could not build it: ${error.message}`)
   }
-  covers('pay_run_people', 'pay_run_grid')
+  covers('payroll_lines', 'payroll_blocks')
 }
+
 {
-  const name = "8B-2 pay-run file, A + B (the app's own): PROJECT LABOUR COST ALLOCATION, subtotals R660 / R440, total R1,100"
+  const name = 'Payroll over a long range: one sheet per month, named for the month'
+  const { data, error } = await owner.client.rpc('payroll_blocks', payArgs(payrollProject.id, '2097-07-01', '2097-10-10'))
+  const months = [...new Set((data ?? []).map((block) => block.sheet_month))].join()
+  const ok = !error && months === '2097-07-01,2097-08-01,2097-09-01,2097-10-01'
+  record(name, ok, ok ? 'July, August, September and October 2097.' : `Got: ${error?.message ?? months}`)
+  covers('payroll_blocks')
+}
+
+{
+  const name = 'Expenses: approved receipts only, oldest first, paid by Company; by category; nothing owed; grand total R2,150.75'
+  const [lines, totals] = await Promise.all([
+    owner.client.rpc('expense_lines', payArgs(payrollProject.id, saToday, saToday)),
+    owner.client.rpc('expense_totals', payArgs(payrollProject.id, saToday, saToday)),
+  ])
+  const rows = lines.data ?? []
+  const byLabel = Object.fromEntries((totals.data ?? []).map((row) => [row.label, Number(row.amount)]))
+  const ok =
+    !lines.error &&
+    !totals.error &&
+    rows.map((row) => row.receipt_id).join() === [expMaterials, expFuel, expFood].join() &&
+    !rows.some((row) => row.receipt_id === expWaiting) &&
+    rows.every((row) => row.paid_by === 'Company') &&
+    rows[0].description === 'Cement' &&
+    rows[1].description === null &&
+    byLabel.Materials === 1200.5 &&
+    byLabel.Fuel === 800 &&
+    byLabel['Plant hire'] === 0 &&
+    byLabel.Consumables === 0 &&
+    byLabel.Food === 150.25 &&
+    byLabel['Total owed'] === 0 &&
+    byLabel['GRAND TOTAL'] === 2150.75
+  record(name, ok, ok ? 'Three approved receipts (the waiting one left out); Materials R1,200.50, Fuel R800, Plant hire R0, Consumables R0, Food R150.25; owed R0; total R2,150.75.' : `Lines: ${lines.error?.message ?? JSON.stringify(rows)}; totals: ${totals.error?.message ?? JSON.stringify(totals.data)}`)
+  covers('expense_lines', 'expense_totals', 'receipt_amounts')
+}
+
+{
+  const name = "Expenses statement (the app's own file): header, table, totals and file name"
   try {
-    const run = screenVersions[0]
-    const projects = [screenA, screenB]
-    const data = await fetchPayRun(owner.client, { runId: screenRun, projects })
-    const { workbook, filename } = buildPayRun(data, screenMeta(run, projects))
-    const SHEET = 'Labour allocation'
-    const MONEY = 'Allocated labour cost'
-    const subA = cellAt(workbook, SHEET, `Subtotal: ${screenA.name}`, MONEY)
-    const subB = cellAt(workbook, SHEET, `Subtotal: ${screenB.name}`, MONEY)
-    const total = cellAt(workbook, SHEET, 'Total', MONEY)
+    const data = await fetchExpenses(owner.client, { project: payrollProject, from: saToday, to: saToday })
+    const { workbook, filename } = buildExpenses(data, { generatedBy: 'RLS test', generatedAt: new Date(), project: payrollProject, from: saToday, to: saToday })
+    const sheet = workbook.worksheets[0]
+    const at = (address) => sheet.getCell(address).value
+    const grand = cellWithText(sheet, 'GRAND TOTAL')
+    const totalsRow = cellWithText(sheet, 'TOTALS')
     const problems = [
-      firstColumn(workbook, SHEET)[0] === ALLOCATION_TITLE ? null : 'Top line is not the allocation title',
-      firstColumn(workbook, SHEET).includes(PAY_ONLY_UNFILTERED) ? null : 'No payment note',
-      subA.value === 660 && subA.formula?.startsWith('SUM(') ? null : `Subtotal A: ${JSON.stringify(subA)}`,
-      subB.value === 440 ? null : `Subtotal B: ${JSON.stringify(subB)}`,
-      total.value === 1100 && total.formula?.includes('+') ? null : `Total: ${JSON.stringify(total)}`,
-      filename === `nkutwala_pay-run-v1-labour-allocation_${fileSlug(screenA.name)}+${fileSlug(screenB.name)}_${screenStart}_${screenEnd}.xlsx`
-        ? null
-        : `File name ${filename}`,
+      at('C5') === 'NKUTWALA CONSTRUCTION — EXPENSES STATEMENT' ? null : `C5: ${at('C5')}`,
+      String(at('C6')).startsWith(`${payrollProject.name.toUpperCase()}  |  `) ? null : `C6: ${at('C6')}`,
+      'CDEFGH'.split('').map((letter) => at(`${letter}8`)).join() === 'DATE,VENDOR,CATEGORY,DESCRIPTION,PAID BY,AMOUNT' ? null : 'Headers',
+      at('G9') === 'Company' && at('H9') === 1200.5 ? null : `Row 9: ${at('G9')} ${at('H9')}`,
+      cellNumber(sheet.getCell(`H${totalsRow?.row}`)) === 2150.75 ? null : 'TOTALS',
+      cellNumber(sheet.getCell(`H${grand?.row}`)) === 2150.75 ? null : 'GRAND TOTAL',
+      cellWithText(sheet, 'None — all expenses paid by the company') ? null : 'Reimbursements',
+      filename === `nkutwala_expenses_${fileSlug(payrollProject.name)}_${saToday}_${saToday}.xlsx` ? null : `File name ${filename}`,
     ].filter(Boolean)
-    record(name, problems.length === 0, problems.length ? problems.join('; ') : 'Allocation title and payment note; A R660, B R440, total R1,100 (subtotal rows added up).')
+    record(name, problems.length === 0, problems.length ? problems.join('; ') : 'Title bars, DATE..AMOUNT from C8, TOTALS R2,150.75 = GRAND TOTAL, reimbursements none, file name.')
   } catch (error) {
     record(name, false, `Could not build it: ${error.message}`)
   }
-  covers('pay_run_people', 'pay_run_grid', 'pay_run_allocations')
+  covers('expense_lines', 'expense_totals')
 }
 
-// --- Reopen: version 1 is kept (superseded), its file says so; then paid --------------
 {
-  const name = '8B-2 after a reopen, version 1 is superseded and its file says SUPERSEDED — DO NOT PAY; version 2 is active, then paid'
-  try {
-    const reopen = await admin.client.rpc('reopen_pay_period', { p_period_id: screenPeriod, p_reason: `RLS screens test ${RUN_TAG}` })
-    if (reopen.error) throw reopen.error
-    const close = await owner.client.rpc('close_pay_period', { p_period_id: screenPeriod })
-    if (close.error) throw close.error
-    const paid = await owner.client.rpc('mark_pay_period_paid', { p_period_id: screenPeriod, p_paid_on: screenEnd })
-    if (paid.error) throw paid.error
-    const [{ data: versions }, { data: overview }] = await Promise.all([
-      owner.client.rpc('pay_run_versions', { p_period_id: screenPeriod }),
-      owner.client.from('pay_period_overview').select('status, version, paid_on, versions').eq('id', screenPeriod).single(),
-    ])
-    const v1 = versions.find((run) => run.version === 1)
-    const v2 = versions.find((run) => run.version === 2)
-    const data = await fetchPayRun(owner.client, { runId: v1.run_id, projects: null })
-    const { workbook } = buildPayRun(data, screenMeta(v1, null))
-    const superseded = firstColumn(workbook, 'Pay run').some((line) => String(line).startsWith(SUPERSEDED_NOTE))
-    const ok =
-      v1?.status === 'superseded' &&
-      v1.superseded_reason === `RLS screens test ${RUN_TAG}` &&
-      v2?.status === 'active' &&
-      v2.has_split === true &&
-      v2.paid_on === screenEnd &&
-      overview?.status === 'paid' &&
-      overview.version === 2 &&
-      Number(overview.versions) === 2 &&
-      superseded
-    record(name, ok, ok ? 'v1 superseded (with the reason) and its file is marked; v2 active with its split, paid; the list shows Paid, version 2.' : `Versions ${JSON.stringify(versions)}; overview ${JSON.stringify(overview)}; superseded line ${superseded}`)
-  } catch (error) {
-    record(name, false, `Error: ${error.message}`)
-  }
-  covers('pay_run_versions', 'pay_period_overview', 'close_pay_period', 'pay_run_allocations')
-}
-{
-  const name = '8B-2 the export log accepts a pay run, with its projects, version and allocation'
-  const marker = `rls-payrun-${RUN_TAG}`
-  const filters = {
-    ...exportLogFilters({ projects: [screenA, screenB], from: screenStart, to: screenEnd, allocation: true, version: 1 }),
-    marker,
-  }
-  const { error } = await owner.client.from('export_log').insert({ report_type: 'pay_run', filters })
-  const { data } = await owner.client.from('export_log').select('report_type, filters').eq('filters->>marker', marker)
-  const got = data?.[0]
-  const ok = !error && got?.report_type === 'pay_run' && got.filters.allocation === true && got.filters.version === 1 && got.filters.project_ids?.length === 2
-  record(name, ok, ok ? 'Logged as a pay run: version 1, an allocation, both projects.' : `Error ${error?.message}; got ${JSON.stringify(got)}`)
+  const name = 'The export log takes the payroll and the expenses statement (logged by the owner)'
+  const marker = `rls-payroll-${RUN_TAG}`
+  const filters = { ...exportLogFilters({ projects: [payrollProject], from: PAY_FROM, to: PAY_TO }), marker }
+  const results = await Promise.all([
+    owner.client.from('export_log').insert({ report_type: 'payroll', filters }),
+    owner.client.from('export_log').insert({ report_type: 'expenses_statement', filters }),
+  ])
+  const { data } = await owner.client.from('export_log').select('report_type, user_id').eq('filters->>marker', marker)
+  const failed = results.find((result) => result.error)
+  const ok = !failed && data?.length === 2 && data.every((row) => row.user_id === owner.userId)
+  record(name, ok, ok ? 'Both logged, as the owner.' : `Error: ${failed?.error.message}; got ${JSON.stringify(data)}`)
   covers('export_log')
 }
 
-// --- Site manager: nothing at all -------------------------------------------------------
-await attackReadNothing('Site manager reads pay_run_allocations', site.client, 'pay_run_allocations')
-await attackReadNothing('Site manager reads pay_period_overview', site.client, 'pay_period_overview')
-covers('pay_run_allocations', 'pay_period_overview')
-for (const [fn, args, note] of [
-  ['pay_period_close_days', { p_period_id: screenPeriod }, ''],
-  ['pay_period_preview', { p_period_id: screenPeriod }, ''],
-  ['pay_run_versions', { p_period_id: screenPeriod }, ''],
-  ['pay_run_people', { p_run_id: screenRun, p_project_ids: null }, ' for all projects'],
-  ['pay_run_people', { p_run_id: screenRun, p_project_ids: [screenA.id] }, ' for project A'],
-  ['pay_run_grid', { p_run_id: screenRun, p_project_ids: null }, ''],
-  ['pay_run_projects', { p_run_id: screenRun }, ''],
-  ['pay_outstanding_people', {}, ''],
-]) {
-  const name = `Site manager calls ${fn}()${note} (their own reports are in it)`
-  const { data, error } = await site.client.rpc(fn, args)
-  const empty = Array.isArray(data) ? data.length === 0 : data === null
-  if (error?.code === PERMISSION_DENIED) record(name, true, 'Server refused (permission denied).')
-  else if (error) record(name, false, `Unexpected error: ${error.message}`)
-  else record(name, empty, empty ? 'Nothing came back.' : `LEAK: ${JSON.stringify(data).slice(0, 200)}`)
-  covers(fn)
-}
-
-// --- Finish off this run's pay run screens test data (nothing can be deleted) --------
+// --- Finish off this run's payroll test data (nothing can be deleted) -------------
 {
   const outcomes = await Promise.all([
-    owner.client.from('projects').update({ status: 'complete' }).in('id', [screenA.id, screenB.id]).select('id'),
-    owner.client.from('employees').update({ status: 'inactive' }).eq('id', screenPending.id).select('id'),
+    changeReceipt(owner, expWaiting, { status: 'rejected', review_reason: 'RLS payroll test: tidy-up' }),
+    ...[expMaterials, expFuel, expFood].map((id) => changeReceipt(admin, id, { status: 'reversed', review_reason: 'RLS payroll test: tidy-up' })),
+    owner.client.from('projects').update({ status: 'complete' }).in('id', [payrollProject.id, payrollOther]).select('id'),
   ])
   const failed = outcomes.find((outcome) => outcome.error)
   if (failed) console.log(`          (note: tidy-up incomplete: ${failed.error.message})`)
@@ -4689,7 +4134,21 @@ for (const [fn, args, note] of [
 
 // --- Every object created in phases 5 and 6 (and since) must be attacked ------
 // (Rework A's file is left out: everything it created was undone by the
-// undo-rework-A file, which is checked here instead.)
+// undo-rework-A file, which is checked here instead. The pay run files
+// (8B-1, 8B-2) are left out too: the payroll exports file deleted all of it.
+// Anything a later file deleted for good is skipped.)
+const migrationSql = (file) => readFileSync(fileURLToPath(new URL(`../supabase/migrations/${file}`, import.meta.url)), 'utf8')
+const createdIn = (sql) =>
+  [...sql.matchAll(/create\s+(?:or\s+replace\s+)?(table|view|function)\s+public\.(\w+)/gi)].map(([, kind, name]) => ({
+    kind: kind.toLowerCase(),
+    name,
+  }))
+const PAYROLL_FILE = '20261014090000_payroll_exports.sql'
+const deletedForGood = (() => {
+  const sql = migrationSql(PAYROLL_FILE)
+  const remade = new Set(createdIn(sql).map((object) => object.name))
+  return new Set([...sql.matchAll(/drop\s+(?:table|view|function)\s+public\.(\w+)/gi)].map(([, name]) => name).filter((name) => !remade.has(name)))
+})()
 for (const [phase, file] of [
   [5, '20261005120000_budgets_and_costing.sql'],
   [6, '20261006090000_dashboard.sql'],
@@ -4699,16 +4158,13 @@ for (const [phase, file] of [
   ['rework C', '20261007150000_rework_c_drilldown.sql'],
   ['7a (exports)', '20261008090000_phase7a_exports.sql'],
   ['8A-1 (overtime)', '20261009090000_phase8a1_overtime.sql'],
-  ['8B-1 (pay runs)', '20261010090000_phase8b1_pay_runs.sql'],
-  ['8B-2 (pay run screens)', '20261012090000_phase8b2_pay_run_screens.sql'],
   ['the labour speed fix', '20261012100000_labour_lines_speed.sql'],
   ['8A-2 (pay rule screens)', '20261013090000_phase8a2_pay_rule_screens.sql'],
   ['export filter', '20261011090000_export_project_filter.sql'],
+  ['payroll exports', PAYROLL_FILE],
+  ['the labour_days speed fix', '20261014100000_labour_days_speed.sql'],
 ]) {
-  const sql = readFileSync(fileURLToPath(new URL(`../supabase/migrations/${file}`, import.meta.url)), 'utf8')
-  const created = [...sql.matchAll(/create\s+(?:or\s+replace\s+)?(table|view|function)\s+public\.(\w+)/gi)].map(
-    ([, kind, name]) => ({ kind: kind.toLowerCase(), name }),
-  )
+  const created = createdIn(migrationSql(file)).filter((object) => !deletedForGood.has(object.name))
   console.log(`\n          Everything phase ${phase} creates, and the checks that attack it:`)
   const notAttacked = []
   for (const { kind, name } of created) {

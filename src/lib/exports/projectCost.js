@@ -47,25 +47,17 @@ export function rateColumns(people) {
   return columns
 }
 
-// Hours split by the pay rules: ordinary, overtime and (only when someone
-// has any) Sunday / public holiday hours. Real numbers, from the database.
-const hasPremium = (people) => people.some((person) => Number(person.premium_hours) > 0)
+// Hours split into ordinary (up to 8 h a day) and overtime. Real numbers,
+// from the database.
+export const HOURS_SPLIT_COLUMNS = [
+  { header: 'Ordinary hours', key: 'ordinary_hours', type: 'hours', width: 11 },
+  { header: 'Overtime hours', key: 'ot_hours', type: 'hours', width: 11 },
+]
 
-export function hoursSplitColumns(people) {
-  return [
-    { header: 'Ordinary hours', key: 'ordinary_hours', type: 'hours', width: 11 },
-    { header: 'Overtime hours', key: 'ot_hours', type: 'hours', width: 11 },
-    ...(hasPremium(people) ? [{ header: 'Sunday / holiday hours', key: 'premium_hours', type: 'hours', width: 12 }] : []),
-  ]
-}
-
-export function paySplitColumns(people) {
-  return [
-    { header: 'Ordinary pay', key: 'ordinary_pay', type: 'money', width: 15 },
-    { header: 'Overtime pay', key: 'ot_pay', type: 'money', width: 15 },
-    ...(hasPremium(people) ? [{ header: 'Sunday / holiday pay', key: 'premium_pay', type: 'money', width: 15 }] : []),
-  ]
-}
+export const PAY_SPLIT_COLUMNS = [
+  { header: 'Ordinary pay', key: 'ordinary_pay', type: 'money', width: 15 },
+  { header: 'Overtime pay', key: 'ot_pay', type: 'money', width: 15 },
+]
 
 // The database's totals for those columns (its rows all carry them).
 //   prefix: 'total' (the grand totals) or 'project_total' (a project's subtotals)
@@ -73,10 +65,8 @@ export function splitTotals(totals, prefix = 'total') {
   return {
     ordinary_hours: totals[`${prefix}_ordinary_hours`] ?? 0,
     ot_hours: totals[`${prefix}_ot_hours`] ?? 0,
-    premium_hours: totals[`${prefix}_premium_hours`] ?? 0,
     ordinary_pay: totals[`${prefix}_ordinary_pay`] ?? 0,
     ot_pay: totals[`${prefix}_ot_pay`] ?? 0,
-    premium_pay: totals[`${prefix}_premium_pay`] ?? 0,
   }
 }
 
@@ -146,10 +136,10 @@ export function buildProjectCost(data, meta) {
       { header: 'Status', key: 'status_label', type: 'text', width: 11 },
       { header: 'Days worked', key: 'days', type: 'whole', width: 11 },
       { header: 'Hours', key: 'hours', type: 'hours', width: 10 },
-      ...hoursSplitColumns(data.labour),
+      ...HOURS_SPLIT_COLUMNS,
       { header: 'Unpriced hours', key: 'unpriced_hours', type: 'hours', width: 11 },
       ...rateColumns(data.labour),
-      ...paySplitColumns(data.labour),
+      ...PAY_SPLIT_COLUMNS,
       { header: 'Cost (provisional)', key: 'cost', type: 'money', width: 17 },
     ],
     rows: data.labour.map((person) => ({

@@ -137,7 +137,8 @@ export function HealthPill({ health }) {
 // spend to date.
 //   projects: from dashboard_projects
 //   onPick(project): a row was tapped
-// Overtime over the pay rule's limits (warn only): one line per person per
+// Overtime over the limits (over 12 h in a day, over 10 overtime hours in a
+// week - warn only): one line per person per
 // day or week, from the database. Tap a line to see the person's days.
 //   warnings: rows of overtime_warnings
 export function OvertimeWarnings({ warnings, onPick }) {

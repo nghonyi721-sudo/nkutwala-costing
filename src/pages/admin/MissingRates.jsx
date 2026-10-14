@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../../lib/supabaseClient'
-import { EMPLOYEE_COLUMNS } from '../../lib/employeeSteps'
+import { OWNER_EMPLOYEE_COLUMNS } from '../../lib/employeeSteps'
 import { formatDate } from '../../lib/labels'
 import EmptyState from '../../components/EmptyState'
 import { BulldozerIcon, CheckCircleIcon, UserIcon } from '../../components/icons'
@@ -78,7 +78,7 @@ function MissingRates({ projectId, backLabel, onBack }) {
     }
     const { data, error } =
       group.kind === 'employee'
-        ? await supabase.from('employees').select(EMPLOYEE_COLUMNS).eq('id', group.id).single()
+        ? await supabase.from('employees').select(OWNER_EMPLOYEE_COLUMNS).eq('id', group.id).single()
         : await supabase.from('equipment').select('id, name, ownership, active').eq('id', group.id).single()
     if (error) {
       setOpenError('Could not open it. Check your signal and try again.')

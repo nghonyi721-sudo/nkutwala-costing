@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../../../lib/supabaseClient'
-import { EMPLOYEE_COLUMNS } from '../../../lib/employeeSteps'
+import { OWNER_EMPLOYEE_COLUMNS } from '../../../lib/employeeSteps'
 import Notice from '../../../components/Notice'
 import Page from '../../../components/Page'
 import Skeleton from '../../../components/Skeleton'
@@ -42,7 +42,7 @@ function Loading({ title, backLabel, onDone, error }) {
 }
 
 export function PersonRates({ employeeId, name, backLabel, onDone }) {
-  const { record, error } = useRecord('employees', EMPLOYEE_COLUMNS, employeeId)
+  const { record, error } = useRecord('employees', OWNER_EMPLOYEE_COLUMNS, employeeId)
   if (!record) return <Loading title={name} backLabel={backLabel} onDone={onDone} error={error} />
   return <EmployeeForm employee={record} backLabel={backLabel} onDone={onDone} />
 }

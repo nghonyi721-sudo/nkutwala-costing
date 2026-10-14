@@ -15,7 +15,7 @@ import s from './Drill.module.css'
 // One person's days in the period: hours, project(s), the rate in effect
 // that day and the day's cost. The totals come from the database
 // (drill_employee_days) and equal the person's figure one level up. Tap a
-// day to see its report (read-only). Overtime over the pay rule's limits is
+// day to see its report (read-only). Overtime over the limits is
 // shown as a warning (never a block): weeks at the top, days on their row.
 function EmployeeDaysLevel({ level, nav }) {
   const { employeeId, projectId, period } = level

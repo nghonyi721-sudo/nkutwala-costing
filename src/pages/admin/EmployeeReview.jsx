@@ -48,23 +48,27 @@ function EmployeeReview({ employeeId, backLabel = 'Employees', onDone }) {
   useEffect(() => {
     let cancelled = false
 
-    supabase
-      .from('pending_employees')
-      .select('id, full_name, category, phone, created_at, added_by_name, hours_logged, first_worked')
-      .eq('id', employeeId)
-      .maybeSingle()
-      .then(({ data, error }) => {
-        if (cancelled) return
-        if (error) {
-          setLoadError('Could not load this person. Check your signal and try again.')
-          return
-        }
-        setLoadError('')
-        setPerson(data)
-        // The rate starts on their first day, so the hours they've already
-        // worked get priced.
-        if (data) setStartsOn((current) => current || data.first_worked || todayLocal())
-      })
+    Promise.all([
+      supabase
+        .from('pending_employees')
+        .select('id, full_name, category, phone, created_at, added_by_name, hours_logged, first_worked')
+        .eq('id', employeeId)
+        .maybeSingle(),
+      // Their name in parts, for the edit sheet.
+      supabase.from('employees').select('first_names, surname').eq('id', employeeId).maybeSingle(),
+    ]).then(([pending, names]) => {
+      if (cancelled) return
+      if (pending.error || names.error) {
+        setLoadError('Could not load this person. Check your signal and try again.')
+        return
+      }
+      const data = pending.data ? { ...pending.data, ...names.data } : null
+      setLoadError('')
+      setPerson(data)
+      // The rate starts on their first day, so the hours they've already
+      // worked get priced.
+      if (data) setStartsOn((current) => current || data.first_worked || todayLocal())
+    })
 
     return () => {
       cancelled = true

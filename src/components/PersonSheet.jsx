@@ -1,28 +1,31 @@
 import { useState } from 'react'
+import { nameParts } from '../lib/employeeSteps'
 import { EMPLOYEE_CATEGORY_LABELS } from '../lib/labels'
 import Button from './Button'
-import { PhoneIcon, UserCircleIcon } from './icons'
+import { PhoneIcon, UserCircleIcon, UserIcon } from './icons'
 import Notice from './Notice'
 import { FieldRow } from './Row'
 import Sheet, { SheetGroup } from './Sheet'
 import s from './PersonSheet.module.css'
 
-// Add a new person, or fix the details of one: full name, category (big
+// Add a new person, or fix the details of one: first name(s), surname
+// (optional - the payroll shows it in its own column), category (big
 // buttons) and an optional phone number. No rates here - ever.
 //   person:  null to add someone new, or the person to edit
 //   busy:    saving; the Save button shows the activity indicator
 //   error:   a message to show above the button
-//   onSave({ fullName, category, phone }) does the work; the parent closes
-//   the sheet when it's done.
+//   onSave({ firstNames, surname, category, phone }) does the work; the
+//   parent closes the sheet when it's done.
 function PersonSheet({ person, busy = false, error = '', onSave, onClose }) {
-  const [fullName, setFullName] = useState(person?.full_name ?? '')
+  const [firstNames, setFirstNames] = useState(() => nameParts(person).firstNames)
+  const [surname, setSurname] = useState(() => nameParts(person).surname)
   const [category, setCategory] = useState(person?.category ?? '')
   const [phone, setPhone] = useState(person?.phone ?? '')
   const [problem, setProblem] = useState('')
 
   function save() {
-    if (!fullName.trim()) {
-      setProblem('Enter their full name.')
+    if (!firstNames.trim()) {
+      setProblem('Enter their first name.')
       return
     }
     if (!category) {
@@ -34,7 +37,7 @@ function PersonSheet({ person, busy = false, error = '', onSave, onClose }) {
       return
     }
     setProblem('')
-    onSave({ fullName, category, phone })
+    onSave({ firstNames, surname, category, phone })
   }
 
   const message = problem || error
@@ -60,11 +63,19 @@ function PersonSheet({ person, busy = false, error = '', onSave, onClose }) {
       <SheetGroup>
         <FieldRow
           icon={UserCircleIcon}
-          label="Full name"
-          placeholder="Name and surname"
+          label="First name(s)"
+          placeholder="e.g. Johannes"
           autoComplete="off"
-          value={fullName}
-          onChange={(e) => setFullName(e.target.value)}
+          value={firstNames}
+          onChange={(e) => setFirstNames(e.target.value)}
+        />
+        <FieldRow
+          icon={UserIcon}
+          label="Surname"
+          placeholder="Optional"
+          autoComplete="off"
+          value={surname}
+          onChange={(e) => setSurname(e.target.value)}
         />
         <FieldRow
           icon={PhoneIcon}

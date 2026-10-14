@@ -22,8 +22,7 @@ const ProjectsPage = lazy(() => import('./admin/ProjectsPage'))
 const EmployeesPage = lazy(() => import('./admin/EmployeesPage'))
 const EquipmentPage = lazy(() => import('./admin/EquipmentPage'))
 const ExportsPage = lazy(() => import('./admin/ExportsPage'))
-const PayRunsPage = lazy(() => import('./admin/pay/PayRunsPage'))
-const PayRulesPage = lazy(() => import('./admin/payRules/PayRulesPage'))
+const PayrollPage = lazy(() => import('./admin/payroll/PayrollPage'))
 
 // Each screen's title: shown while it downloads, or if it can't.
 const TITLES = {
@@ -35,8 +34,7 @@ const TITLES = {
   employees: 'Employees',
   equipment: 'Equipment',
   exports: 'Exports',
-  pay: 'Pay runs',
-  'pay-rules': 'Pay rules',
+  payroll: 'Payroll',
 }
 
 const DASHBOARD_PATH = '/dashboard'
@@ -47,8 +45,8 @@ function HomePage({ user }) {
   // undefined = loading, null = no profile row, object = loaded
   const [profile, setProfile] = useState(undefined)
   const [error, setError] = useState('')
-  // 'home' | 'dashboard' | 'projects' | 'employees' | 'equipment' | 'exports' | 'pay'
-  // | 'pay-rules' | 'more' | 'reports' | 'receipts' | 'new-report' | 'my-reports'
+  // 'home' | 'dashboard' | 'projects' | 'employees' | 'equipment' | 'exports' | 'payroll'
+  // | 'more' | 'reports' | 'receipts' | 'new-report' | 'my-reports'
   // 'home' = not chosen yet (the role's landing screen is shown).
   // Opening the app at /dashboard asks for the dashboard straight away.
   const [screen, setScreen] = useState(() => (window.location.pathname === DASHBOARD_PATH ? 'dashboard' : 'home'))
@@ -181,8 +179,7 @@ function HomePage({ user }) {
   }
   if (isAdmin && current === 'equipment') page = <EquipmentPage key={pageKey} />
   if (isAdmin && current === 'exports') page = <ExportsPage key={pageKey} />
-  if (isAdmin && current === 'pay') page = <PayRunsPage key={pageKey} role={profile.role} />
-  if (isAdmin && current === 'pay-rules') page = <PayRulesPage key={pageKey} />
+  if (isAdmin && current === 'payroll') page = <PayrollPage key={pageKey} />
   if (isSiteManager && (current === 'new-report' || current === 'my-reports')) {
     page = (
       <MyReportsPage

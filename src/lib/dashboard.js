@@ -29,7 +29,7 @@ export async function fetchPeriod(preset, projectId) {
 // Everything that depends on the project and date range, in one go.
 //   cumulative: spend vs budget over the whole job (ignores the date range)
 //   projects:   the health board - only needed for "All projects"
-//   warnings:   overtime over the pay rule's limits (warn only); null when
+//   warnings:   overtime over the limits (warn only); null when
 //               they couldn't be checked - the rest still loads
 export async function fetchDashboard(projectId, from, to) {
   const args = { p_project_id: projectId, p_from: from, p_to: to }

@@ -37,8 +37,9 @@ Replaces a paper Daily Activity Report. NOT a SaaS product.
 - owner — all costs, rates, gross pay, approvals
 - site_manager — quantities ONLY. Never rates, never totals.
 Employees do not log in. Site managers record them by name.
-Site managers may ADD a new person (name, category, phone) - always as
-Pending - and fix the pending people they added. Only owner/system_admin
+Site managers may ADD a new person (first name(s), optional surname,
+category, phone) - always as Pending - and fix the pending people they
+added. Only owner/system_admin
 approve someone, and only together with a dated hourly rate
 (approve_employee). Rejecting needs a reason. Owners adding someone
 enter the rate on the same form.
@@ -55,7 +56,10 @@ If you are about to send a rand value to a site_manager, STOP and flag it.
 - Never commit secrets. Keys live in .env, which is gitignored.
 - Point at the DEV Supabase project. Never production.
 ## Data rules
-- Nothing is ever hard-deleted. Void or correct only.
+- Nothing is ever hard-deleted. Void or correct only. (One exception, the
+  owner's decision in Oct 2026: pay rules, public holidays, pay periods and
+  pay runs were deleted for good with their rows - 20261014090000. The
+  audit log still holds their history.)
 - Corrections create a NEW record. The original is kept.
 - Every write goes to audit_log: actor, action, entity, before, after, time.
 - Rates are dated (effective_from). Old months recalculate at OLD rates.
@@ -68,59 +72,77 @@ If you are about to send a rand value to a site_manager, STOP and flag it.
 - Project teams (project_employees): who works where. Never deleted -
   switched off. A new daily report starts with the project's team.
 - Absent = 0 hours on a crew line; the row stays on the report.
+- Employees: surname is optional; when set, the full name ENDS with it
+  (database check) and first_names is worked out by the database. The
+  forms ask "First name(s)" + "Surname" (fullNameOf in employeeSteps.js).
+  uif_registered: only owners/admins change it (employees_before_write).
 
-## Pay rules and overtime (phase 8A)
-- pay_rules: dated (effective_from), never edited - void with a reason
-  and add a new rule from a date. Each day uses the rule in force that day.
-  ON: daily OT above 8 h at x1.5. Built but OFF: weekly OT above 45 h,
-  Sunday x2.0, public holiday x2.0 (public_holidays table, void-only).
-- Labour pay is worked out per person per DAY across all reports
-  (labour_days), then shared between projects by hours (labour_lines; the
-  project with most hours takes the leftover cent). ALL labour cost
-  (project_cost_lines, dashboard, drill-down, exports) comes from these.
-  Overtime is shown as its own figures. "Before deductions", provisional.
+## Overtime (a fixed rule - there are no pay rule settings)
+- No pay rules, holiday calendar, pay periods or pay runs any more (all
+  deleted in 20261014090000) and no "period is closed" locks: the exported
+  payroll file is the record.
+- The rule is written into labour_days: per person per DAY across all
+  reports, up to 8 h normal, the rest overtime at x1.5. A report switched
+  to "Sunday or public holiday" (daily_reports.all_overtime, on the site
+  manager's form, locked after submit) is ALL overtime.
+- Labour pay is then shared between projects by hours (labour_lines; the
+  biggest ordinary line takes the leftover cent). ALL labour cost
+  (project_cost_lines, dashboard, drill-down, exports, payroll) comes from
+  these. Overtime is shown as its own figures. The Sunday/holiday
+  "premium" columns are still in the views but always 0 (kept so the
+  dashboard and export functions didn't need rebuilding).
 - Owned plant has no overtime. Pending/unpriced hours stay unpriced.
-- 8A-2 screens (More -> Pay rules and holidays, also from Pay runs;
-  src/pages/admin/payRules/, lazy): the rule in force today, "change the
-  rules from a date" (a NEW rule - steppers and switches), history with
-  void (reason), public holidays by year (add, void). The first live rule
-  can never be voided (trigger pay_rules_00_keep_first, runs before the
-  8B-1 lock).
-- Overtime WARNINGS (overtime_warnings, warn only): a day over
-  warn_daily_hours (all projects) or a Mon-Sun week over
-  warn_weekly_ot_hours of overtime, limits from the rule in force. Shown
+- Overtime WARNINGS (overtime_warnings, warn only): a day over 12 h (all
+  projects) or a Mon-Sun week over 10 h of overtime - fixed limits. Shown
   on the dashboard ("Overtime limits" card) and a person's days.
 - SPEED: labour_lines reads labour_days through a MATERIALIZED step (and
   its lines too). Without it, functions (dates/project unknown at plan
   time) recomputed every day's pay per report line: ~2 s each and the
   dashboard/test hit the 8 s statement limit. Keep it when changing
   labour_lines; time new labour functions with a read-only check.
+- SPEED: labour_days gets the rate from a LATERAL step with OFFSET 0
+  (20261014100000), so rate_on() runs once per person per day. Without it
+  Postgres folds the step in and calls rate_on() for every use of the rate
+  (~6 times - the dashboard was 3-4x slower). Keep it.
 
-## Pay periods and pay runs (phase 8B)
-- pay_periods never overlap (database constraint). open -> closed ->
-  paid; only a system_admin reopens, with a reason.
-- Closing saves a snapshot (pay_runs v1, v2..., pay_run_lines per person,
-  pay_run_days per day). It never changes; reopening marks it superseded.
-- Close is blocked by draft reports or unpriced hours of approved people.
-  Pending people are left out (excluded) and paid later as late hours.
-- LOCKS (database triggers) while closed/paid: reports and their lines
-  dated in it can't change ("This period is closed. Contact the office.");
-  no rate, pay rule or holiday may change a day already in an active run.
-- close/mark paid/reopen and the lock triggers are SECURITY DEFINER (they
-  write/see what the app can't); everything else invoker.
-- Site managers see nothing of pay periods or runs.
-- 8B-2 screens (More -> Pay runs, src/pages/admin/pay/, lazy): periods
-  list (pay_period_overview), new period on the suggested dates with a gap
-  warning, blockers (draft report -> ReportView, unpriced -> PersonRates),
-  preview, Close, Mark paid, Reopen (system_admin), versions, Outstanding
-  (pay_outstanding_people).
-- The preview and the close share pay_period_close_days: never change one
-  without the other. close_pay_period also freezes the PROJECT SPLIT
-  (pay_run_allocations, from labour_lines); runs closed before 8B-2 have
-  none (their filtered Excel isn't offered).
-- Pay-run Excel (src/lib/exports/payRun.js) only from the snapshot
-  (pay_run_people / pay_run_grid), export_log type 'pay_run'. Superseded
-  versions say "SUPERSEDED — DO NOT PAY FROM THIS VERSION".
+## Payroll and expenses exports (docs/payroll-export-format.md)
+- THE SPEC FILE IS THE AUTHORITY for layout and wording (cell positions,
+  merges, headers - OVER TIME = hours in G, OVERTIME = money in J). The
+  owner's real workbook is NOT in the repo (real names and pay; docs/*.xlsx
+  is gitignored).
+- Screen: More -> Payroll (src/pages/admin/payroll/PayrollPage.jsx, lazy,
+  owner/admin): project, start date, end date (any dates), Download
+  payroll, Download expenses statement. payroll_checks first: people with
+  hours but no rate BLOCK the payroll (named); drafts and receipts waiting
+  are warnings.
+- Database (all owner/admin only: payroll_check_inputs raises 42501 for
+  anyone else): payroll_lines (per 14-day block, per person, PER RATE -
+  a rate change gives two rows), payroll_blocks (block totals, month
+  summary, SARS UIF = employee UIF x 2), expense_lines, expense_totals,
+  round_half_even. payroll_lines refuses while anyone has unpriced hours
+  in the range - never a silent R0.
+- Blocks: 14 days from the start date, the last one ends on the end date;
+  each goes on the sheet of the month it ENDS in (sheet "SEPTEMBER 2026"),
+  FIRST / SECOND / THIRD FORTNIGHT.
+- Money: GROSS = normal h x rate, OVERTIME = OT h x rate x 1.5, TOTAL,
+  UIF = TOTAL x 0.01 only if uif_registered (else the cell is BLANK), NET.
+  Every value rounded half-to-even in the database before any total. Rows
+  are plain numbers (an Excel formula would round 215.625 up); TOTALS and
+  summary lines are formulas carrying the database's figures.
+- Expenses: approved receipts only, oldest first. PAID BY is always
+  "Company" for now (receipts don't record who paid). By category:
+  Materials, Fuel, Plant hire, Consumables always, other categories when
+  they have amounts. Amounts VAT inclusive.
+- Builders: src/lib/exports/payroll.js, expenses.js and their shared look
+  houseStyle.js (Arial, the workbook's colours and widths, columns C-M,
+  no gridlines). Rows 2-3, above the spec's layout: the POPIA line and
+  "Generated ... by ...". No frozen header or filter (multi-table layout).
+- export_log types 'payroll' and 'expenses_statement'; files
+  nkutwala_payroll_{project}_{from}_{to}.xlsx and nkutwala_expenses_....
+- Supabase sends at most 1,000 rows per request: the payroll and expense
+  rows are fetched with callAll (workbook.js, 1,000 at a time) so a long
+  range or a big crew is never cut short. Use it for any export that can
+  pass 1,000 rows.
 
 ## Exports (phase 7)
 - Excel with ExcelJS (never the "xlsx" package). PDFs: print-friendly
@@ -146,13 +168,9 @@ If you are about to send a rand value to a site_manager, STOP and flag it.
   Projects shown in the title rows; filename
   nkutwala_{report}_{all-projects | name | a+b+c | n-projects}_{from}_{to}.xlsx
   export_log filters record projects, project_ids, project_names.
-- PAY FILES (payroll hours sheet, pay run export, annual earnings):
-  All projects = full pay, top line "GROSS BEFORE DEDUCTIONS — NOT A
-  PAYSLIP". Filtered = labour cost allocated to those projects (overtime
-  as allocated by labour_lines), top line "PROJECT LABOUR COST ALLOCATION
-  — NOT THE AMOUNT TO PAY EMPLOYEES", filename labour-allocation, logged
-  with allocation: true. Every pay file says: pay only from the
-  unfiltered (All projects) pay run.
+- The payroll is the Payroll screen's file (see Payroll and expenses
+  exports); the old Payroll hours sheet and pay-run Excel were removed.
+  Their past rows stay in the export log ('payroll_hours', 'pay_run').
 - Site manager exports (7c): only the projects they have their own
   reports on (my_report_projects), own submitted reports, quantities only
   (my_labour_return - never a rand value).
@@ -162,7 +180,7 @@ If you are about to send a rand value to a site_manager, STOP and flag it.
   My receipts + Add receipt) stay in the first download - they must open
   fast on weak signal.
 - Every owner/admin-only screen is React.lazy in HomePage.jsx (with its
-  title in TITLES) - including new ones (pay runs, pay rules, approvals).
+  title in TITLES) - including new ones (payroll, approvals).
   The lazy screens sit inside LoadError (Try again) + Suspense (title and
   skeleton rows).
 - ExcelJS and recharts are only ever reached through import(): ExcelJS via
@@ -246,8 +264,10 @@ If you are about to send a rand value to a site_manager, STOP and flag it.
   together. No iPhone startup images (iOS's own launch screen is white).
 
 ## Out of scope for v1 — do NOT build these
-Payroll deductions (PAYE/UIF), offline sync, receipt OCR, multi-tenancy,
-invoicing, variations. If I ask for one, remind me it was cut.
+Payroll deductions other than UIF (PAYE, tax tables, payslips), offline
+sync, receipt OCR, multi-tenancy, invoicing, variations. If I ask for one,
+remind me it was cut. (UIF 1% for UIF-registered people IS in - the payroll
+export, the owner's decision in Oct 2026.)
 
 ## Working rules
 - Small vertical slices. One feature at a time.

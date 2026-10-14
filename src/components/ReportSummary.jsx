@@ -3,6 +3,7 @@ import { totalHours } from '../lib/reports'
 import SummaryCard from './SummaryCard'
 import {
   CalendarBlankIcon,
+  CalendarStarIcon,
   CheckCircleIcon,
   ClipboardTextIcon,
   ClockIcon,
@@ -69,6 +70,14 @@ function ReportSummary({ report }) {
 
       <Section title="Details">
         <Row icon={CalendarBlankIcon} iconTone="grey" title="Date" trailing={formatDate(report.report_date)} />
+        {report.all_overtime && (
+          <Row
+            icon={CalendarStarIcon}
+            title="Sunday or public holiday"
+            subtitle="All hours on this report are overtime"
+            trailing={<StatusBadge status="active" label="Yes" />}
+          />
+        )}
         {report.reporter?.full_name && (
           <Row
             icon={UserCircleIcon}

@@ -447,7 +447,7 @@ function Overview({
           )}
         </DashboardCard>
 
-        {/* Overtime over the pay rule's limits (warn only) */}
+        {/* Overtime over the limits (warn only) */}
         <DashboardCard
           index={9}
           flush={warnings?.length > 0}

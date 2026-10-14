@@ -27,3 +27,6 @@ dist-ssr
 .env
 .env.*
 !.env.example
+
+# Real payroll workbooks (names and pay) - never in the repo (POPIA)
+docs/*.xlsx

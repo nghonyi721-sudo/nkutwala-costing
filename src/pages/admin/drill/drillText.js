@@ -20,9 +20,9 @@ export function ratesText(rates) {
 
 export const daysText = (days) => `${days} day${Number(days) === 1 ? '' : 's'}`
 
-// Labour: hours × the rate on each day, with overtime per the pay rules.
+// Labour: hours × the rate on each day, overtime above 8 h a day at ×1.5.
 export const PROVISIONAL_NOTE =
-  'Provisional: hours × the rate on each day, overtime included per the pay rules, before deductions.'
+  'Provisional: hours × the rate on each day, overtime above 8 h a day at ×1.5, before deductions.'
 
 // "incl. R 300,00 overtime (2.0 h)", or '' when there is none.
 export function overtimeText(otPay, otHours) {

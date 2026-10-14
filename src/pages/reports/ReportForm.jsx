@@ -6,6 +6,7 @@ import {
   assignToProject,
   fetchTeam,
   findDuplicates,
+  fullNameOf,
   removeFromProject,
   updateEmployeeDetails,
 } from '../../lib/employeeSteps'
@@ -15,6 +16,7 @@ import ActionBar from '../../components/ActionBar'
 import Button from '../../components/Button'
 import {
   CalendarBlankIcon,
+  CalendarStarIcon,
   ClipboardTextIcon,
   ClockIcon,
   CloudRainIcon,
@@ -73,15 +75,11 @@ const EMPTY_FORM = {
   near_miss: false,
   safety_moment: false,
   activities: '',
+  // Sunday or public holiday: every hour on this report is overtime.
+  all_overtime: false,
 }
 
-// The database refuses any change to a report dated inside a closed or
-// paid pay period, with exactly this message.
-const PERIOD_CLOSED = 'This period is closed. Contact the office.'
-const isPeriodClosed = (error) => String(error?.message ?? '').includes(PERIOD_CLOSED)
-
 function saveErrorMessage(error) {
-  if (isPeriodClosed(error)) return PERIOD_CLOSED
   if (error.code === '23505') {
     return 'You already have a report for this project and date. Open it from My reports.'
   }
@@ -167,6 +165,7 @@ function ReportForm({ user, reportId, onDone }) {
       near_miss: report.near_miss,
       safety_moment: report.safety_moment,
       activities: report.activities,
+      all_overtime: Boolean(report.all_overtime),
     })
     // Saved hours are kept as they are; 0 hours means Absent.
     setCrew(
@@ -321,7 +320,7 @@ function ReportForm({ user, reportId, onDone }) {
         setEmployees((current) => withPeople(current.filter((e) => e.id !== updated.id), [updated]))
         setPersonSheet(null)
       } else {
-        const matches = (await findDuplicates(supabase, details.fullName)).filter(
+        const matches = (await findDuplicates(supabase, fullNameOf(details))).filter(
           (match) => match.status !== 'inactive',
         )
         if (matches.length > 0) setSameName({ matches, details })
@@ -439,9 +438,7 @@ function ReportForm({ user, reportId, onDone }) {
         .eq('status', 'draft')
         .select('id')
       if (submitError || data.length === 0) {
-        setError(
-          isPeriodClosed(submitError) ? PERIOD_CLOSED : 'Saved as a draft, but could not submit. Check your signal and try again.',
-        )
+        setError('Saved as a draft, but could not submit. Check your signal and try again.')
         return
       }
 
@@ -553,7 +550,10 @@ function ReportForm({ user, reportId, onDone }) {
         ]}
       />
 
-      <Section title="Project">
+      <Section
+        title="Project"
+        footer={form.all_overtime ? 'Sunday or public holiday: every hour on this report counts as overtime.' : undefined}
+      >
         {projectChoices.length === 0 ? (
           <Row icon={MapPinIcon} title="No active projects" subtitle="Ask the owner to add one." />
         ) : (
@@ -576,6 +576,13 @@ function ReportForm({ user, reportId, onDone }) {
               onChange={(e) => setField('report_date', e.target.value)}
             />
           }
+        />
+        <SwitchRow
+          icon={CalendarStarIcon}
+          title="Sunday or public holiday"
+          subtitle="All hours on this report are overtime"
+          checked={form.all_overtime}
+          onChange={(value) => setField('all_overtime', value)}
         />
       </Section>
 

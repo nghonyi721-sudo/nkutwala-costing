@@ -8,14 +8,40 @@
 // (and never without a rate), and only owners/admins can see or send rates.
 
 // The columns of an employee the app reads. Employees have no money columns.
+// first_names is worked out by the database (the full name without the
+// surname).
 export const EMPLOYEE_COLUMNS =
-  'id, full_name, category, phone, status, active, created_by, approved_at, rejected_at, reject_reason'
+  'id, full_name, first_names, surname, category, phone, status, active, created_by, approved_at, rejected_at, reject_reason'
+
+// Owner/admin screens also read whether someone is UIF registered (only
+// owners and admins can change it - the database checks).
+export const OWNER_EMPLOYEE_COLUMNS = `${EMPLOYEE_COLUMNS}, uif_registered`
+
+const tidy = (text) => (text ?? '').trim().replace(/\s+/g, ' ')
+
+// The full name the database keeps: first name(s), then the surname if there
+// is one (the database checks the full name ends with the surname).
+export const fullNameOf = ({ firstNames, surname }) => [tidy(firstNames), tidy(surname)].filter(Boolean).join(' ')
+
+// A person's name as the forms show it: { firstNames, surname }.
+export const nameParts = (person) => ({
+  firstNames: person?.first_names ?? person?.full_name ?? '',
+  surname: person?.surname ?? '',
+})
+
+const nameValues = (details) => ({ full_name: fullNameOf(details), surname: tidy(details.surname) || null })
 
 // Add someone new. Returns them as stored: always Pending.
-export async function addEmployee(client, { fullName, category, phone }) {
+//   uifRegistered: owners/admins only (the database refuses anyone else)
+export async function addEmployee(client, { firstNames, surname, category, phone, uifRegistered = false }) {
   const { data, error } = await client
     .from('employees')
-    .insert({ full_name: fullName.trim(), category, phone: phone?.trim() || null })
+    .insert({
+      ...nameValues({ firstNames, surname }),
+      category,
+      phone: phone?.trim() || null,
+      ...(uifRegistered ? { uif_registered: true } : {}),
+    })
     .select(EMPLOYEE_COLUMNS)
     .single()
   if (error) throw error
@@ -24,10 +50,10 @@ export async function addEmployee(client, { fullName, category, phone }) {
 
 // Fix the name, category or phone of a person. Site managers may only do
 // this for the pending people they added. Returns them as stored.
-export async function updateEmployeeDetails(client, employeeId, { fullName, category, phone }) {
+export async function updateEmployeeDetails(client, employeeId, { firstNames, surname, category, phone }) {
   const { data, error } = await client
     .from('employees')
-    .update({ full_name: fullName.trim(), category, phone: phone?.trim() || null })
+    .update({ ...nameValues({ firstNames, surname }), category, phone: phone?.trim() || null })
     .eq('id', employeeId)
     .select(EMPLOYEE_COLUMNS)
   if (error) throw error

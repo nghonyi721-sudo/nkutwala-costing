@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../../lib/supabaseClient'
-import { exportPayrollHours, exportProjectCost, fetchExportPeriod } from '../../lib/exports/run'
+import { exportProjectCost, fetchExportPeriod } from '../../lib/exports/run'
 import { EXPORT_LABELS, formatDate, formatDateTime, todayLocal } from '../../lib/labels'
 import Button from '../../components/Button'
 import DateTimeField from '../../components/DateTimeField'
@@ -21,10 +21,10 @@ const COST_PERIODS = {
   project_to_date: 'To date',
   custom: 'Dates',
 }
-const PAYROLL_PERIODS = { this_month: 'This month', last_month: 'Last month', custom: 'Dates' }
 const ALLOCATION_NAME = 'Project labour cost allocation'
 
-// An export log row's name: the report, and whether it was an allocation.
+// An export log row's name: the report, and whether it was an allocation
+// (past payroll hours sheets and pay runs filtered to projects).
 function logTitle(row) {
   const name = EXPORT_LABELS[row.report_type] ?? row.report_type
   if (!row.filters?.allocation) return name
@@ -65,24 +65,22 @@ function CustomDates({ value, onChange }) {
   )
 }
 
-// Owner/admin: download Excel exports, and see the log of every export.
+// Owner/admin: download the project cost report, and see the log of every
+// export (the payroll and the expenses statement are on the Payroll screen).
 // Every figure in the files comes from the database; the database refuses
 // anyone else. Each export is logged (who, which report, projects, dates,
-// when). Each export has its own project filter: All projects (the
-// default), or one or more projects.
+// when). Project filter: All projects (the default), or one or more.
 function ExportsPage() {
   const [projects, setProjects] = useState([])
-  // Whose project filter is open: 'cost' | 'payroll' | null
+  // Whose project filter is open: 'cost' | null
   const [picking, setPicking] = useState(null)
 
   // The chosen project ids per export; [] = all projects.
-  const [chosen, setChosen] = useState({ cost: [], payroll: [] })
+  const [chosen, setChosen] = useState({ cost: [] })
   const [costPreset, setCostPreset] = useState('this_month')
   const [costDates, setCostDates] = useState({ from: '', to: todayLocal() })
-  const [payPreset, setPayPreset] = useState('last_month')
-  const [payDates, setPayDates] = useState({ from: '', to: todayLocal() })
 
-  // 'cost' | 'payroll' while exporting
+  // 'cost' while exporting
   const [busy, setBusy] = useState(null)
   const [message, setMessage] = useState({ tone: 'info', text: '' })
 
@@ -143,30 +141,19 @@ function ExportsPage() {
     })
   }
 
-  // Payroll with projects chosen = a project labour cost allocation.
-  const payAllocation = chosenProjects('payroll') !== null
-
   async function run(which) {
     setMessage({ tone: 'info', text: '' })
     const picked = chosenProjects(which)
     setBusy(which)
     try {
-      const period =
-        which === 'cost'
-          ? await resolvePeriod(costPreset, picked, costDates)
-          : await resolvePeriod(payPreset, picked, payDates)
+      const period = await resolvePeriod(costPreset, picked, costDates)
       if (period.problem) {
         setMessage({ tone: 'error', text: period.problem })
       } else {
-        if (which === 'cost') {
-          await exportProjectCost({ projects: picked, ...period })
-        } else {
-          await exportPayrollHours({ projects: picked, ...period })
-        }
-        const label = which === 'cost' ? EXPORT_LABELS.project_cost : picked ? ALLOCATION_NAME : EXPORT_LABELS.payroll_hours
+        await exportProjectCost({ projects: picked, ...period })
         setMessage({
           tone: 'info',
-          text: `Saved: ${label}, ${filterText(which)}, ${formatDate(period.from)} – ${formatDate(period.to)}.`,
+          text: `Saved: ${EXPORT_LABELS.project_cost}, ${filterText(which)}, ${formatDate(period.from)} – ${formatDate(period.to)}.`,
         })
         setLogCount((count) => count + 1)
       }
@@ -201,34 +188,6 @@ function ExportsPage() {
       >
         <Button icon={DownloadSimpleIcon} busy={busy === 'cost'} disabled={Boolean(busy)} onClick={() => run('cost')}>
           {busy === 'cost' ? 'Exporting…' : 'Download Excel'}
-        </Button>
-      </Section>
-
-      {/* Payroll hours sheet: projects, period, (dates), download */}
-      <Section title="Payroll hours sheet">{projectsRow('payroll')}</Section>
-      {payAllocation && (
-        <Notice tone="error">
-          {ALLOCATION_NAME} - NOT the amount to pay employees. Pay only from All projects.
-        </Notice>
-      )}
-      <Section plain>
-        <SegmentedControl label="Payroll period" options={PAYROLL_PERIODS} value={payPreset} onChange={setPayPreset} />
-      </Section>
-      {payPreset === 'custom' && (
-        <Section>
-          <CustomDates value={payDates} onChange={setPayDates} />
-        </Section>
-      )}
-      <Section
-        plain
-        footer={
-          payAllocation
-            ? "Only the chosen projects' share of each person's pay, overtime as allocated. People not yet approved are listed separately."
-            : 'All projects: gross with overtime, before deductions - provisional, NOT a payslip. People not yet approved are listed separately.'
-        }
-      >
-        <Button icon={DownloadSimpleIcon} busy={busy === 'payroll'} disabled={Boolean(busy)} onClick={() => run('payroll')}>
-          {busy === 'payroll' ? 'Exporting…' : 'Download Excel'}
         </Button>
       </Section>
 

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../../lib/supabaseClient'
-import { EMPLOYEE_COLUMNS } from '../../lib/employeeSteps'
+import { OWNER_EMPLOYEE_COLUMNS } from '../../lib/employeeSteps'
 import { EMPLOYEE_CATEGORY_LABELS } from '../../lib/labels'
 import Button from '../../components/Button'
 import EmptyState from '../../components/EmptyState'
@@ -33,7 +33,7 @@ function EmployeesPage({ onChanged }) {
     let cancelled = false
 
     Promise.all([
-      supabase.from('employees').select(EMPLOYEE_COLUMNS).order('full_name'),
+      supabase.from('employees').select(OWNER_EMPLOYEE_COLUMNS).order('full_name'),
       supabase.from('pending_employees').select('id, added_by_name, hours_logged'),
     ]).then(([employeesResult, waitingResult]) => {
       if (cancelled) return

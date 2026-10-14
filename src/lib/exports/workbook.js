@@ -20,17 +20,7 @@ export const WHOLE = '0'
 export const CONFIDENTIAL = 'Confidential – contains personal information (POPIA)'
 export const VAT_NOTE = 'Receipt amounts are the total paid, VAT inclusive.'
 export const PROVISIONAL_NOTE =
-  'Labour is provisional: hours × the rate on each day, overtime included per the pay rules, before deductions. Owned plant: hours × the machine rate.'
-
-// PAY FILES (payroll hours sheet, pay run export, annual earnings). The top
-// line of every sheet says what the file is:
-//   all projects      -> the person's full pay
-//   filtered projects -> only those projects' share of it: NEVER pay from it
-export const PAY_TITLE = 'GROSS BEFORE DEDUCTIONS — NOT A PAYSLIP'
-export const ALLOCATION_TITLE = 'PROJECT LABOUR COST ALLOCATION — NOT THE AMOUNT TO PAY EMPLOYEES'
-export const PAY_ONLY_UNFILTERED = 'Pay employees only from the unfiltered (All projects) pay run.'
-export const ALLOCATION_OT_NOTE =
-  "Each project's share of a person's day: its share of the day's hours, of the ordinary and of the overtime hours and pay."
+  'Labour is provisional: hours × the rate on each day, overtime above 8 h a day at ×1.5, before deductions. Owned plant: hours × the machine rate.'
 
 export const ALL_PROJECTS = 'All projects'
 
@@ -42,9 +32,6 @@ export const isGrouped = (projects) => (projects?.length ?? 0) > 1
 export function projectsLabel(projects) {
   return isFiltered(projects) ? projects.map((project) => project.name).join(', ') : ALL_PROJECTS
 }
-
-// The top line of a pay file, for the projects chosen.
-export const payTitle = (projects) => (isFiltered(projects) ? ALLOCATION_TITLE : PAY_TITLE)
 
 const FORMATS = { money: MONEY, hours: HOURS, date: DATE, percent: PERCENT, whole: WHOLE }
 
@@ -117,7 +104,6 @@ export function createWorkbook() {
 // filters, sensible widths and (optionally) totals.
 //   meta:    { report, banner, company, projects, from, to, generatedBy, generatedAt }
 //            banner:   a line above the report name, large, bold and red
-//                      (pay files: PAY_TITLE or ALLOCATION_TITLE)
 //            projects: null (all projects) or [{ id, name }]
 //   notes:   extra lines under the title (shown bold), e.g. CONFIDENTIAL
 //   columns: [{ header, key, type: 'text'|'money'|'hours'|'date'|'percent'|'whole', width, dateHeader }]
@@ -264,4 +250,19 @@ export async function call(client, fn, args) {
   const { data, error } = await client.rpc(fn, args)
   if (error) throw error
   return data
+}
+
+// Every row of a database function, 1,000 at a time: the server sends at
+// most 1,000 rows per request, and a file must never be cut short without
+// anyone noticing. The function must return its rows in a fixed order.
+const PAGE_SIZE = 1000
+
+export async function callAll(client, fn, args) {
+  const rows = []
+  for (let from = 0; ; from += PAGE_SIZE) {
+    const { data, error } = await client.rpc(fn, args).range(from, from + PAGE_SIZE - 1)
+    if (error) throw error
+    rows.push(...data)
+    if (data.length < PAGE_SIZE) return rows
+  }
 }
